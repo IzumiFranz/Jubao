@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}Reports | Budget Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <p class="text-secondary mb-0">
+        Reports summarize your manually recorded income and spending across personal and shared records. Wallet-to-wallet transfers are excluded from income and expense totals.
+    </p>
+    <div class="d-flex flex-wrap gap-2">
+        <a
+            href="{% url 'budgets:export_transactions' %}?format=csv&amp;{{ request.GET.urlencode }}"
+            class="btn btn-outline-secondary btn-sm"
+        >
+            Export CSV
+        </a>
+        <a
+            href="{% url 'budgets:export_transactions' %}?format=json&amp;{{ request.GET.urlencode }}"
+            class="btn btn-outline-secondary btn-sm"
+        >
+            Export JSON
+        </a>
+    </div>
+</div>
+
+<section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="report-controls-heading">
+    <h2 id="report-controls-heading" class="h6 fw-semibold mb-3">Report controls</h2>
+    <form method="get" action="{% url 'budgets:reports' %}">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-sm-6 col-lg-3">
+                <label for="report-start-date" class="form-label small fw-medium">Start date</label>
+                <input
+                    type="date"
+                    id="report-start-date"
+                    name="start_date"
+                    value="{{ filters.start_date }}"
+                    class="form-control form-control-sm"
+                >
+            </div>
+
+            <div class="col-12 col-sm-6 col-lg-3">
+                <label for="report-end-date" class="form-label small fw-medium">End date</label>
+                <input
+                    type="date"
+                    id="report-end-date"
+                    name="end_date"
+                    value="{{ filters.end_date }}"
+                    class="form-control form-control-sm"
+                >
+            </div>
+
+            <div class="col-12 col-sm-6 col-lg-3">
+                <label for="report-scope" class="form-label small fw-medium">Personal / Shared scope</label>
+                <select id="report-scope" name="scope" class="form-select form-select-sm">
+                    <option value="">All scopes</option>
+                    <option value="personal" {% if filters.scope == 'personal' %}selected{% endif %}>Personal</option>
+                    <option value="shared" {% if filters.scope == 'shared' %}selected{% endif %}>Shared</option>
+                </select>
+            </div>
+
+            <div class="col-12 col-sm-6 col-lg-3">
+                <label for="report-currency" class="form-label small fw-medium">Reporting currency</label>
+                <select id="report-currency" name="currency" class="form-select form-select-sm">
+                    <option value="">Default base currency</option>
+                    {% for c in currencies %}
+                    <option value="{{ c.code }}" {% if filters.currency == c.code %}selected{% endif %}>
+                        {{ c.code }} — {{ c.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end gap-2 mt-3">
+            <a href="{% url 'budgets:reports' %}" class="btn btn-outline-secondary btn-sm">Reset</a>
+            <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
+        </div>
+    </form>
+</section>
+
+{% if summary.unconverted_count %}
+<div class="alert alert-warning py-2 px-3 small mb-4" role="status">
+    Conversion incomplete: {{ summary.unconverted_count }} transaction{{ summary.unconverted_count|pluralize }} could not be converted to {{ target_currency.code|default:"the reporting currency" }} because an exchange rate for that date is unavailable. Combined totals are shown as — rather than fabricated.
+</div>
+{% endif %}
+
+<section class="mb-4" aria-labelledby="reports-summary-heading">
+    <h2 id="reports-summary-heading" class="visually-hidden">Report Summary</h2>
+    <div class="row g-3">
+        <div class="col-12 col-md-4">
+            <div class="summary-card p-3 h-100">
+                <p class="text-secondary small fw-medium mb-1">Income</p>
+                <p class="summary-value mb-1">
+                    {% if summary.is_complete and target_currency %}
+                        {{ summary.formatted_income }} {{ target_currency.code }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </p>
+                <p class="text-secondary small mb-0">
+                    {% if summary.is_complete %}Recorded period income{% else %}Requires reporting currency &amp; complete conversion{% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="summary-card p-3 h-100">
+                <p class="text-secondary small fw-medium mb-1">Expenses</p>
+                <p class="summary-value mb-1">
+                    {% if summary.is_complete and target_currency %}
+                        {{ summary.formatted_expense }} {{ target_currency.code }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </p>
+                <p class="text-secondary small mb-0">
+                    {% if summary.is_complete %}Recorded period expenses{% else %}Requires reporting currency &amp; complete conversion{% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="summary-card p-3 h-100">
+                <p class="text-secondary small fw-medium mb-1">Net Income</p>
+                <p class="summary-value mb-1">
+                    {% if summary.is_complete and target_currency %}
+                        {{ summary.formatted_net_income }} {{ target_currency.code }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </p>
+                <p class="text-secondary small mb-0">
+                    Income minus expenses for the selected period (not total wallet balance)
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="panel-income-expenses-time">
+            <h2 id="panel-income-expenses-time" class="h6 fw-semibold mb-3">
+                Income and Expenses Over Time
+            </h2>
+            {% if monthly_rows %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Month</th>
+                            <th>Currency</th>
+                            <th class="text-end">Income</th>
+                            <th class="text-end">Expenses</th>
+                            <th class="text-end">Net Income</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in monthly_rows %}
+                        <tr>
+                            <td class="fw-medium">{{ m.period }}</td>
+                            <td>{{ m.currency_code }}</td>
+                            <td class="text-end text-success">{{ m.formatted_income }}</td>
+                            <td class="text-end text-danger">{{ m.formatted_expense }}</td>
+                            <td class="text-end fw-semibold">{{ m.formatted_net }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state-box">
+                <p class="mb-0">No time-series data to display.</p>
+            </div>
+            {% endif %}
+        </section>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="panel-personal-shared-spending">
+            <h2 id="panel-personal-shared-spending" class="h6 fw-semibold mb-3">
+                Personal and Shared Comparison
+            </h2>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Scope</th>
+                            <th class="text-end">Income</th>
+                            <th class="text-end">Expenses</th>
+                            <th class="text-end">Net Income</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="fw-medium">Personal</td>
+                            <td class="text-end">{{ personal_summary.formatted_income }} {{ target_currency.code|default:"" }}</td>
+                            <td class="text-end">{{ personal_summary.formatted_expense }} {{ target_currency.code|default:"" }}</td>
+                            <td class="text-end fw-semibold">{{ personal_summary.formatted_net_income }} {{ target_currency.code|default:"" }}</td>
+                        </tr>
+                        <tr>
+                            <td class="fw-medium">Shared</td>
+                            <td class="text-end">{{ shared_summary.formatted_income }} {{ target_currency.code|default:"" }}</td>
+                            <td class="text-end">{{ shared_summary.formatted_expense }} {{ target_currency.code|default:"" }}</td>
+                            <td class="text-end fw-semibold">{{ shared_summary.formatted_net_income }} {{ target_currency.code|default:"" }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+<section class="dashboard-panel p-3 p-md-4" aria-labelledby="category-breakdown-heading">
+    <div class="mb-3">
+        <h2 id="category-breakdown-heading" class="h6 fw-semibold mb-1">Category breakdown</h2>
+        <p class="small text-secondary mb-0">
+            Expense totals and percentage share of spending for the selected reporting period.
+        </p>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col">Category</th>
+                    <th scope="col">Scope</th>
+                    <th scope="col">Currency</th>
+                    <th scope="col" class="text-end">Total Expenses</th>
+                    <th scope="col" class="text-end">Share of Spending</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in category_rows %}
+                <tr>
+                    <td class="fw-medium">{{ row.category_name }}</td>
+                    <td>{{ row.scope_display }}</td>
+                    <td>{{ row.currency_code }}</td>
+                    <td class="text-end fw-semibold">{{ row.formatted_amount }}</td>
+                    <td class="text-end">{{ row.share_display }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center text-secondary py-5">
+                        No spending data to display.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

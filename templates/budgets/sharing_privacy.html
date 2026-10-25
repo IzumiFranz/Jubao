@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block title %}Sharing &amp; Privacy | Budget Tracker{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+        <div>
+            <p class="text-secondary mb-1">
+                Manage personal balance disclosures and view your transaction-sharing grants for your shared spaces.
+            </p>
+            <p class="small text-muted mb-0">
+                You control only your own disclosures. Membership in a space never reveals personal data by default.
+            </p>
+        </div>
+        {% if selected_space %}
+        <a href="{% url 'budgets:shared_activity' %}?space={{ selected_space.id }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Back to Shared Activity
+        </a>
+        {% endif %}
+    </div>
+
+    {% if active_spaces %}
+    <div class="card bg-light border-0 p-3 mb-4">
+        <form method="get" action="{% url 'budgets:sharing_privacy' %}" class="row g-2 align-items-center">
+            <div class="col-auto">
+                <label for="privacy-space-select" class="form-label small fw-semibold mb-0">Shared space:</label>
+            </div>
+            <div class="col-auto">
+                <select name="space" id="privacy-space-select" class="form-select form-select-sm" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
+                    {% for sp in active_spaces %}
+                    <option value="{{ sp.id }}" {% if selected_space and selected_space.id == sp.id %}selected{% endif %}>
+                        {{ sp.name }} ({{ sp.base_currency.code }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if partner %}
+            <div class="col-auto ms-sm-auto small text-secondary">
+                Partner: <strong class="text-dark">{{ partner.username }}</strong>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+    {% endif %}
+</div>
+
+{% if not active_spaces %}
+<section class="dashboard-panel p-4 text-center text-secondary mb-4" aria-labelledby="privacy-no-space-heading">
+    <h2 id="privacy-no-space-heading" class="h6 fw-semibold mb-2">No active shared spaces</h2>
+    <p class="small text-muted mb-3">
+        You must be an active member of a shared space to configure sharing and privacy settings.
+    </p>
+    <a href="{% url 'budgets:shared_space' %}" class="btn btn-primary btn-sm">
+        Go to Shared Space
+    </a>
+</section>
+{% elif not partner %}
+<section class="dashboard-panel p-4 text-center text-secondary mb-4" aria-labelledby="privacy-no-partner-heading">
+    <h2 id="privacy-no-partner-heading" class="h6 fw-semibold mb-2">Awaiting space partner</h2>
+    <p class="small text-muted mb-3">
+        "{{ selected_space.name }}" currently has no other active member. Privacy controls can be configured once a partner joins.
+    </p>
+    <a href="{% url 'budgets:shared_space' %}" class="btn btn-outline-primary btn-sm">
+        Manage Space &amp; Invitations
+    </a>
+</section>
+{% else %}
+
+<div class="alert alert-warning py-1 px-3 small d-none sharing-offline-alert mb-4" role="alert">
+    <i class="bi bi-wifi-off"></i> You are currently offline. Privacy settings and disclosure grants require an active internet connection and server confirmation.
+</div>
+
+{% if ineligible_selected_wallets %}
+<div class="alert alert-warning py-2 px-3 small mb-4" role="alert">
+    <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle me-1"></i> Ineligible wallet selection detected:</div>
+    <div>The following previously selected wallet(s) have been archived or deactivated and no longer contribute to disclosed balances:</div>
+    <ul class="mb-0 mt-1">
+        {% for iw in ineligible_selected_wallets %}
+        <li><strong>{{ iw.name }}</strong> (Archived)</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<!-- Balance Disclosure Configuration Form -->
+<section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="balance-privacy-heading">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div>
+            <h2 id="balance-privacy-heading" class="h6 fw-semibold mb-1">Personal balance disclosure</h2>
+            <p class="small text-secondary mb-0">
+                Control whether <strong class="text-dark">{{ partner.username }}</strong> can view your combined personal balance from selected personal wallets.
+            </p>
+        </div>
+        <div>
+            {% if perm and perm.show_balance and not perm.is_revoked %}
+            <span class="badge text-bg-success">Active disclosure</span>
+            {% else %}
+            <span class="badge text-bg-secondary">Disclosure OFF</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="post" action="{% url 'budgets:sharing_privacy' %}" class="sharing-action-form" data-online-only="true">
+        {% csrf_token %}
+        <input type="hidden" name="shared_space_id" value="{{ selected_space.id }}">
+
+        <div class="card border p-3 mb-3 bg-light">
+            <div class="form-check form-switch mb-0">
+                <input
+                    class="form-check-input"
+                    type="checkbox"
+                    role="switch"
+                    name="show_balance"
+                    value="true"
+                    id="toggle-show-balance"
+                    {% if submitted_show_balance %}checked{% endif %}
+                >
+                <label class="form-check-label fw-semibold" for="toggle-show-balance">
+                    Show my personal balance to {{ partner.username }}
+                </label>
+            </div>
+            <div class="form-text small text-secondary mt-1">
+                Balance visibility is OFF by default. When enabled, only a single aggregated balance in the viewer's currency is disclosed. Individual wallet names, IDs, balances, and transaction details are never revealed.
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold">
+                Select personal wallets to include in disclosed balance:
+            </label>
+            <p class="small text-muted mb-2">
+                Only checked wallets contribute to the disclosed total. Newly created wallets are excluded automatically. Shared wallets cannot be selected.
+            </p>
+
+            {% if all_personal_wallets %}
+            <div class="list-group">
+                {% for w in all_personal_wallets %}
+                <label class="list-group-item d-flex justify-content-between align-items-center {% if w.is_archived %}bg-light text-muted{% endif %}">
+                    <div class="form-check mb-0">
+                        <input
+                            class="form-check-input me-2"
+                            type="checkbox"
+                            name="wallet_ids"
+                            value="{{ w.id }}"
+                            id="wallet-check-{{ w.id }}"
+                            {% if w.id|stringformat:'s' in submitted_wallet_ids and not w.is_archived %}checked{% endif %}
+                            {% if w.is_archived %}disabled{% endif %}
+                        >
+                        <span class="fw-medium">{{ w.name }}</span>
+                        <span class="badge text-bg-light border ms-1">{{ w.currency.code }}</span>
+                        {% if w.is_archived %}
+                        <span class="badge text-bg-secondary ms-1">Archived (ineligible)</span>
+                        {% endif %}
+                    </div>
+                    <div class="text-end small">
+                        <span class="text-secondary">Your current balance:</span>
+                        <strong class="text-dark">{{ w.formatted_current_balance }} {{ w.currency.code }}</strong>
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="alert alert-secondary py-2 px-3 small mb-0">
+                You do not have any personal wallets. Create a personal wallet first on the <a href="{% url 'budgets:wallets' %}">Wallets page</a>.
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pt-2 border-top">
+            <div>
+                <button type="submit" name="action" value="preview_balance" class="btn btn-outline-info btn-sm sharing-action-btn" data-online-only="true">
+                    <i class="bi bi-eye me-1"></i> Preview what {{ partner.username }} sees
+                </button>
+            </div>
+            <div class="d-flex gap-2">
+                {% if perm and perm.show_balance and not perm.is_revoked %}
+                <button type="submit" name="action" value="stop_sharing_balance" class="btn btn-outline-danger btn-sm sharing-action-btn" data-online-only="true">
+                    Stop sharing balance
+                </button>
+                {% endif %}
+                <button type="submit" name="action" value="save_balance_permission" class="btn btn-primary btn-sm sharing-action-btn" data-online-only="true">
+                    Save privacy settings
+                </button>
+            </div>
+        </div>
+    </form>
+</section>
+
+<!-- Preview Modal / Section -->
+{% if is_preview and preview_result %}
+<section class="dashboard-panel p-3 p-md-4 mb-4 border border-info-subtle" aria-labelledby="privacy-preview-heading">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <h2 id="privacy-preview-heading" class="h6 fw-semibold text-info-emphasis mb-0">
+            <i class="bi bi-eye me-1"></i> Preview: What {{ partner.username }} sees
+        </h2>
+        <span class="badge text-bg-warning">Unsaved Preview</span>
+    </div>
+    <p class="small text-muted mb-3">
+        This preview uses the exact same calculation and restricted projection that your partner sees, valued using global provider and shared space rates. Note that the actual recipient's displayed value may differ if they use an authorized personal rate. Unsaved settings are shown here; click "Save privacy settings" above to apply them.
+    </p>
+
+    <div class="border rounded p-3 bg-white">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+            <span class="small fw-semibold text-secondary text-uppercase tracking-wider">
+                Personal balance from selected wallets
+            </span>
+            {% if preview_result.status == 'available' %}
+                {% if preview_result.is_stale %}
+                    <span class="badge text-bg-warning-subtle text-warning-emphasis border border-warning-subtle"><i class="bi bi-clock-history me-1"></i> Uses stale exchange rates</span>
+                {% else %}
+                    <span class="badge text-bg-success">Available</span>
+                {% endif %}
+            {% elif preview_result.status == 'visibility_off' %}
+                <span class="badge text-bg-secondary">Sharing OFF</span>
+            {% else %}
+                <span class="badge text-bg-warning">Notice</span>
+            {% endif %}
+        </div>
+
+        {% if preview_result.status == 'available' %}
+            <div class="fs-4 fw-bold mb-1 {% if preview_result.amount < 0 %}text-danger{% elif preview_result.is_zero %}text-secondary{% else %}text-success{% endif %}">
+                {{ preview_result.formatted_amount }} {{ preview_result.currency.code }}
+            </div>
+            <div class="small text-muted mt-2">
+                {% if preview_result.latest_record_update %}
+                <div>Record updated: {{ preview_result.latest_record_update|date:"Y-m-d H:i" }}</div>
+                {% endif %}
+                {% if preview_result.rate_effective_dates %}
+                <div>Exchange rate date: {{ preview_result.rate_effective_dates|join:", " }}</div>
+                {% endif %}
+                {% if preview_result.is_stale %}
+                <div class="text-warning-emphasis small mt-1">
+                    <i class="bi bi-exclamation-triangle me-1"></i> Uses stale exchange rates
+                </div>
+                {% endif %}
+                <div class="text-muted small mt-1 fst-italic">
+                    Note: Actual recipient's displayed value may differ if they use an authorized personal rate.
+                </div>
+            </div>
+        {% elif preview_result.status == 'visibility_off' %}
+            <p class="text-muted small mb-0 py-2">
+                This member has not shared a personal balance.
+            </p>
+        {% elif preview_result.status == 'no_wallets_selected' %}
+            <p class="text-muted small mb-0 py-2">
+                This member enabled balance sharing, but has no wallets currently selected.
+            </p>
+        {% elif preview_result.status == 'conversion_unavailable' %}
+            <div class="text-warning-emphasis fw-medium small mb-1 py-1">
+                {{ preview_result.label|default:"Balance unavailable — conversion required" }}
+            </div>
+            <p class="text-muted small mb-0">
+                A required currency exchange rate is currently unavailable. Partial amounts are not displayed.
+            </p>
+        {% else %}
+            <p class="text-muted small mb-0 py-2">
+                {{ preview_result.label|default:"Disclosure unavailable." }}
+            </p>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+<!-- Shared Transactions in this Space -->
+<section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="shared-transactions-privacy-heading">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div>
+            <h2 id="shared-transactions-privacy-heading" class="h6 fw-semibold mb-1">Your shared transactions in this space</h2>
+            <p class="small text-secondary mb-0">
+                Transactions you explicitly shared with {{ partner.username }}. Transactions are shared individually and are completely independent of personal balance permissions.
+            </p>
+        </div>
+        <a href="{% url 'budgets:transactions' %}" class="small text-decoration-none">
+            Manage on Transactions page &rarr;
+        </a>
+    </div>
+
+    {% if shared_tx_grants %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col">Date</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Original amount</th>
+                    <th scope="col">Notes status</th>
+                    <th scope="col" class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for grant in shared_tx_grants %}
+                <tr>
+                    <td class="small">{{ grant.transaction.transaction_date|date:"Y-m-d" }}</td>
+                    <td class="fw-medium">{{ grant.transaction.description|default:"Personal transaction" }}</td>
+                    <td class="fw-semibold {% if grant.transaction.transaction_type == 'income' %}text-success{% else %}text-danger{% endif %}">
+                        {% if grant.transaction.transaction_type == 'income' %}+{% else %}-{% endif %}{{ grant.transaction.formatted_amount }} {{ grant.transaction.currency.code }}
+                    </td>
+                    <td>
+                        {% if grant.include_notes %}
+                        <span class="badge text-bg-light border text-success">Notes shared</span>
+                        {% else %}
+                        <span class="badge text-bg-light border text-muted">Notes hidden</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline sharing-action-form" data-online-only="true">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update_personal_transaction_share">
+                            <input type="hidden" name="share_id" value="{{ grant.id }}">
+                            <input type="hidden" name="include_notes" value="{% if grant.include_notes %}false{% else %}true{% endif %}">
+                            <button type="submit" class="btn btn-outline-secondary btn-sm py-0 px-2 sharing-action-btn" data-online-only="true" title="{% if grant.include_notes %}Hide notes from partner{% else %}Share notes with partner{% endif %}">
+                                {% if grant.include_notes %}Hide notes{% else %}Share notes{% endif %}
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline sharing-action-form" data-online-only="true">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="revoke_personal_transaction_share">
+                            <input type="hidden" name="share_id" value="{{ grant.id }}">
+                            <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-2 sharing-action-btn" data-online-only="true" title="Stop sharing this transaction with partner">
+                                Stop sharing
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card bg-light border-0 p-3 text-center text-muted small">
+        You have not shared any personal transactions with {{ partner.username }} in this space.
+        You can share individual transactions anytime from your <a href="{% url 'budgets:transactions' %}" class="ms-1">Transactions page</a>.
+    </div>
+    {% endif %}
+
+    <div class="mt-3 small text-muted">
+        <i class="bi bi-info-circle me-1"></i> Revoking a transaction grant or personal balance disclosure immediately prevents future server access, but cannot recall screenshots or information previously viewed.
+    </div>
+</section>
+{% endif %}
+{% endblock %}

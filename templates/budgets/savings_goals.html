@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}Savings Goals | Budget Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <p class="text-secondary mb-0">
+        Savings goals track earmarked funds toward a target amount for personal plans or shared milestones without reducing wallet balances or counting as expenses.
+    </p>
+    <a href="{% url 'budgets:wallets' %}" class="small text-decoration-none">
+        Go to Wallets
+    </a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="create-goal-heading">
+            <h2 id="create-goal-heading" class="h6 fw-semibold mb-2">Create savings goal</h2>
+            <form method="post" action="{% url 'budgets:savings_goals' %}" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_goal">
+                <div class="row g-2">
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label small fw-medium">Goal name</label>
+                        {{ goal_form.name }}
+                    </div>
+                    <div class="col-6 col-sm-3">
+                        <label class="form-label small fw-medium">Currency</label>
+                        {{ goal_form.currency }}
+                    </div>
+                    <div class="col-6 col-sm-3">
+                        <label class="form-label small fw-medium">Scope</label>
+                        {{ goal_form.scope }}
+                    </div>
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label small fw-medium">Target amount</label>
+                        {{ goal_form.target_amount }}
+                    </div>
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label small fw-medium">Target date (optional)</label>
+                        {{ goal_form.target_date }}
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mt-3">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        Create savings goal
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="goal-contributions-heading">
+            <h2 id="goal-contributions-heading" class="h6 fw-semibold mb-2">Record contribution or reversal</h2>
+            <p class="small text-secondary mb-3">
+                Allocate or release earmarked savings toward a goal. Contributions do not deduct from your wallet balances.
+            </p>
+            <form method="post" action="{% url 'budgets:savings_goals' %}" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="record_contribution">
+                <div class="row g-2">
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label small fw-medium">Goal</label>
+                        {{ contribution_form.goal }}
+                    </div>
+                    <div class="col-6 col-sm-3">
+                        <label class="form-label small fw-medium">Type</label>
+                        {{ contribution_form.entry_type }}
+                    </div>
+                    <div class="col-6 col-sm-3">
+                        <label class="form-label small fw-medium">Amount</label>
+                        {{ contribution_form.amount }}
+                    </div>
+                    <div class="col-12 col-sm-5">
+                        <label class="form-label small fw-medium">Date</label>
+                        {{ contribution_form.contribution_date }}
+                    </div>
+                    <div class="col-12 col-sm-7">
+                        <label class="form-label small fw-medium">Notes</label>
+                        {{ contribution_form.notes }}
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mt-3">
+                    <button type="submit" class="btn btn-outline-primary btn-sm">
+                        Record entry
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+</div>
+
+<section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="your-savings-goals-heading">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <h2 id="your-savings-goals-heading" class="h6 fw-semibold mb-0">Your savings goals</h2>
+        <form method="get" action="{% url 'budgets:savings_goals' %}" class="d-flex align-items-center gap-2">
+            <label for="goal-scope" class="form-label small text-secondary mb-0">Scope</label>
+            <select id="goal-scope" name="scope" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+                <option value="">All scopes</option>
+                <option value="personal" {% if overview.scope == 'personal' %}selected{% endif %}>Personal</option>
+                <option value="shared" {% if overview.scope == 'shared' %}selected{% endif %}>Shared</option>
+            </select>
+        </form>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col">Goal</th>
+                    <th scope="col">Scope</th>
+                    <th scope="col">Currency</th>
+                    <th scope="col" class="text-end">Target Amount</th>
+                    <th scope="col" class="text-end">Saved Amount</th>
+                    <th scope="col" class="text-end">Remaining Amount</th>
+                    <th scope="col">Target Date</th>
+                    <th scope="col" class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in overview.rows %}
+                <tr>
+                    <td>
+                        <div class="fw-medium">{{ item.goal.name }}</div>
+                        <div class="progress mt-1" style="height: 5px; max-width: 140px;">
+                            <div class="progress-bar bg-primary" style="width: {{ item.progress_pct }}%;"></div>
+                        </div>
+                    </td>
+                    <td>{{ item.goal.get_scope_display }}</td>
+                    <td>{{ item.goal.currency.code }}</td>
+                    <td class="text-end">{{ item.formatted_target }}</td>
+                    <td class="text-end text-success fw-semibold">{{ item.formatted_saved }}</td>
+                    <td class="text-end">{{ item.formatted_remaining }}</td>
+                    <td>{{ item.goal.target_date|date:"Y-m-d"|default:"—" }}</td>
+                    <td class="text-end">
+                        <div class="d-inline-flex gap-1">
+                            <button
+                                class="btn btn-outline-secondary btn-sm py-0 px-2"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#edit-goal-{{ item.goal.id }}"
+                                aria-expanded="false"
+                                aria-controls="edit-goal-{{ item.goal.id }}"
+                            >
+                                Edit
+                            </button>
+                            <form method="post" action="{% url 'budgets:savings_goals' %}" class="d-inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="archive_goal">
+                                <input type="hidden" name="goal_id" value="{{ item.goal.id }}">
+                                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">
+                                    Archive
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                <tr class="collapse bg-light" id="edit-goal-{{ item.goal.id }}">
+                    <td colspan="8" class="p-3">
+                        <form method="post" action="{% url 'budgets:savings_goals' %}" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update_goal">
+                            <input type="hidden" name="goal_id" value="{{ item.goal.id }}">
+                            <input type="hidden" name="expected_revision" value="{{ item.goal.revision }}">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-12 col-sm-3">
+                                    <label class="form-label small fw-medium mb-1">Goal name</label>
+                                    <input
+                                        type="text"
+                                        name="name"
+                                        value="{{ item.goal.name }}"
+                                        maxlength="120"
+                                        class="form-control form-control-sm"
+                                        required
+                                    >
+                                </div>
+                                <div class="col-6 col-sm-2">
+                                    <label class="form-label small fw-medium mb-1">Currency</label>
+                                    <select name="currency" class="form-select form-select-sm" required>
+                                        {% for c in currencies %}
+                                        <option value="{{ c.id }}" {% if c.id == item.goal.currency_id %}selected{% endif %}>
+                                            {{ c.code }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-6 col-sm-3">
+                                    <label class="form-label small fw-medium mb-1">Target amount</label>
+                                    <input
+                                        type="text"
+                                        name="target_amount"
+                                        value="{{ item.formatted_target }}"
+                                        inputmode="decimal"
+                                        class="form-control form-control-sm"
+                                        required
+                                    >
+                                </div>
+                                <div class="col-12 col-sm-2">
+                                    <label class="form-label small fw-medium mb-1">Target date</label>
+                                    <input
+                                        type="date"
+                                        name="target_date"
+                                        value="{{ item.goal.target_date|date:'Y-m-d'|default:'' }}"
+                                        class="form-control form-control-sm"
+                                    >
+                                </div>
+                                <div class="col-12 col-sm-2 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                                        Save goal
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center text-secondary py-5">
+                        No savings goals created.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

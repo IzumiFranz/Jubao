@@ -1,0 +1,353 @@
+/* Scoped Dashboard styles for Japanese kawaii stationery / kakeibo aesthetic */
+
+body:has(.dashboard-kawaii),
+body:has(.dashboard-kawaii) .app-main-column,
+body:has(.dashboard-kawaii) .app-content {
+    background-color: #FAF8F3 !important;
+}
+
+.dashboard-kawaii {
+    background-color: #FAF8F3;
+    color: #18365D;
+    font-family: inherit;
+}
+
+/* 1. Welcome Banner */
+.dashboard-kawaii .dashboard-banner {
+    background: linear-gradient(135deg, #FEFBF1 0%, #FEF5DF 100%);
+    border: 1px solid #F5E6BA;
+    border-radius: 16px;
+    padding: 1.25rem 1.75rem;
+    position: relative;
+    box-shadow: 0 2px 8px rgba(180, 117, 20, 0.05);
+}
+
+.dashboard-kawaii .dashboard-banner-title {
+    color: #18365D;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.dashboard-kawaii .banner-heart {
+    color: #F497A9;
+    display: inline-block;
+    margin-left: 0.25rem;
+}
+
+.dashboard-kawaii .dashboard-banner-subtitle {
+    color: #5A6B82;
+    font-size: 0.875rem;
+    margin-bottom: 0;
+}
+
+.dashboard-kawaii .dashboard-banner-art {
+    min-width: 110px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.dashboard-kawaii .dashboard-banner-art img {
+    max-height: 80px;
+    width: auto;
+    object-fit: contain;
+}
+
+/* 2. Summary Cards */
+.dashboard-kawaii .summary-card-kawaii {
+    border-radius: 16px;
+    padding: 1.25rem;
+    position: relative;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 2px 8px rgba(24, 54, 93, 0.04);
+}
+
+.dashboard-kawaii .summary-card-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #5A6B82;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.dashboard-kawaii .summary-card-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.dashboard-kawaii .summary-card-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #18365D;
+    line-height: 1.2;
+    margin-bottom: 0.35rem;
+    letter-spacing: -0.01em;
+}
+
+.dashboard-kawaii .summary-card-subtext {
+    font-size: 0.775rem;
+    color: #718096;
+    margin-bottom: 0;
+    line-height: 1.35;
+}
+
+/* Mint - Income */
+.dashboard-kawaii .card-income {
+    background-color: #EAF7EE;
+    border: 1px solid #D1EED8;
+}
+.dashboard-kawaii .card-income .summary-card-icon {
+    background-color: #D5F1DE;
+    color: #2E7D46;
+}
+
+/* Blush - Expenses */
+.dashboard-kawaii .card-expenses {
+    background-color: #FDF0EE;
+    border: 1px solid #F8D7D3;
+}
+.dashboard-kawaii .card-expenses .summary-card-icon {
+    background-color: #FCE1DC;
+    color: #C04B3E;
+}
+
+/* Pale Blue - Balance */
+.dashboard-kawaii .card-balance {
+    background-color: #EBF3FC;
+    border: 1px solid #D5E6F8;
+}
+.dashboard-kawaii .card-balance .summary-card-icon {
+    background-color: #DCEAF9;
+    color: #1E4E8C;
+}
+
+/* Butter Yellow - Remaining Budget */
+.dashboard-kawaii .card-budget {
+    background-color: #FEF6E4;
+    border: 1px solid #FAE3B2;
+}
+.dashboard-kawaii .card-budget .summary-card-icon {
+    background-color: #FCEABA;
+    color: #B47514;
+}
+
+/* Negative balance text */
+.dashboard-kawaii .text-negative-balance {
+    color: #C04B3E !important;
+}
+
+/* 3. Main Panels */
+.dashboard-kawaii .dashboard-panel-kawaii {
+    background-color: #FFFFFF;
+    border: 1px solid #ECE7DE;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(24, 54, 93, 0.04);
+}
+
+.dashboard-kawaii .panel-header-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #18365D;
+    margin-bottom: 0;
+}
+
+.dashboard-kawaii .panel-header-link {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #18365D;
+    text-decoration: none;
+    opacity: 0.85;
+    transition: opacity 0.15s ease;
+}
+
+.dashboard-kawaii .panel-header-link:hover {
+    opacity: 1;
+    text-decoration: underline;
+    color: #0B1630;
+}
+
+/* Buttons */
+.dashboard-kawaii .btn-kawaii-primary {
+    background-color: #18365D;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 9999px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 0.4rem 1.1rem;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    text-decoration: none;
+}
+
+.dashboard-kawaii .btn-kawaii-primary:hover,
+.dashboard-kawaii .btn-kawaii-primary:focus {
+    background-color: #0B1630;
+    color: #FFFFFF;
+}
+
+.dashboard-kawaii .btn-kawaii-primary:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(24, 54, 93, 0.25);
+}
+
+/* Tables */
+.dashboard-kawaii .table-kawaii {
+    width: 100%;
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.dashboard-kawaii .table-kawaii thead th {
+    background-color: #FAF8F3;
+    color: #5A6B82;
+    font-size: 0.775rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.65rem 0.75rem;
+    border-top: none;
+    border-bottom: 1px solid #ECE7DE;
+}
+
+.dashboard-kawaii .table-kawaii tbody td {
+    padding: 0.75rem;
+    border-top: none;
+    border-bottom: 1px solid #F3EFE8;
+    color: #18365D;
+    vertical-align: middle;
+    font-size: 0.875rem;
+}
+
+.dashboard-kawaii .table-kawaii tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Badges */
+.dashboard-kawaii .badge-scope-personal {
+    background-color: #EBF3FC;
+    color: #1E4E8C;
+    border: 1px solid #D5E6F8;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 9999px;
+    padding: 0.25rem 0.6rem;
+}
+
+.dashboard-kawaii .badge-scope-shared {
+    background-color: #FEF6E4;
+    color: #B47514;
+    border: 1px solid #FAE3B2;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 9999px;
+    padding: 0.25rem 0.6rem;
+}
+
+/* Amounts */
+.dashboard-kawaii .text-kawaii-income {
+    color: #2E7D46;
+}
+
+.dashboard-kawaii .text-kawaii-expense {
+    color: #C04B3E;
+}
+
+/* Budget & Goal items */
+.dashboard-kawaii .goal-budget-item {
+    background-color: #FAF8F3;
+    border: 1px solid #ECE7DE;
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+}
+
+.dashboard-kawaii .progress-kawaii {
+    background-color: #E8E3D9;
+    border-radius: 9999px;
+    height: 8px;
+    overflow: hidden;
+}
+
+.dashboard-kawaii .progress-kawaii .progress-bar {
+    border-radius: 9999px;
+}
+
+/* Empty states */
+.dashboard-kawaii .empty-state-box-kawaii {
+    padding: 2.25rem 1.5rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.dashboard-kawaii .empty-state-art {
+    width: 100px;
+    height: 80px;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dashboard-kawaii .empty-state-art img {
+    max-height: 75px;
+    max-width: 95px;
+    object-fit: contain;
+}
+
+.dashboard-kawaii .empty-state-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #18365D;
+    margin-bottom: 0.35rem;
+}
+
+.dashboard-kawaii .empty-state-text {
+    font-size: 0.85rem;
+    color: #5A6B82;
+    max-width: 360px;
+    margin-bottom: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 767.98px) {
+    .dashboard-kawaii .dashboard-banner {
+        padding: 1rem 1.25rem;
+    }
+    .dashboard-kawaii .dashboard-banner-title {
+        font-size: 1.1rem;
+    }
+    .dashboard-kawaii .dashboard-banner-art {
+        min-width: 70px;
+        height: 60px;
+    }
+    .dashboard-kawaii .dashboard-banner-art img {
+        max-height: 55px;
+    }
+    .dashboard-kawaii .summary-card-value {
+        font-size: 1.35rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-kawaii .summary-card-kawaii,
+    .dashboard-kawaii .btn-kawaii-primary {
+        transition: none;
+    }
+}

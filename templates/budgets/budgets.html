@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Budgets | Budget Tracker{% endblock %}
+
+{% block content %}
+<p class="text-secondary mb-4">
+    Set monthly category spending limits for a chosen period across both personal and shared spaces.
+</p>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-7">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="budget-create-heading">
+            <h2 id="budget-create-heading" class="h6 fw-semibold mb-2">Set monthly category budget</h2>
+            <p class="small text-secondary mb-3">
+                Select an expense category, month, currency, and spending limit. Saving an existing category/period/currency combination updates its limit.
+            </p>
+            <form method="post" action="{% url 'budgets:budgets' %}" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_budget">
+                <div class="row g-2">
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label small fw-medium">Category</label>
+                        {{ budget_form.category }}
+                    </div>
+                    <div class="col-6 col-sm-3">
+                        <label class="form-label small fw-medium">Period (YYYY-MM)</label>
+                        {{ budget_form.period }}
+                    </div>
+                    <div class="col-6 col-sm-3">
+                        <label class="form-label small fw-medium">Scope</label>
+                        {{ budget_form.scope }}
+                    </div>
+                    <div class="col-6 col-sm-6">
+                        <label class="form-label small fw-medium">Currency</label>
+                        {{ budget_form.currency }}
+                    </div>
+                    <div class="col-6 col-sm-6">
+                        <label class="form-label small fw-medium">Monthly limit</label>
+                        {{ budget_form.limit_amount }}
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mt-3">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        Save budget
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div class="col-12 col-lg-5">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="budget-controls-heading">
+            <h2 id="budget-controls-heading" class="h6 fw-semibold mb-2">Filter budget period</h2>
+            <form method="get" action="{% url 'budgets:budgets' %}" class="row g-2 align-items-end mb-3">
+                <div class="col-12 col-sm-6">
+                    <label for="budget-period" class="form-label small fw-medium">Period</label>
+                    <input
+                        type="month"
+                        id="budget-period"
+                        name="period"
+                        value="{{ overview.period }}"
+                        class="form-control form-control-sm"
+                    >
+                </div>
+                <div class="col-12 col-sm-6">
+                    <label for="budget-scope" class="form-label small fw-medium">Scope</label>
+                    <select id="budget-scope" name="scope" class="form-select form-select-sm">
+                        <option value="">All scopes</option>
+                        <option value="personal" {% if overview.scope == 'personal' %}selected{% endif %}>Personal</option>
+                        <option value="shared" {% if overview.scope == 'shared' %}selected{% endif %}>Shared</option>
+                    </select>
+                </div>
+                <div class="col-12 d-flex justify-content-end mt-2">
+                    <button type="submit" class="btn btn-outline-primary btn-sm">View period</button>
+                </div>
+            </form>
+
+            <hr class="my-2">
+            <h3 class="small fw-semibold mb-2">Quick add category</h3>
+            <form method="post" action="{% url 'budgets:budgets' %}" class="row g-2 align-items-end" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_category">
+                <input type="hidden" name="kind" value="expense">
+                <div class="col-7">
+                    {{ category_form.name }}
+                </div>
+                <div class="col-5">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm w-100">Add category</button>
+                </div>
+            </form>
+        </section>
+    </div>
+</div>
+
+<section class="mb-4" aria-labelledby="budget-overview-heading">
+    <h2 id="budget-overview-heading" class="visually-hidden">Budget Overview</h2>
+    <div class="row g-3">
+        <div class="col-12 col-md-4">
+            <div class="summary-card p-3 h-100">
+                <p class="text-secondary small fw-medium mb-1">Planned Budget ({{ overview.period }})</p>
+                <p class="summary-value mb-1">
+                    {% if overview.single_currency %}
+                        {{ overview.formatted_total_budgeted }} {{ overview.single_currency.code }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </p>
+                <p class="text-secondary small mb-0">
+                    {% if overview.single_currency %}
+                        Single-currency period total
+                    {% elif overview.rows %}
+                        Multiple currencies — see per-category rows
+                    {% else %}
+                        No budgets for {{ overview.period }}
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="summary-card p-3 h-100">
+                <p class="text-secondary small fw-medium mb-1">Spent ({{ overview.period }})</p>
+                <p class="summary-value mb-1">
+                    {% if overview.summary_available and overview.single_currency %}
+                        {{ overview.formatted_total_spent }} {{ overview.single_currency.code }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </p>
+                <p class="text-secondary small mb-0">
+                    {% if overview.any_incomplete_conversion %}
+                        Conversion incomplete for some category expenses
+                    {% else %}
+                        Tracked expenses in budgeted categories
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="summary-card p-3 h-100">
+                <p class="text-secondary small fw-medium mb-1">Remaining ({{ overview.period }})</p>
+                <p class="summary-value mb-1">
+                    {% if overview.summary_available and overview.single_currency %}
+                        {{ overview.formatted_total_remaining }} {{ overview.single_currency.code }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </p>
+                <p class="text-secondary small mb-0">
+                    Planned limit minus tracked expenses
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="dashboard-panel p-3 p-md-4" aria-labelledby="category-budgets-heading">
+    <div class="mb-3">
+        <h2 id="category-budgets-heading" class="h6 fw-semibold mb-1">Category budgets ({{ overview.period }})</h2>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col">Category</th>
+                    <th scope="col">Scope</th>
+                    <th scope="col">Period</th>
+                    <th scope="col">Currency</th>
+                    <th scope="col" class="text-end">Limit</th>
+                    <th scope="col" class="text-end">Spent</th>
+                    <th scope="col" class="text-end">Remaining</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in overview.rows %}
+                <tr>
+                    <td class="fw-medium">{{ row.category.name }}</td>
+                    <td>{{ row.scope_display }}</td>
+                    <td>{{ row.budget.period }}</td>
+                    <td>{{ row.currency.code }}</td>
+                    <td class="text-end">{{ row.formatted_limit }}</td>
+                    <td class="text-end">{{ row.formatted_spent }}</td>
+                    <td class="text-end fw-semibold">{{ row.formatted_remaining }}</td>
+                    <td>
+                        <span class="badge text-bg-{{ row.status_variant }}">{{ row.status_label }}</span>
+                    </td>
+                    <td class="text-end">
+                        <form method="post" action="{% url 'budgets:budgets' %}" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="archive_budget">
+                            <input type="hidden" name="budget_id" value="{{ row.budget.id }}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">
+                                Remove
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center text-secondary py-5">
+                        No budgets created for this period.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

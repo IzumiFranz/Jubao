@@ -1,0 +1,287 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0d6efd">
+    <title>Offline Workspace | Budget Tracker</title>
+    <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=v3">
+</head>
+<body
+    class="app-body"
+    data-offline-shell="true"
+    data-sync-state-url="{% url 'budgets:sync_state_api' %}"
+    data-sync-mutations-url="{% url 'budgets:sync_mutations_api' %}"
+>
+    <a class="visually-hidden-focusable skip-link" href="#main-content">Skip to main content</a>
+
+    <header class="app-topbar border-bottom bg-white px-3 px-md-4 py-3">
+        <div class="container-fluid p-0 d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div>
+                <h1 class="h5 mb-0 fw-semibold">Budget Tracker — Offline Workspace</h1>
+                <p class="text-secondary small mb-0">
+                    Account-neutral offline shell. Local data is loaded from your browser's isolated per-account storage.
+                </p>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <span id="offline-active-user-badge" class="badge bg-secondary-subtle text-secondary-emphasis border">
+                    No active offline profile loaded
+                </span>
+                <button type="button" id="btn-sync-now" class="btn btn-primary btn-sm">
+                    Sync now
+                </button>
+                <a href="{% url 'budgets:dashboard' %}" class="btn btn-outline-secondary btn-sm">Dashboard</a>
+                <a href="{% url 'budgets:transactions' %}" class="btn btn-outline-secondary btn-sm">Transactions</a>
+                <a href="{% url 'accounts:login' %}" class="btn btn-outline-secondary btn-sm">Sign in</a>
+            </div>
+        </div>
+    </header>
+
+    <main id="main-content" class="app-content py-4 px-3 px-md-4" tabindex="-1">
+        <div class="container-fluid p-0">
+            <div
+                id="offline-sync-banner"
+                class="alert alert-warning py-2 px-3 small mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2"
+                role="status"
+                aria-live="polite"
+            >
+                <span id="offline-sync-banner-text">
+                    Checking connection and local offline storage...
+                </span>
+                <span id="offline-last-sync-badge" class="small text-secondary"></span>
+            </div>
+
+            <div
+                id="offline-bounded-notice"
+                class="alert alert-info py-2 px-3 small mb-3 d-none d-flex flex-wrap align-items-center justify-content-between gap-2"
+                role="status"
+            >
+                <span id="offline-bounded-notice-text"></span>
+                <button type="button" id="btn-offline-load-more" class="btn btn-outline-primary btn-sm py-0 px-2 d-none">
+                    Download older transactions
+                </button>
+            </div>
+
+            <div id="offline-no-snapshot-alert" class="dashboard-panel p-4 mb-4 d-none">
+                <h2 class="h6 fw-semibold mb-2">No offline snapshot found for an active account</h2>
+                <p class="text-secondary small mb-0">
+                    Sign in while online so Budget Tracker can download your authorized wallets, categories, and transactions into isolated local storage for offline use.
+                </p>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-xl-5">
+                    <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="offline-entry-heading">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <h2 id="offline-entry-heading" class="h6 fw-semibold mb-0">
+                                Record Offline Income or Expense
+                            </h2>
+                            <span class="badge bg-warning-subtle text-warning-emphasis border">Queued locally</span>
+                        </div>
+                        <p class="text-secondary small mb-3">
+                            Entries recorded here are stored in your account's local queue with currency precision validation and will synchronize when your authenticated connection is restored.
+                        </p>
+
+                        <div id="offline-entry-feedback" class="alert d-none py-2 px-3 small mb-3" role="alert"></div>
+
+                        <form id="offline-entry-form" novalidate>
+                            <div class="row g-3">
+                                <div class="col-12 col-sm-6">
+                                    <label for="offline-tx-type" class="form-label small fw-medium">Type</label>
+                                    <select id="offline-tx-type" name="transaction_type" class="form-select form-select-sm" required>
+                                        <option value="expense">Expense</option>
+                                        <option value="income">Income</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label for="offline-tx-date" class="form-label small fw-medium">Date</label>
+                                    <input type="date" id="offline-tx-date" name="transaction_date" class="form-control form-control-sm" required>
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label for="offline-tx-wallet" class="form-label small fw-medium">Wallet</label>
+                                    <select id="offline-tx-wallet" name="wallet_id" class="form-select form-select-sm" required>
+                                        <option value="">Select wallet</option>
+                                    </select>
+                                    <div id="offline-wallet-precision-hint" class="form-text small"></div>
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label for="offline-tx-amount" class="form-label small fw-medium">Amount</label>
+                                    <input
+                                        type="text"
+                                        id="offline-tx-amount"
+                                        name="amount"
+                                        inputmode="decimal"
+                                        autocomplete="off"
+                                        placeholder="0.00"
+                                        class="form-control form-control-sm"
+                                        required
+                                    >
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label for="offline-tx-category" class="form-label small fw-medium">Category</label>
+                                    <select id="offline-tx-category" name="category_id" class="form-select form-select-sm">
+                                        <option value="">Uncategorized</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label for="offline-tx-scope" class="form-label small fw-medium">Scope</label>
+                                    <select id="offline-tx-scope" name="scope" class="form-select form-select-sm">
+                                        <option value="personal">Personal</option>
+                                        <option value="shared">Shared</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 col-sm-6" id="offline-shared-space-group">
+                                    <label for="offline-tx-shared-space" class="form-label small fw-medium">Shared space</label>
+                                    <select id="offline-tx-shared-space" name="shared_space_id" class="form-select form-select-sm">
+                                        <option value="">Auto-detect from wallet</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 col-sm-6" id="offline-paid-by-group">
+                                    <label for="offline-tx-paid-by" class="form-label small fw-medium">Paid by (shared)</label>
+                                    <select id="offline-tx-paid-by" name="paid_by_id" class="form-select form-select-sm">
+                                        <option value="">Current user (default)</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label for="offline-tx-manual-rate" class="form-label small fw-medium">Manual exchange rate (optional)</label>
+                                    <input
+                                        type="text"
+                                        id="offline-tx-manual-rate"
+                                        name="manual_rate"
+                                        inputmode="decimal"
+                                        autocomplete="off"
+                                        placeholder="Optional rate override"
+                                        class="form-control form-control-sm"
+                                    >
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label for="offline-tx-description" class="form-label small fw-medium">Description</label>
+                                    <input
+                                        type="text"
+                                        id="offline-tx-description"
+                                        name="description"
+                                        maxlength="200"
+                                        placeholder="What was this for?"
+                                        class="form-control form-control-sm"
+                                    >
+                                </div>
+                                <div class="col-12">
+                                    <label for="offline-tx-notes" class="form-label small fw-medium">Notes</label>
+                                    <textarea
+                                        id="offline-tx-notes"
+                                        name="notes"
+                                        rows="2"
+                                        placeholder="Optional details"
+                                        class="form-control form-control-sm"
+                                    ></textarea>
+                                </div>
+                                <div class="col-12">
+                                    <button type="submit" id="btn-offline-queue-submit" class="btn btn-primary btn-sm">
+                                        Queue offline transaction
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </section>
+                </div>
+
+                <div class="col-12 col-xl-7">
+                    <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="offline-queued-heading">
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                            <h2 id="offline-queued-heading" class="h6 fw-semibold mb-0">
+                                Pending, Failed &amp; Conflicting Offline Changes
+                            </h2>
+                            <span id="offline-queued-count-badge" class="badge bg-secondary-subtle text-secondary-emphasis border">
+                                0 items
+                            </span>
+                        </div>
+                        <p class="text-secondary small mb-3">
+                            Queued changes are kept separate from confirmed server records until synchronization succeeds. Failed or conflicting mutations remain here so you can inspect the reason, retry, or discard them.
+                        </p>
+                        <div id="offline-queued-list" class="vstack gap-2">
+                            <p class="text-secondary small mb-0">No pending offline mutations.</p>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-lg-5">
+                    <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="offline-wallets-heading">
+                        <h2 id="offline-wallets-heading" class="h6 fw-semibold mb-2">Downloaded Wallets (Synced Snapshot)</h2>
+                        <p class="text-secondary small mb-3">
+                            Balances below reflect the last confirmed server sync. Pending offline entries are listed separately above.
+                        </p>
+                        <div id="offline-wallets-list" class="vstack gap-2">
+                            <p class="text-secondary small mb-0">No synced wallets loaded.</p>
+                        </div>
+                    </section>
+                </div>
+                <div class="col-12 col-lg-7">
+                    <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="offline-categories-heading">
+                        <h2 id="offline-categories-heading" class="h6 fw-semibold mb-2">Downloaded Categories</h2>
+                        <div id="offline-categories-list" class="d-flex flex-wrap gap-2">
+                            <p class="text-secondary small mb-0">No synced categories loaded.</p>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="offline-transactions-heading">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <div>
+                        <h2 id="offline-transactions-heading" class="h6 fw-semibold mb-0">
+                            Downloaded Transactions (Synced Server History)
+                        </h2>
+                        <p class="text-secondary small mb-0">
+                            Confirmed server records downloaded in your snapshot.
+                        </p>
+                    </div>
+                    <span id="offline-tx-summary-badge" class="badge bg-light text-dark border">0 synced</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Date</th>
+                                <th scope="col">Description &amp; Category</th>
+                                <th scope="col">Wallet</th>
+                                <th scope="col">Scope</th>
+                                <th scope="col" class="text-end">Amount</th>
+                                <th scope="col" class="text-end">Offline Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="offline-transactions-tbody">
+                            <tr>
+                                <td colspan="6" class="text-secondary small py-3 text-center">
+                                    No synced transactions available in local storage.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="dashboard-panel p-3 p-md-4" aria-labelledby="offline-limitations-heading">
+                <h2 id="offline-limitations-heading" class="h6 fw-semibold mb-2">Features Requiring an Online Connection</h2>
+                <p class="text-secondary small mb-2">
+                    While offline, you can view your downloaded wallets, categories, and transactions, queue new income or expense entries, and queue edits or deletions with revision tracking. The following actions require a live server connection:
+                </p>
+                <ul class="text-secondary small mb-0">
+                    <li>Creating or modifying wallets, categories, category budgets, or savings goals</li>
+                    <li>Recording wallet-to-wallet transfers or savings contributions</li>
+                    <li>Creating shared spaces, generating or accepting partner invitations, and changing membership</li>
+                    <li>Refreshing external exchange-rate providers or saving base-currency preferences</li>
+                    <li>Exporting full server CSV/JSON archives, changing passwords, or deleting accounts</li>
+                </ul>
+            </section>
+        </div>
+    </main>
+
+    <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+    <script src="{% static 'js/offline.js' %}?v=v3"></script>
+</body>
+</html>

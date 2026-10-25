@@ -1,0 +1,120 @@
+{% if not has_active_currencies %}
+<div class="alert alert-warning py-2 px-3 small mb-3" role="status" id="no-currencies-alert">
+    No active currencies are currently available for wallet creation.
+</div>
+{% endif %}
+
+{% if form.non_field_errors %}
+<div class="alert alert-danger py-2 px-3 small mb-3" role="alert">
+    {% for error in form.non_field_errors %}
+    <div>{{ error }}</div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<form method="post" action="{% url 'budgets:wallets' %}" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create_wallet">
+    <div class="row g-3 align-items-start">
+        <div class="col-12 col-md-4">
+            <label for="{{ form.name.id_for_label }}" class="form-label small fw-medium">
+                Wallet name
+            </label>
+            {{ form.name }}
+            {% if form.name.errors %}
+            <div class="invalid-feedback d-block" id="wallet-name-errors">
+                {% for error in form.name.errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-4">
+            <label for="{{ form.wallet_type.id_for_label }}" class="form-label small fw-medium">
+                Type
+            </label>
+            {{ form.wallet_type }}
+            {% if form.wallet_type.errors %}
+            <div class="invalid-feedback d-block" id="wallet-type-errors">
+                {% for error in form.wallet_type.errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-4">
+            <label for="{{ form.currency.id_for_label }}" class="form-label small fw-medium">
+                Currency
+            </label>
+            {{ form.currency }}
+            {% if form.currency.errors %}
+            <div class="invalid-feedback d-block" id="wallet-currency-errors">
+                {% for error in form.currency.errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-3">
+            <label for="{{ form.opening_balance.id_for_label }}" class="form-label small fw-medium">
+                Opening balance
+            </label>
+            {{ form.opening_balance }}
+            <div class="form-text small" id="wallet-opening-balance-help">
+                Starting balance as of the opening-balance date (not recorded as income).
+            </div>
+            {% if form.opening_balance.errors %}
+            <div class="invalid-feedback d-block" id="wallet-opening-balance-errors">
+                {% for error in form.opening_balance.errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-3">
+            <label for="{{ form.opening_balance_date.id_for_label }}" class="form-label small fw-medium">
+                Opening-balance date
+            </label>
+            {{ form.opening_balance_date }}
+            {% if form.opening_balance_date.errors %}
+            <div class="invalid-feedback d-block" id="wallet-opening-balance-date-errors">
+                {% for error in form.opening_balance_date.errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-3">
+            <label for="{{ form.ownership_scope.id_for_label }}" class="form-label small fw-medium">
+                Ownership scope
+            </label>
+            {{ form.ownership_scope }}
+            {% if form.ownership_scope.errors %}
+            <div class="invalid-feedback d-block">
+                {% for error in form.ownership_scope.errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-3 d-flex align-items-end pt-md-4">
+            <button
+                type="submit"
+                class="btn btn-primary btn-sm"
+                {% if not has_active_currencies %}
+                disabled
+                aria-disabled="true"
+                aria-describedby="no-currencies-alert"
+                {% endif %}
+            >
+                Add wallet
+            </button>
+        </div>
+    </div>
+</form>

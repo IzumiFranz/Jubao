@@ -1,0 +1,116 @@
+<header class="app-topbar bg-white border-bottom sticky-top">
+    <div class="container-fluid px-3 px-md-4 py-2">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm d-lg-none"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#appSidebar"
+                    aria-controls="appSidebar"
+                    aria-label="Open navigation menu"
+                >
+                    Menu
+                </button>
+                <h1 class="h5 mb-0 fw-semibold text-dark">{{ page_title|default:"Dashboard" }}</h1>
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                {% if request.user.is_authenticated %}
+                <form id="workspace-view-form" method="post" action="{% url 'accounts:switch_scope' %}" class="d-flex align-items-center gap-1">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <label for="workspace-view-select" class="form-label small text-secondary mb-0">
+                        View
+                    </label>
+                    <select
+                        id="workspace-view-select"
+                        name="view_choice"
+                        class="form-select form-select-sm w-auto"
+                        onchange="this.form.requestSubmit()"
+                        aria-label="Workspace view"
+                    >
+                        <option value="personal" {% if active_workspace_scope != 'shared' %}selected{% endif %}>
+                            Personal
+                        </option>
+                        {% for space in user_shared_spaces %}
+                        <option value="shared:{{ space.id }}" {% if active_workspace_scope == 'shared' and active_shared_space and active_shared_space.id == space.id %}selected{% endif %}>
+                            Shared — {{ space.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% if not user_shared_spaces %}
+                    <a href="{% url 'budgets:shared_space' %}" class="small text-decoration-none ms-1" title="Join or create a shared space">
+                        Join shared space
+                    </a>
+                    {% endif %}
+                    <noscript>
+                        <button type="submit" class="btn btn-outline-secondary btn-sm">Apply</button>
+                    </noscript>
+                </form>
+
+                <form id="display-currency-form" method="post" action="{% url 'accounts:set_display_currency' %}" class="d-flex align-items-center gap-1">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <label for="display-currency-select" class="form-label small text-secondary mb-0">
+                        Display currency
+                    </label>
+                    <select
+                        id="display-currency-select"
+                        name="currency_code"
+                        class="form-select form-select-sm w-auto"
+                        onchange="this.form.requestSubmit()"
+                        aria-label="Display currency"
+                    >
+                        {% if not effective_display_currency %}
+                        <option value="" selected disabled>Not configured (—)</option>
+                        {% endif %}
+                        {% for curr in active_currencies %}
+                        <option value="{{ curr.code }}" {% if effective_display_currency and effective_display_currency.code == curr.code %}selected{% endif %}>
+                            {{ curr.code }} ({{ curr.name }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <noscript>
+                        <button type="submit" class="btn btn-outline-secondary btn-sm">Apply</button>
+                    </noscript>
+                </form>
+                {% endif %}
+
+                {% if transaction_modal_enabled or request.resolver_match.view_name == 'budgets:transactions' %}
+                <button
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    data-bs-toggle="modal"
+                    data-bs-target="#transactionModal"
+                    aria-haspopup="dialog"
+                    aria-controls="transactionModal"
+                >
+                    Add transaction
+                </button>
+                {% else %}
+                <a href="{% url 'budgets:transactions' %}" class="btn btn-primary btn-sm">
+                    Add transaction
+                </a>
+                {% endif %}
+
+                {% if request.user.is_authenticated %}
+                <div class="d-flex align-items-center gap-2 ps-2 ms-1 border-start">
+                    <span id="offline-queue-badge" class="badge text-bg-warning d-none" title="Unsynced offline changes">
+                        0 queued
+                    </span>
+                    <span class="small text-secondary">
+                        Signed in as <strong class="text-dark">{{ request.user.username }}</strong>
+                    </span>
+                    <form method="post" action="{% url 'accounts:logout' %}" class="d-inline" id="logout-form">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-secondary btn-sm">
+                            Log out
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</header>

@@ -1,0 +1,11 @@
+{
+  "name": "Budget Tracker",
+  "short_name": "Budgets",
+  "description": "Multi-currency personal and shared household budget tracker with offline synchronization.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8f9fa",
+  "theme_color": "#0d6efd",
+  "orientation": "portrait-primary"
+}

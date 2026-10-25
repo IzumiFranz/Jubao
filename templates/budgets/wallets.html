@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Wallets | Budget Tracker{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <p class="text-secondary mb-1">
+        Wallets track your manually entered balances and transactions across cash, bank accounts, and e-wallets. Bank and e-wallet connections are not required.
+    </p>
+    <p class="small text-secondary mb-0">
+        Each wallet uses its own currency so balances remain accurate in the currency you hold them in. Current balance is derived from opening balance plus inflows minus outflows.
+    </p>
+</div>
+
+<section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="add-wallet-heading">
+    <h2 id="add-wallet-heading" class="h6 fw-semibold mb-3">Add wallet</h2>
+    {% include "budgets/includes/wallet_form.html" %}
+</section>
+
+<section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="your-wallets-heading">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <h2 id="your-wallets-heading" class="h6 fw-semibold mb-0">Your wallets</h2>
+    </div>
+
+    {% if wallets %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Currency</th>
+                    <th scope="col">Ownership</th>
+                    <th scope="col" class="text-end">Opening Balance</th>
+                    <th scope="col" class="text-end">Current Balance</th>
+                    <th scope="col">Opening-Balance Date</th>
+                    <th scope="col" class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for wallet in wallets %}
+                <tr>
+                    <td class="fw-medium">{{ wallet.name }}</td>
+                    <td>{{ wallet.get_wallet_type_display }}</td>
+                    <td>{{ wallet.currency.code }}</td>
+                    <td>{{ wallet.get_ownership_scope_display }}</td>
+                    <td class="text-end">{{ wallet.formatted_opening_balance }}</td>
+                    <td class="text-end fw-semibold">{{ wallet.formatted_current_balance }}</td>
+                    <td>{{ wallet.opening_balance_date|date:"Y-m-d" }}</td>
+                    <td class="text-end">
+                        <form method="post" action="{% url 'budgets:wallets' %}" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="archive_wallet">
+                            <input type="hidden" name="wallet_id" value="{{ wallet.id }}">
+                            <button type="submit" class="btn btn-outline-secondary btn-sm py-0 px-2">
+                                Archive
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state-box">
+        <p class="fw-medium text-dark mb-1">No wallets added.</p>
+        <p class="small text-secondary mb-0">
+            Track cash, bank accounts, and e-wallets here to organize balances in their respective currencies.
+        </p>
+    </div>
+    {% endif %}
+</section>
+
+{% if archived_wallets %}
+<section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="archived-wallets-heading">
+    <h2 id="archived-wallets-heading" class="h6 fw-semibold mb-3">Archived wallets (historical records preserved)</h2>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Currency</th>
+                    <th>Ownership</th>
+                    <th class="text-end">Current Balance</th>
+                    <th class="text-end">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for wallet in archived_wallets %}
+                <tr class="text-secondary">
+                    <td>{{ wallet.name }}</td>
+                    <td>{{ wallet.get_wallet_type_display }}</td>
+                    <td>{{ wallet.currency.code }}</td>
+                    <td>{{ wallet.get_ownership_scope_display }}</td>
+                    <td class="text-end">{{ wallet.formatted_current_balance }}</td>
+                    <td class="text-end">
+                        <form method="post" action="{% url 'budgets:wallets' %}" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="unarchive_wallet">
+                            <input type="hidden" name="wallet_id" value="{{ wallet.id }}">
+                            <button type="submit" class="btn btn-outline-primary btn-sm py-0 px-2">
+                                Restore
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+<section class="dashboard-panel p-3 p-md-4" aria-labelledby="wallet-transfers-heading">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+            <h2 id="wallet-transfers-heading" class="h6 fw-semibold mb-1">Transfers</h2>
+            <p class="text-secondary small mb-0">
+                Transfers move money manually between your tracked wallets without counting as new income or expense.
+            </p>
+        </div>
+        <a href="{% url 'budgets:transactions' %}" class="btn btn-outline-primary btn-sm">
+            Record transfer
+        </a>
+    </div>
+</section>
+{% endblock %}

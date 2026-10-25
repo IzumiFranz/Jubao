@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | Budget Tracker{% endblock %}
+
+{% block content %}
+<p class="text-secondary mb-4">
+    Manage your profile display name, time zone, calendar preferences, account password, and data exports.
+</p>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-profile-heading">
+            <h2 id="settings-profile-heading" class="h6 fw-semibold mb-2">Profile</h2>
+            <p class="small text-secondary mb-3">
+                Update your display name below. Username (<strong>{{ request.user.username }}</strong>) is used for signing in.
+            </p>
+
+            <form method="post" action="{% url 'accounts:settings' %}" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_profile">
+                <div class="mb-3">
+                    <label for="settings-display-name" class="form-label small fw-medium">Display name</label>
+                    {{ profile_form.display_name }}
+                    {% if profile_form.display_name.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in profile_form.display_name.errors %}
+                        <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="mb-3">
+                    <label for="profile-email" class="form-label small fw-medium">Email</label>
+                    <input
+                        type="email"
+                        id="profile-email"
+                        name="email"
+                        class="form-control form-control-sm"
+                        value="{{ profile_email }}"
+                        disabled
+                        aria-disabled="true"
+                    >
+                    <div class="form-text small">
+                        Email verification and password recovery delivery are not enabled on this deployment.
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        Save profile
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-preferences-heading">
+            <h2 id="settings-preferences-heading" class="h6 fw-semibold mb-2">Preferences</h2>
+            <p class="small text-secondary mb-3">
+                Configure your time zone and week start day. Manage exchange rates and currency details on
+                <a href="{% url 'budgets:currencies' %}" class="text-decoration-none">Currencies</a>.
+            </p>
+
+            <form method="post" action="{% url 'accounts:settings' %}" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_preferences">
+                <div class="mb-3">
+                    <label for="settings-timezone" class="form-label small fw-medium">Time zone</label>
+                    {{ preferences_form.timezone }}
+                    {% if preferences_form.timezone.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in preferences_form.timezone.errors %}
+                        <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="mb-3">
+                    <label for="settings-week-start" class="form-label small fw-medium">Week starts on</label>
+                    {{ preferences_form.week_starts_on }}
+                    {% if preferences_form.week_starts_on.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in preferences_form.week_starts_on.errors %}
+                        <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        Save preferences
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-security-heading">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <h2 id="settings-security-heading" class="h6 fw-semibold mb-0">Security</h2>
+                <a href="{% url 'accounts:password_change' %}" class="btn btn-outline-primary btn-sm">
+                    Change password
+                </a>
+            </div>
+            <p class="small text-secondary mb-0">
+                Change your account password while signed in. Your current session remains active after updating your password.
+            </p>
+        </section>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-shared-space-heading">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <h2 id="settings-shared-space-heading" class="h6 fw-semibold mb-0">Shared-space settings</h2>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'budgets:sharing_privacy' %}" class="btn btn-outline-secondary btn-sm">
+                        Sharing &amp; Privacy
+                    </a>
+                    <a href="{% url 'budgets:shared_space' %}" class="btn btn-outline-secondary btn-sm">
+                        Go to Shared Space
+                    </a>
+                </div>
+            </div>
+            <p class="small text-secondary mb-0">
+                Shared-space creation, base currency, personal balance disclosure, and partner invitation codes are managed on the Shared Space and Sharing &amp; Privacy pages.
+            </p>
+        </section>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-data-export-heading">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <h2 id="settings-data-export-heading" class="h6 fw-semibold mb-0">Data export</h2>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'accounts:export_data' %}?format=csv" class="btn btn-outline-primary btn-sm">
+                        Export CSV
+                    </a>
+                    <a href="{% url 'accounts:export_data' %}?format=json" class="btn btn-outline-secondary btn-sm">
+                        Export JSON
+                    </a>
+                </div>
+            </div>
+            <p class="small text-secondary mb-0">
+                Download your authorized wallets, categories, savings goals, and transactions in CSV or JSON format.
+            </p>
+        </section>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-offline-sync-heading">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <h2 id="settings-offline-sync-heading" class="h6 fw-semibold mb-0">Offline and synchronization</h2>
+                <button type="button" id="btn-settings-sync" class="btn btn-outline-primary btn-sm">
+                    Sync offline cache
+                </button>
+            </div>
+            <p class="small text-secondary mb-1">
+                Offline data is partitioned by your signed-in username in IndexedDB and cleared automatically when you log out.
+            </p>
+            <p class="small text-secondary mb-0" id="settings-last-sync-note">
+                Last server sync: {{ user_preference.last_sync_at|date:"Y-m-d H:i"|default:"Not synced yet" }}
+            </p>
+        </section>
+    </div>
+</div>
+{% endblock %}

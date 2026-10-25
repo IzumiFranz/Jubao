@@ -1,0 +1,78 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0d6efd">
+    <title>{% block title %}{{ page_title|default:"Budget Tracker" }} | Budget Tracker{% endblock %}</title>
+    <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=v3">
+    {% block extra_css %}{% endblock %}
+</head>
+<body
+    class="app-body"
+    data-authenticated-user-id="{% if request.user.is_authenticated %}{{ request.user.pk }}{% endif %}"
+    data-authenticated-username="{% if request.user.is_authenticated %}{{ request.user.username }}{% endif %}"
+    data-sync-state-url="{% url 'budgets:sync_state_api' %}"
+    data-sync-mutations-url="{% url 'budgets:sync_mutations_api' %}"
+>
+    <a class="visually-hidden-focusable skip-link" href="#main-content">Skip to main content</a>
+
+    <div class="app-shell d-flex min-vh-100">
+        {% include "includes/sidebar.html" %}
+
+        <div class="app-main-column d-flex flex-column flex-grow-1 min-w-0">
+            {% include "includes/topbar.html" %}
+
+            <main id="main-content" class="app-content flex-grow-1 py-4 px-3 px-md-4" tabindex="-1">
+                <div class="container-fluid p-0">
+                    <div
+                        id="offline-sync-banner"
+                        class="alert alert-warning py-2 px-3 small mb-3 d-none d-flex flex-wrap align-items-center justify-content-between gap-2"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <span id="offline-sync-banner-text">Offline mode active. Changes will be queued locally.</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <a href="{% url 'budgets:offline' %}" class="btn btn-outline-secondary btn-sm py-0 px-2">
+                                Review offline workspace
+                            </a>
+                            <button type="button" id="btn-sync-now" class="btn btn-outline-dark btn-sm py-0 px-2">
+                                Sync now
+                            </button>
+                        </div>
+                    </div>
+                    <div
+                        id="offline-queue-review-panel"
+                        class="dashboard-panel p-3 mb-3 d-none"
+                        aria-label="Queued and failed offline changes"
+                    ></div>
+
+                    {% if messages %}
+                    <div class="mb-3" aria-live="polite">
+                        {% for message in messages %}
+                        <div
+                            class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'success' %}alert-success{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %} py-2 px-3 small mb-2"
+                            role="status"
+                        >
+                            {{ message }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% block content %}{% endblock %}
+                </div>
+            </main>
+        </div>
+    </div>
+
+    {% block modals %}{% endblock %}
+
+    <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+    <script src="{% static 'js/app.js' %}?v=v3"></script>
+    <script src="{% static 'js/offline.js' %}?v=v3"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,224 @@
+<div
+    class="modal fade"
+    id="transactionModal"
+    tabindex="-1"
+    aria-labelledby="transactionModalLabel"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title h5 fw-semibold mb-0" id="transactionModalLabel">
+                        Add transaction
+                    </h2>
+                    <p class="small text-secondary mb-0 mt-1">
+                        Enter an income or expense record manually.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Close transaction dialog"
+                ></button>
+            </div>
+
+            <form
+                id="transaction-form"
+                method="post"
+                action="{% url 'budgets:transactions' %}"
+                novalidate
+            >
+                {% csrf_token %}
+                <input type="hidden" name="action" id="tx-form-action" value="create_transaction">
+                <input type="hidden" name="transaction_id" id="tx-form-id" value="">
+                <input type="hidden" name="expected_revision" id="tx-form-revision" value="">
+
+                <div class="modal-body">
+                    <fieldset class="mb-3">
+                        <legend class="h6 fw-semibold mb-2">Transaction details</legend>
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-4">
+                                <label for="tx-type" class="form-label">Type</label>
+                                <select id="tx-type" name="transaction_type" class="form-select form-select-sm" required>
+                                    <option value="expense" selected>Expense</option>
+                                    <option value="income">Income</option>
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-sm-4">
+                                <label for="tx-amount" class="form-label">Amount</label>
+                                <input
+                                    type="text"
+                                    id="tx-amount"
+                                    name="amount"
+                                    class="form-control form-control-sm"
+                                    inputmode="decimal"
+                                    placeholder="0.00"
+                                    autocomplete="off"
+                                    aria-describedby="tx-amount-help tx-amount-feedback"
+                                    required
+                                >
+                                <div id="tx-amount-help" class="form-text small">
+                                    Precision follows the selected wallet's currency.
+                                </div>
+                                <div id="tx-amount-feedback" class="invalid-feedback">
+                                    Enter a valid positive decimal amount matching the wallet currency precision.
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-sm-4">
+                                <label for="tx-wallet" class="form-label">Wallet</label>
+                                <select
+                                    id="tx-wallet"
+                                    name="wallet"
+                                    class="form-select form-select-sm"
+                                    {% if not accessible_wallets %}disabled aria-disabled="true"{% endif %}
+                                    required
+                                >
+                                    {% if accessible_wallets %}
+                                        <option value="">Select wallet</option>
+                                        {% for w in accessible_wallets %}
+                                        <option
+                                            value="{{ w.id }}"
+                                            data-currency-code="{{ w.currency.code }}"
+                                            data-decimal-places="{{ w.currency.decimal_places }}"
+                                            data-scope="{{ w.ownership_scope }}"
+                                            data-shared-space-id="{% if w.shared_space_id %}{{ w.shared_space_id }}{% endif %}"
+                                        >
+                                            {{ w.name }} ({{ w.currency.code }} · {{ w.get_ownership_scope_display }})
+                                        </option>
+                                        {% endfor %}
+                                    {% else %}
+                                        <option value="" selected>No active wallets — create one on Wallets page</option>
+                                    {% endif %}
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-sm-4">
+                                <label for="tx-date" class="form-label">Date</label>
+                                <input
+                                    type="date"
+                                    id="tx-date"
+                                    name="transaction_date"
+                                    class="form-control form-control-sm"
+                                    value="{% now 'Y-m-d' %}"
+                                    required
+                                >
+                            </div>
+
+                            <div class="col-12 col-sm-4">
+                                <label for="tx-category" class="form-label">Category</label>
+                                <select
+                                    id="tx-category"
+                                    name="category"
+                                    class="form-select form-select-sm"
+                                >
+                                    <option value="">Uncategorized</option>
+                                    {% for cat in accessible_categories %}
+                                    <option
+                                        value="{{ cat.id }}"
+                                        data-kind="{{ cat.kind }}"
+                                        data-scope="{{ cat.scope }}"
+                                    >
+                                        {{ cat.name }} ({{ cat.get_scope_display }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-sm-4">
+                                <label for="tx-scope" class="form-label">Personal / Shared scope</label>
+                                <select
+                                    id="tx-scope"
+                                    name="scope"
+                                    class="form-select form-select-sm"
+                                >
+                                    <option value="personal" {% if active_workspace_scope != 'shared' %}selected{% endif %}>Personal</option>
+                                    <option value="shared" {% if active_workspace_scope == 'shared' %}selected{% endif %}>Shared</option>
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-sm-4">
+                                <label for="tx-description" class="form-label">
+                                    Description <span class="text-secondary fw-normal">(optional)</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    id="tx-description"
+                                    name="description"
+                                    class="form-control form-control-sm"
+                                    maxlength="200"
+                                    placeholder="Merchant, payee, or short summary"
+                                >
+                            </div>
+
+                            <div class="col-12 col-sm-4">
+                                <label for="tx-paid-by" class="form-label">
+                                    Paid by <span class="text-secondary fw-normal">(shared)</span>
+                                </label>
+                                <select id="tx-paid-by" name="paid_by" class="form-select form-select-sm">
+                                    <option value="">{{ request.user.username }} (default)</option>
+                                    {% if tx_form and tx_form.fields.paid_by %}
+                                        {% for member_user in tx_form.fields.paid_by.queryset %}
+                                            {% if member_user.pk != request.user.pk %}
+                                            <option value="{{ member_user.pk }}">{{ member_user.username }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endif %}
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-sm-4">
+                                <label for="tx-manual-rate" class="form-label">
+                                    Manual rate <span class="text-secondary fw-normal">(optional)</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    id="tx-manual-rate"
+                                    name="manual_rate"
+                                    class="form-control form-control-sm"
+                                    inputmode="decimal"
+                                    placeholder="Override conversion rate"
+                                >
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <div class="mb-0">
+                        <label for="tx-notes" class="form-label">
+                            Notes <span class="text-secondary fw-normal">(optional)</span>
+                        </label>
+                        <textarea
+                            id="tx-notes"
+                            name="notes"
+                            class="form-control form-control-sm"
+                            rows="2"
+                            placeholder="Add optional context or receipt notes"
+                        ></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
+                    <p id="transactionModalSaveNote" class="small text-secondary mb-0">
+                        Amounts are stored in the wallet's currency and snapshotted to your base currency when available.
+                    </p>
+                    <div class="d-flex align-items-center gap-2 ms-sm-auto">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            id="tx-submit-btn"
+                            class="btn btn-primary btn-sm"
+                            {% if not accessible_wallets %}disabled aria-disabled="true"{% endif %}
+                        >
+                            Save transaction
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

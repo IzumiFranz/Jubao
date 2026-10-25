@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}Currencies | Budget Tracker{% endblock %}
+
+{% block content %}
+<p class="text-secondary mb-4">
+    Every wallet and transaction retains its original amount and currency. Selecting a personal base currency records your preferred reference currency for personal views without altering existing wallet balances.
+</p>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-5">
+        <section
+            class="dashboard-panel p-3 p-md-4 h-100"
+            aria-labelledby="currency-preferences-heading"
+            aria-describedby="currency-preferences-note"
+        >
+            <h2 id="currency-preferences-heading" class="h6 fw-semibold mb-2">Currency preferences</h2>
+            <p class="small text-secondary mb-3">
+                Choose your personal base currency from the supported currencies below. Shared spaces use their own separate base currency, and changing your personal preference will not modify a shared space or any wallet balances.
+            </p>
+
+            {% if not has_active_currencies %}
+            <div class="alert alert-warning py-2 px-3 small mb-3" role="status" id="no-active-currencies-note">
+                No active currencies are currently available to save a preference.
+            </div>
+            {% endif %}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2 px-3 small mb-3" role="alert">
+                {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'budgets:currencies' %}" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_base_currency">
+                <div class="mb-3">
+                    <label for="personal-base-currency" class="form-label small fw-medium">
+                        Personal base currency
+                    </label>
+                    {{ form.personal_base_currency }}
+                    {% if form.personal_base_currency.errors %}
+                    <div class="invalid-feedback d-block" id="personal-base-currency-errors">
+                        {% for error in form.personal_base_currency.errors %}
+                        <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <p id="currency-preferences-note" class="small text-secondary mb-0">
+                        {% if saved_base_currency %}
+                        Current preference: <strong>{{ saved_base_currency.code }} ({{ saved_base_currency.name }})</strong>
+                        {% else %}
+                        Current preference: <strong>Not configured</strong>
+                        {% endif %}
+                    </p>
+                    <button
+                        type="submit"
+                        class="btn btn-primary btn-sm"
+                        {% if not has_active_currencies %}
+                        disabled
+                        aria-disabled="true"
+                        aria-describedby="no-active-currencies-note"
+                        {% endif %}
+                    >
+                        Save preference
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div class="col-12 col-lg-7">
+        <section
+            class="dashboard-panel p-3 p-md-4 h-100"
+            aria-labelledby="currency-converter-heading"
+        >
+            <div class="mb-3">
+                <h2 id="currency-converter-heading" class="h6 fw-semibold mb-1">Currency converter</h2>
+                <p class="small text-secondary mb-0">
+                    Convert an amount between supported currencies using stored reference or manual rates without creating a ledger transaction.
+                </p>
+            </div>
+
+            <form method="post" action="{% url 'budgets:currencies' %}" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="convert_currency">
+                <div class="row g-3 align-items-end">
+                    <div class="col-12 col-sm-3">
+                        <label for="converter-amount" class="form-label small fw-medium">Amount</label>
+                        {{ converter_form.amount }}
+                    </div>
+                    <div class="col-12 col-sm-3">
+                        <label for="converter-from" class="form-label small fw-medium">From currency</label>
+                        {{ converter_form.from_currency }}
+                    </div>
+                    <div class="col-12 col-sm-3">
+                        <label for="converter-to" class="form-label small fw-medium">To currency</label>
+                        {{ converter_form.to_currency }}
+                    </div>
+                    <div class="col-12 col-sm-3">
+                        <label for="converter-scope" class="form-label small fw-medium">Scope</label>
+                        {{ converter_form.scope }}
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3 pt-3 border-top">
+                    <div>
+                        <span class="small text-secondary d-block">Converted result</span>
+                        {% if conversion_result %}
+                            {% if conversion_result.available %}
+                            <span class="fs-5 fw-semibold text-dark">
+                                {{ conversion_result.formatted_input }} {{ conversion_result.from_currency.code }} =
+                                {{ conversion_result.formatted_output }} {{ conversion_result.to_currency.code }}
+                            </span>
+                            <span class="small text-secondary d-block">
+                                Rate: {{ conversion_result.rate }} ({{ conversion_result.status_label }})
+                            </span>
+                            {% else %}
+                            <span class="fs-6 fw-semibold text-warning">{{ conversion_result.status_label }}</span>
+                            {% endif %}
+                        {% else %}
+                        <span class="fs-5 fw-semibold text-dark" aria-label="Unavailable">—</span>
+                        {% endif %}
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        Convert
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+</div>
+
+<section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="supported-currencies-heading">
+    <div class="mb-3">
+        <h2 id="supported-currencies-heading" class="h6 fw-semibold mb-1">Supported currencies</h2>
+        <p class="small text-secondary mb-0">
+            Initial supported ISO 4217 currencies available for wallets and base-currency preferences.
+        </p>
+    </div>
+
+    {% if supported_currencies %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col">Code</th>
+                    <th scope="col">Currency Name</th>
+                    <th scope="col">Minor-Unit Precision</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for currency in supported_currencies %}
+                <tr>
+                    <td class="fw-semibold">{{ currency.code }}</td>
+                    <td>{{ currency.name }}</td>
+                    <td>{{ currency.decimal_places }} decimal place{{ currency.decimal_places|pluralize }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state-box">
+        <p class="mb-0">No active currencies are currently available.</p>
+    </div>
+    {% endif %}
+</section>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="exchange-rate-info-heading">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <div>
+                    <h2 id="exchange-rate-info-heading" class="h6 fw-semibold mb-1">Exchange-rate provider</h2>
+                    <p class="small text-secondary mb-0">
+                        {{ provider_info.cadence }}
+                    </p>
+                </div>
+                <form method="post" action="{% url 'budgets:currencies' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="refresh_rates">
+                    <button type="submit" class="btn btn-outline-primary btn-sm">
+                        Refresh rates
+                    </button>
+                </form>
+            </div>
+
+            <div class="row g-2">
+                <div class="col-12">
+                    <div class="summary-card p-3">
+                        <p class="text-secondary small fw-medium mb-1">Configured provider</p>
+                        <p class="h6 fw-semibold mb-1">{{ provider_info.name }}</p>
+                        <p class="small text-secondary mb-0">
+                            Host: <code>{{ provider_info.host }}</code> ({{ provider_info.coverage_note }})
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="manual-rate-heading">
+            <h2 id="manual-rate-heading" class="h6 fw-semibold mb-2">Record manual exchange rate</h2>
+            <p class="small text-secondary mb-3">
+                Enter an explicit exchange rate for any currency pair (including KWD and TWD or offline scenarios). Existing booked transactions keep their historical rate snapshot.
+            </p>
+            <form method="post" action="{% url 'budgets:currencies' %}" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="record_manual_rate">
+                <div class="row g-2">
+                    <div class="col-6 col-sm-3">
+                        <label class="form-label small fw-medium">From</label>
+                        {{ manual_rate_form.from_currency }}
+                    </div>
+                    <div class="col-6 col-sm-3">
+                        <label class="form-label small fw-medium">To</label>
+                        {{ manual_rate_form.to_currency }}
+                    </div>
+                    <div class="col-6 col-sm-2">
+                        <label class="form-label small fw-medium">Rate</label>
+                        {{ manual_rate_form.rate }}
+                    </div>
+                    <div class="col-6 col-sm-2">
+                        <label class="form-label small fw-medium">Scope</label>
+                        {{ manual_rate_form.scope }}
+                    </div>
+                    <div class="col-12 col-sm-2">
+                        <label class="form-label small fw-medium">Date</label>
+                        {{ manual_rate_form.rate_date }}
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mt-3">
+                    <button type="submit" class="btn btn-outline-primary btn-sm">
+                        Save manual rate
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+</div>
+
+<section class="dashboard-panel p-3 p-md-4" aria-labelledby="exchange-rates-table-heading">
+    <div class="mb-3">
+        {% if table_source_currency %}
+        <h2 id="exchange-rates-table-heading" class="h6 fw-semibold mb-1">Exchange rates — {{ table_source_currency.code }} base</h2>
+        <p class="small text-secondary mb-0">
+            Daily reference rates with {{ table_source_currency.code }} as the base currency, respecting provider feeds and your authorized manual rates.
+        </p>
+        {% else %}
+        <h2 id="exchange-rates-table-heading" class="h6 fw-semibold mb-1">Exchange rates</h2>
+        <p class="small text-secondary mb-0">
+            Daily reference rates respecting provider feeds and your authorized manual rates.
+        </p>
+        {% endif %}
+    </div>
+
+    {% if not table_source_currency %}
+    <div class="alert alert-info py-3 px-3 mb-0" role="status">
+        <p class="fw-semibold mb-1">No display currency selected</p>
+        <p class="small mb-0">
+            Please select a <strong>Display currency</strong> in the top navigation bar to view reference exchange rates.
+        </p>
+    </div>
+    {% else %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col">Target Currency</th>
+                    <th scope="col">Exchange Rate</th>
+                    <th scope="col">Source</th>
+                    <th scope="col">Rate Date</th>
+                    <th scope="col">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rate_table_rows %}
+                <tr>
+                    <td>
+                        <span class="fw-semibold">{{ row.target_currency.code }}</span>
+                        <span class="text-secondary small ms-1">({{ row.target_currency.name }})</span>
+                    </td>
+                    <td class="font-monospace">
+                        {% if row.is_available %}
+                            1 {{ table_source_currency.code }} = <span class="fw-semibold">{{ row.rate }}</span> {{ row.target_currency.code }}
+                        {% else %}
+                            <span class="text-secondary">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.is_manual %}
+                            <span class="badge text-bg-info">Manual rate</span>
+                        {% elif row.provider %}
+                            <span class="badge text-bg-light border">{{ row.provider }}</span>
+                        {% else %}
+                            <span class="text-secondary small">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="small text-secondary">
+                        {% if row.rate_timestamp %}
+                            <div>{{ row.rate_timestamp|date:"Y-m-d" }}</div>
+                            {% if row.retrieved_at %}
+                            <div class="small text-muted" title="Last successful retrieval">Fetched: {{ row.retrieved_at|date:"Y-m-d H:i" }} UTC</div>
+                            {% endif %}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.is_available %}
+                            {% if row.is_stale %}
+                                <span class="badge text-bg-warning" title="{{ row.status_label }}">Stale rate</span>
+                            {% else %}
+                                <span class="badge text-bg-success">Available</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge text-bg-secondary" title="{{ row.status_label }}">Unavailable</span>
+                            <span class="small text-secondary d-block mt-1">{{ row.status_label }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center text-secondary py-4">
+                        No target currencies found.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

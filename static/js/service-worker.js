@@ -1,6 +1,6 @@
 const CACHE_PREFIX = "budget-tracker-shell-";
 const CACHE_NAME = "budget-tracker-shell-v3";
-const PRECACHE_URLS = [
+const REQUIRED_PRECACHE_URLS = [
     "/static/vendor/bootstrap/bootstrap.min.css",
     "/static/vendor/bootstrap/bootstrap.bundle.min.js",
     "/static/css/app.css",
@@ -14,6 +14,8 @@ const PRECACHE_URLS = [
     "/static/js/pages/transaction.js",
     "/static/manifest.webmanifest",
 ];
+const PRECACHE_URLS = REQUIRED_PRECACHE_URLS;
+const OPTIONAL_PRECACHE_URLS = [];
 
 self.addEventListener("install", function (event) {
     event.waitUntil(
@@ -25,25 +27,44 @@ self.addEventListener("install", function (event) {
                     credentials: "omit",
                     cache: "reload",
                 });
-                return fetch(offlineReq)
-                    .then(function (resp) {
-                        if (resp && resp.status === 200) {
-                            return cache.put("/offline/", resp);
+
+                var requiredFetches = [
+                    fetch(offlineReq).then(function (resp) {
+                        if (!resp || resp.status !== 200) {
+                            var status = resp ? resp.status : "network_error";
+                            throw new Error("Failed to cache required offline page: HTTP " + status);
                         }
-                    })
-                    .then(function () {
-                        return Promise.all(
-                            PRECACHE_URLS.map(function (url) {
-                                return fetch(new Request(url, { cache: "reload" })).then(
-                                    function (resp) {
-                                        if (resp && resp.status === 200) {
-                                            return cache.put(url, resp);
-                                        }
-                                    }
-                                );
-                            })
-                        );
-                    });
+                        return cache.put("/offline/", resp);
+                    }),
+                ];
+
+                REQUIRED_PRECACHE_URLS.forEach(function (url) {
+                    requiredFetches.push(
+                        fetch(new Request(url, { cache: "reload" })).then(function (resp) {
+                            if (!resp || resp.status !== 200) {
+                                var status = resp ? resp.status : "network_error";
+                                throw new Error("Failed to cache required asset " + url + ": HTTP " + status);
+                            }
+                            return cache.put(url, resp);
+                        })
+                    );
+                });
+
+                var optionalFetches = OPTIONAL_PRECACHE_URLS.map(function (url) {
+                    return fetch(new Request(url, { cache: "reload" }))
+                        .then(function (resp) {
+                            if (resp && resp.status === 200) {
+                                return cache.put(url, resp);
+                            }
+                        })
+                        .catch(function () {
+                            // Optional assets may fail without rejecting installation
+                        });
+                });
+
+                return Promise.all(requiredFetches).then(function () {
+                    return Promise.all(optionalFetches);
+                });
             })
             .then(function () {
                 return self.skipWaiting();

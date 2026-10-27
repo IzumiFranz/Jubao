@@ -229,11 +229,228 @@ textarea:focus-visible,
     min-width: 0;
 }
 
+/* Global Topbar: Japanese Stationery / Kakeibo Navbar */
 .app-topbar {
     position: sticky;
     top: 0;
     z-index: 1020;
-    background-color: var(--app-surface);
+    background-color: #FAF8F5;
+    border-bottom: 1px solid #E5E3DE;
+    box-shadow: 0 1px 3px rgba(19, 34, 56, 0.04), 0 1px 2px rgba(19, 34, 56, 0.02);
+}
+
+.topbar-page-title {
+    color: #132238;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+}
+
+.btn-topbar-menu {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.35rem 0.5rem;
+    background-color: #FFFFFF;
+    color: #18365D;
+    border: 1px solid #E5E3DE;
+    border-radius: 6px;
+    line-height: 1;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-topbar-menu:hover {
+    background-color: #F4F1EC;
+    border-color: #D3CFCA;
+    color: #0F2440;
+}
+
+.btn-topbar-menu:focus-visible {
+    outline: 2px solid #18365D;
+    outline-offset: 2px;
+}
+
+.topbar-control-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.topbar-select-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #5A6B82;
+    white-space: nowrap;
+    margin-bottom: 0;
+}
+
+.topbar-select {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E3DE;
+    border-radius: 6px;
+    color: #132238;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    padding: 0.3rem 1.85rem 0.3rem 0.625rem;
+    min-height: 32px;
+    line-height: 1.4;
+    box-shadow: 0 1px 2px rgba(19, 34, 56, 0.02);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.topbar-select:hover {
+    border-color: #C8C5BF;
+}
+
+.topbar-select:focus {
+    border-color: #18365D;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(24, 54, 93, 0.15);
+}
+
+.topbar-link {
+    color: #18365D;
+    font-weight: 500;
+}
+
+.topbar-link:hover {
+    text-decoration: underline;
+    color: #0F2440;
+}
+
+/* Navy "+ Add transaction" button */
+.btn-topbar-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: linear-gradient(180deg, #18365D 0%, #122B4D 100%);
+    border: 1px solid #0F233F;
+    color: #FFFFFF !important;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0.35rem 0.85rem;
+    min-height: 32px;
+    line-height: 1.4;
+    box-shadow: 0 1px 2px rgba(19, 34, 56, 0.1);
+    text-decoration: none;
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease;
+}
+
+.btn-topbar-action:hover {
+    background: linear-gradient(180deg, #112744 0%, #0B1C33 100%);
+    border-color: #0B1C33;
+    color: #FFFFFF !important;
+    box-shadow: 0 2px 4px rgba(19, 34, 56, 0.18);
+}
+
+.btn-topbar-action:active {
+    transform: translateY(1px);
+}
+
+.btn-topbar-action:focus-visible {
+    outline: 2px solid #3B82F6;
+    outline-offset: 2px;
+}
+
+/* Compact account dropdown */
+.btn-topbar-account {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #FFFFFF;
+    border: 1px solid #E5E3DE;
+    border-radius: 6px;
+    padding: 0.25rem 0.55rem 0.25rem 0.35rem;
+    min-height: 32px;
+    color: #132238;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(19, 34, 56, 0.02);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-topbar-account::after {
+    display: none !important;
+}
+
+.btn-topbar-account:hover {
+    background-color: #F8F6F2;
+    border-color: #C8C5BF;
+    color: #132238;
+}
+
+.btn-topbar-account:focus-visible {
+    border-color: #18365D;
+    outline: 2px solid #18365D;
+    outline-offset: 2px;
+}
+
+.topbar-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: #E8EEF5;
+    color: #18365D;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.topbar-username {
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #132238;
+}
+
+.topbar-dropdown-chevron {
+    color: #5A6B82;
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+}
+
+.btn-topbar-account[aria-expanded="true"] .topbar-dropdown-chevron {
+    transform: rotate(180deg);
+}
+
+.topbar-dropdown-menu {
+    border: 1px solid #E5E3DE;
+    border-radius: 8px;
+    padding: 0.5rem;
+    min-width: 190px;
+    box-shadow: 0 4px 14px rgba(19, 34, 56, 0.08);
+    background-color: #FFFFFF;
+}
+
+.topbar-dropdown-menu .dropdown-header {
+    padding: 0.35rem 0.65rem;
+}
+
+.topbar-dropdown-menu .dropdown-item {
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #132238;
+    padding: 0.4rem 0.65rem;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.topbar-dropdown-menu .dropdown-item:hover,
+.topbar-dropdown-menu .dropdown-item:focus {
+    background-color: #F4F1EC;
+    color: #18365D;
+}
+
+.topbar-dropdown-menu .dropdown-item:focus-visible {
+    outline: 2px solid #18365D;
+    outline-offset: 1px;
 }
 
 #main-content {
@@ -272,4 +489,109 @@ textarea:focus-visible,
     white-space: nowrap;
     font-size: 0.875rem;
     font-weight: 600;
+}
+
+/* Toast Notifications (Restrained Navy/Ivory Stationery Aesthetic) */
+.app-toast-container {
+    position: fixed;
+    top: 4.25rem;
+    right: 1.25rem;
+    z-index: 1090;
+    width: 380px;
+    max-width: calc(100vw - 2.5rem);
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.app-toast {
+    pointer-events: auto;
+    background-color: #FFFFFF;
+    color: #132238;
+    border: 1px solid #E5E3DE;
+    border-left-width: 4px;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(19, 34, 56, 0.08), 0 1px 3px rgba(19, 34, 56, 0.04);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    overflow: hidden;
+}
+
+.app-toast.show {
+    display: block;
+    opacity: 1;
+}
+
+.app-toast.hide {
+    display: none !important;
+}
+
+.app-toast.app-toast-success {
+    border-left-color: #3D7A53;
+}
+
+.app-toast.app-toast-info {
+    border-left-color: #1E3A5F;
+}
+
+.app-toast.app-toast-warning {
+    border-left-color: #C27D24;
+}
+
+.app-toast.app-toast-error {
+    border-left-color: #BD4A42;
+}
+
+.app-toast-body {
+    padding: 0.25rem 0;
+    font-weight: 500;
+    color: #132238;
+    word-break: break-word;
+}
+
+.app-toast .btn-close {
+    padding: 0.5rem;
+    opacity: 0.55;
+    transition: opacity 0.15s ease;
+}
+
+.app-toast .btn-close:hover,
+.app-toast .btn-close:focus-visible {
+    opacity: 1;
+    outline: 2px solid #1E3A5F;
+    outline-offset: 1px;
+}
+
+@media (max-width: 991.98px) {
+    .app-toast-container {
+        top: 6.25rem;
+        right: 0.75rem;
+        max-width: calc(100vw - 1.5rem);
+    }
+}
+
+@media (max-width: 576px) {
+    .app-toast-container {
+        top: 6.75rem;
+        right: 0.75rem;
+        max-width: calc(100vw - 1.5rem);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-toast.fade,
+    .btn-topbar-action,
+    .btn-topbar-account,
+    .topbar-dropdown-chevron,
+    .btn-topbar-menu,
+    .topbar-select,
+    .topbar-dropdown-menu .dropdown-item {
+        transition: none !important;
+        animation: none !important;
+    }
+    .app-toast {
+        animation: none !important;
+        transition: none !important;
+    }
 }

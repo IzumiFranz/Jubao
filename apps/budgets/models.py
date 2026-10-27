@@ -58,11 +58,23 @@ def validate_currency_amount(raw_val, currency, *, field_name="amount", require_
     return dec_val
 
 
-def format_currency_amount(amount, currency):
-    if amount is None or currency is None:
+def format_currency_amount(amount, currency, grouping=True):
+    if amount is None or currency is None or amount == "":
         return "—"
-    quantum = Decimal(10) ** (-currency.decimal_places)
-    return f"{Decimal(amount).quantize(quantum):f}"
+    places = getattr(currency, "decimal_places", None)
+    if places is None:
+        return "—"
+    try:
+        dec = amount if isinstance(amount, Decimal) else Decimal(str(amount))
+        if not dec.is_finite():
+            return "—"
+    except (InvalidOperation, TypeError, ValueError):
+        return "—"
+    quantum = Decimal(10) ** (-places)
+    if dec == 0:
+        dec = Decimal(0)
+    spec = ",f" if grouping else "f"
+    return f"{dec.quantize(quantum):{spec}}"
 
 
 class Currency(models.Model):
@@ -366,6 +378,8 @@ class Wallet(models.Model):
     def current_balance(self):
         if hasattr(self, "_prefetched_current_balance"):
             return self._prefetched_current_balance
+        if self.opening_balance is None:
+            return None
         active_tx = self.transactions.filter(is_deleted=False)
         inflows = (
             active_tx.filter(
@@ -392,8 +406,26 @@ class Wallet(models.Model):
         return format_currency_amount(self.opening_balance, self.currency)
 
     @property
+    def plain_opening_balance(self):
+        if self.opening_balance is None or not self.currency_id:
+            return ""
+        return format_currency_amount(self.opening_balance, self.currency, grouping=False)
+
+    @property
     def formatted_current_balance(self):
-        return format_currency_amount(self.current_balance, self.currency)
+        bal = self.current_balance
+        if bal is None or not self.currency_id:
+            return "—"
+        return format_currency_amount(bal, self.currency)
+
+    @property
+    def plain_current_balance(self):
+        if self.opening_balance is None or not self.currency_id:
+            return ""
+        bal = self.current_balance
+        if bal is None:
+            return ""
+        return format_currency_amount(bal, self.currency, grouping=False)
 
     def __str__(self):
         return f"{self.name} ({self.currency.code})"
@@ -535,12 +567,30 @@ class Transfer(models.Model):
         return format_currency_amount(self.amount_sent, self.source_currency)
 
     @property
+    def plain_amount_sent(self):
+        if self.amount_sent is None or not self.source_currency_id:
+            return ""
+        return format_currency_amount(self.amount_sent, self.source_currency, grouping=False)
+
+    @property
     def formatted_amount_received(self):
         return format_currency_amount(self.amount_received, self.destination_currency)
 
     @property
+    def plain_amount_received(self):
+        if self.amount_received is None or not self.destination_currency_id:
+            return ""
+        return format_currency_amount(self.amount_received, self.destination_currency, grouping=False)
+
+    @property
     def formatted_fee_amount(self):
         return format_currency_amount(self.fee_amount, self.source_currency)
+
+    @property
+    def plain_fee_amount(self):
+        if self.fee_amount is None or not self.source_currency_id:
+            return ""
+        return format_currency_amount(self.fee_amount, self.source_currency, grouping=False)
 
     def __str__(self):
         return (
@@ -693,10 +743,22 @@ class Transaction(models.Model):
         return format_currency_amount(self.amount, self.currency)
 
     @property
+    def plain_amount(self):
+        if self.amount is None or not self.currency_id:
+            return ""
+        return format_currency_amount(self.amount, self.currency, grouping=False)
+
+    @property
     def formatted_converted_amount(self):
         if self.converted_amount is None or not self.base_currency_id:
             return None
         return format_currency_amount(self.converted_amount, self.base_currency)
+
+    @property
+    def plain_converted_amount(self):
+        if self.converted_amount is None or not self.base_currency_id:
+            return None
+        return format_currency_amount(self.converted_amount, self.base_currency, grouping=False)
 
     def __str__(self):
         return f"{self.get_transaction_type_display()} {self.formatted_amount} {self.currency.code}"
@@ -767,6 +829,12 @@ class CategoryBudget(models.Model):
     @property
     def formatted_limit_amount(self):
         return format_currency_amount(self.limit_amount, self.currency)
+
+    @property
+    def plain_limit_amount(self):
+        if self.limit_amount is None or not self.currency_id:
+            return ""
+        return format_currency_amount(self.limit_amount, self.currency, grouping=False)
 
     def __str__(self):
         return f"{self.category.name} ({self.period}): {self.formatted_limit_amount} {self.currency.code}"
@@ -853,12 +921,30 @@ class SavingsGoal(models.Model):
         return format_currency_amount(self.target_amount, self.currency)
 
     @property
+    def plain_target_amount(self):
+        if self.target_amount is None or not self.currency_id:
+            return ""
+        return format_currency_amount(self.target_amount, self.currency, grouping=False)
+
+    @property
     def formatted_saved_amount(self):
         return format_currency_amount(self.saved_amount, self.currency)
 
     @property
+    def plain_saved_amount(self):
+        if self.saved_amount is None or not self.currency_id:
+            return ""
+        return format_currency_amount(self.saved_amount, self.currency, grouping=False)
+
+    @property
     def formatted_remaining_amount(self):
         return format_currency_amount(self.remaining_amount, self.currency)
+
+    @property
+    def plain_remaining_amount(self):
+        if self.remaining_amount is None or not self.currency_id:
+            return ""
+        return format_currency_amount(self.remaining_amount, self.currency, grouping=False)
 
     def __str__(self):
         return f"{self.name} ({self.formatted_target_amount} {self.currency.code})"
@@ -906,6 +992,12 @@ class SavingsContribution(models.Model):
     @property
     def formatted_amount(self):
         return format_currency_amount(self.amount, self.goal.currency)
+
+    @property
+    def plain_amount(self):
+        if self.amount is None or not self.goal_id or not self.goal.currency_id:
+            return ""
+        return format_currency_amount(self.amount, self.goal.currency, grouping=False)
 
     def __str__(self):
         return f"{self.get_entry_type_display()} {self.formatted_amount} {self.goal.currency.code}"

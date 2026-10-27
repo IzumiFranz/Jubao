@@ -4,224 +4,276 @@
 {% block title %}Dashboard | Budget Tracker{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=v3">
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=v8">
 {% endblock %}
 
 {% block content %}
-<div class="dashboard-kawaii pb-4">
-    <!-- 1. Welcome Banner -->
-    <section aria-labelledby="dashboard-welcome-heading" class="dashboard-banner mb-4 d-flex align-items-center justify-content-between">
-        <div class="pe-3">
-            <h2 id="dashboard-welcome-heading" class="dashboard-banner-title mb-1">
-                A little saved, a little happier.<span class="banner-heart" aria-hidden="true">&#9829;</span>
-            </h2>
-            <p class="dashboard-banner-subtitle">
-                Small steps today for a brighter tomorrow.
-            </p>
-        </div>
-        <div class="dashboard-banner-art" aria-hidden="true">
-            <img src="{% static 'images/dashboard/banner-mascot.png' %}" alt="" width="110" height="80" class="img-fluid" onerror="this.style.display='none'">
-        </div>
-    </section>
-
-    <!-- 2. Summary Cards -->
-    <section aria-labelledby="dashboard-summary-heading" class="mb-4">
-        <h2 id="dashboard-summary-heading" class="visually-hidden">Summary Overview</h2>
-        <div class="row g-3">
-            <!-- Income: mint -->
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="summary-card-kawaii card-income h-100">
-                    <div class="summary-card-label">
-                        <span>Income ({{ current_period }})</span>
-                        <span class="summary-card-icon" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="9"/>
-                                <path d="M12 16V8M8 12l4-4 4 4"/>
-                            </svg>
-                        </span>
-                    </div>
-                    <p class="summary-card-value">
-                        {% if month_summary.is_complete and month_summary.target_currency %}
-                            {{ month_summary.formatted_income }} {{ month_summary.target_currency.code }}
-                        {% else %}
-                            —
-                        {% endif %}
-                    </p>
-                    <p class="summary-card-subtext">
-                        {% if not month_summary.target_currency %}
-                            Set base currency on Currencies page
-                        {% elif month_summary.unconverted_count %}
-                            {{ month_summary.unconverted_count }} entry pending conversion
-                        {% else %}
-                            Recorded in {{ workspace.active_scope|title }} scope
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-
-            <!-- Expenses: blush -->
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="summary-card-kawaii card-expenses h-100">
-                    <div class="summary-card-label">
-                        <span>Expenses ({{ current_period }})</span>
-                        <span class="summary-card-icon" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="9"/>
-                                <path d="M12 8v8M8 12l4 4 4-4"/>
-                            </svg>
-                        </span>
-                    </div>
-                    <p class="summary-card-value">
-                        {% if month_summary.is_complete and month_summary.target_currency %}
-                            {{ month_summary.formatted_expense }} {{ month_summary.target_currency.code }}
-                        {% else %}
-                            —
-                        {% endif %}
-                    </p>
-                    <p class="summary-card-subtext">
-                        {% if not month_summary.target_currency %}
-                            Set base currency on Currencies page
-                        {% elif month_summary.unconverted_count %}
-                            {{ month_summary.unconverted_count }} entry pending conversion
-                        {% else %}
-                            Excludes wallet-to-wallet transfers
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-
-            <!-- Balance: pale blue -->
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="summary-card-kawaii card-balance h-100">
-                    <div class="summary-card-label">
-                        <span>Balance ({{ workspace.active_scope|title }})</span>
-                        <span class="summary-card-icon" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="9" cy="4" r="1.5"/>
-                                <circle cx="15" cy="4" r="1.5"/>
-                                <path d="M5 8h14a1 1 0 0 1 1 1c0 7-3 12-8 12s-8-5-8-12a1 1 0 0 1 1-1z"/>
-                            </svg>
-                        </span>
-                    </div>
-                    <p class="summary-card-value {% if formatted_wallet_total|slice:':1' == '-' %}text-negative-balance{% endif %}">
-                        {% if wallet_total_complete and workspace.effective_display_currency %}
-                            {{ formatted_wallet_total }} {{ workspace.effective_display_currency.code }}
-                        {% else %}
-                            —
-                        {% endif %}
-                    </p>
-                    <p class="summary-card-subtext">
-                        {% if not workspace.effective_display_currency %}
-                            Set base currency on Currencies page
-                        {% elif wallet_unconverted %}
-                            {{ wallet_unconverted }} wallet{{ wallet_unconverted|pluralize }} pending conversion
-                        {% else %}
-                            Total across {{ wallet_count }} active wallet{{ wallet_count|pluralize }}
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-
-            <!-- Remaining Budget: butter yellow -->
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="summary-card-kawaii card-budget h-100">
-                    <div class="summary-card-label">
-                        <span>Remaining Budget</span>
-                        <span class="summary-card-icon" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="6" width="18" height="14" rx="2"/>
-                                <path d="M3 8l9 6 9-6"/>
-                                <circle cx="12" cy="14" r="2.5"/>
-                            </svg>
-                        </span>
-                    </div>
-                    <p class="summary-card-value">
-                        {% if budget_overview.summary_available and budget_overview.single_currency %}
-                            {{ budget_overview.formatted_total_remaining }} {{ budget_overview.single_currency.code }}
-                        {% else %}
-                            —
-                        {% endif %}
-                    </p>
-                    <p class="summary-card-subtext">
-                        {% if budget_overview.any_incomplete_conversion %}
-                            Conversion incomplete for some expenses
-                        {% elif budget_overview.rows %}
-                            {{ budget_overview.rows|length }} active category budget{{ budget_overview.rows|length|pluralize }}
-                        {% else %}
-                            No active budget configured
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- 3. Main Panels -->
-    <!-- Row 1: Spending overview (left, col-xl-7) | Monthly budgets (right, col-xl-5) -->
-    <div class="row g-4 mb-4">
-        <div class="col-12 col-xl-7">
-            <section class="dashboard-panel-kawaii h-100" aria-labelledby="panel-spending-overview">
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <h2 id="panel-spending-overview" class="panel-header-title">Spending Overview</h2>
-                    <a href="{% url 'budgets:wallets' %}" class="panel-header-link">Manage wallets</a>
-                </div>
-                {% if wallets %}
-                <div class="table-responsive">
-                    <table class="table-kawaii">
-                        <thead>
-                            <tr>
-                                <th>Wallet</th>
-                                <th>Scope</th>
-                                <th class="text-end">Balance (Wallet Currency)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for w in wallets %}
-                            <tr>
-                                <td class="fw-medium">{{ w.name }}</td>
-                                <td>
-                                    <span class="{% if w.ownership_scope == 'shared' %}badge-scope-shared{% else %}badge-scope-personal{% endif %}">
-                                        {{ w.get_ownership_scope_display }}
-                                    </span>
-                                </td>
-                                <td class="text-end fw-semibold">{{ w.formatted_current_balance }} {{ w.currency.code }}</td>
-                            </tr>
+<div class="dashboard-stationery pb-4">
+    <!-- 1. Period Header -->
+    <header class="dashboard-period-header mb-3" aria-labelledby="heading-period-overview">
+        <h2 id="heading-period-overview" class="visually-hidden">Monthly Overview</h2>
+        <div class="period-selector-block">
+            <span class="period-selector-label">Monthly overview</span>
+            <form method="get" action="" class="period-selector-form d-inline-block">
+                <div class="period-dropdown-wrap {% if not period_options %}disabled-period-wrap{% endif %}">
+                    <svg class="period-calendar-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    <select
+                        name="period"
+                        class="period-select"
+                        {% if period_options %}onchange="this.form.submit()"{% else %}disabled{% endif %}
+                        aria-label="Select month"
+                    >
+                        {% if period_options %}
+                            {% for opt in period_options %}
+                            <option value="{{ opt.value }}" {% if opt.selected %}selected{% endif %}>{{ opt.label }}</option>
                             {% endfor %}
-                        </tbody>
-                    </table>
+                        {% else %}
+                            <option value="" selected disabled>No recorded periods</option>
+                        {% endif %}
+                    </select>
                 </div>
-                {% else %}
-                <div class="empty-state-box-kawaii">
-                    <div class="empty-state-art" aria-hidden="true">
-                        <img src="{% static 'images/dashboard/empty-spending.png' %}" alt="" width="100" height="80" class="img-fluid" onerror="this.style.display='none'">
+                {% if period_options %}
+                <noscript>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary ms-1">Go</button>
+                </noscript>
+                {% endif %}
+            </form>
+        </div>
+    </header>
+
+    <!-- 2. Summary Strip -->
+    <section class="summary-strip mb-4" aria-label="{% if current_period %}Financial summary for {{ period_label }}{% else %}Financial summary{% endif %}">
+        <h2 class="visually-hidden">{% if current_period %}Key metrics for {{ period_label }}{% else %}Key metrics{% endif %}</h2>
+        <div class="summary-strip-card">
+            <!-- Income -->
+            <div class="summary-strip-col">
+                <div class="summary-strip-header">
+                    <span class="summary-accent-indicator accent-income" aria-hidden="true"></span>
+                    <span class="summary-strip-label">Income</span>
+                </div>
+                <p class="summary-strip-value">
+                    {% if month_summary.is_complete and month_summary.target_currency %}
+                        {{ month_summary.formatted_income }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </p>
+                <p class="summary-strip-subtext">
+                    {% if not month_summary.target_currency %}
+                        Set base currency on Currencies page
+                    {% elif month_summary.unconverted_count %}
+                        {{ month_summary.unconverted_count }} entry pending conversion
+                    {% else %}
+                        {{ month_summary.target_currency.code }} &middot; {{ workspace.active_scope|title }} scope
+                    {% endif %}
+                </p>
+            </div>
+
+            <!-- Expenses -->
+            <div class="summary-strip-col">
+                <div class="summary-strip-header">
+                    <span class="summary-accent-indicator accent-expenses" aria-hidden="true"></span>
+                    <span class="summary-strip-label">Expenses</span>
+                </div>
+                <p class="summary-strip-value">
+                    {% if month_summary.is_complete and month_summary.target_currency %}
+                        {{ month_summary.formatted_expense }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </p>
+                <p class="summary-strip-subtext">
+                    {% if not month_summary.target_currency %}
+                        Set base currency on Currencies page
+                    {% elif month_summary.unconverted_count %}
+                        {{ month_summary.unconverted_count }} entry pending conversion
+                    {% else %}
+                        {{ month_summary.target_currency.code }} &middot; Excludes transfers
+                    {% endif %}
+                </p>
+            </div>
+
+            <!-- Current Balance -->
+            <div class="summary-strip-col">
+                <div class="summary-strip-header">
+                    <span class="summary-accent-indicator accent-balance" aria-hidden="true"></span>
+                    <span class="summary-strip-label">Current balance</span>
+                </div>
+                <p class="summary-strip-value {% if formatted_wallet_total|slice:':1' == '-' %}text-negative-balance{% endif %}">
+                    {% if wallet_total_complete and workspace.effective_display_currency %}
+                        {{ formatted_wallet_total }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </p>
+                <p class="summary-strip-subtext">
+                    {% if not workspace.effective_display_currency %}
+                        Set base currency on Currencies page
+                    {% elif wallet_unconverted %}
+                        {{ wallet_unconverted }} wallet{{ wallet_unconverted|pluralize }} pending conversion
+                    {% else %}
+                        {{ workspace.effective_display_currency.code }} &middot; {{ wallet_count }} active wallet{{ wallet_count|pluralize }}
+                    {% endif %}
+                </p>
+            </div>
+
+            <!-- Budget Remaining -->
+            <div class="summary-strip-col">
+                <div class="summary-strip-header">
+                    <span class="summary-accent-indicator accent-budget" aria-hidden="true"></span>
+                    <span class="summary-strip-label">Budget remaining</span>
+                </div>
+                <p class="summary-strip-value">
+                    {% if budget_overview.summary_available and budget_overview.display_currency %}
+                        {{ budget_overview.formatted_total_remaining }}
+                    {% elif budget_overview.summary_available and budget_overview.single_currency %}
+                        {{ budget_overview.formatted_total_remaining }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </p>
+                <p class="summary-strip-subtext">
+                    {% if not budget_overview.rows %}
+                        No active budget configured
+                    {% elif budget_overview.any_incomplete_conversion %}
+                        Conversion incomplete for some expenses
+                    {% elif budget_overview.summary_status == "missing_rate" %}
+                        {% if budget_overview.has_mixed_currencies %}
+                            Multi-currency budgets &middot; missing exchange rate
+                        {% else %}
+                            Conversion unavailable: missing exchange rate
+                        {% endif %}
+                    {% elif budget_overview.summary_available and budget_overview.display_currency %}
+                        {{ budget_overview.display_currency.code }} &middot; {{ budget_overview.rows|length }} active budget{{ budget_overview.rows|length|pluralize }}
+                    {% elif budget_overview.summary_available and budget_overview.single_currency %}
+                        {{ budget_overview.single_currency.code }} &middot; {{ budget_overview.rows|length }} active budget{{ budget_overview.rows|length|pluralize }}
+                    {% elif budget_overview.rows %}
+                        Multi-currency budgets
+                    {% else %}
+                        Conversion unavailable
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 3. Main Panels (Row 1) -->
+    <div class="row g-4 mb-4">
+        <!-- Spending this month (left, col-xl-7) -->
+        <div class="col-12 col-xl-7">
+            <section class="stationery-panel h-100 d-flex flex-column" aria-labelledby="panel-spending-title">
+                <div class="panel-header d-flex align-items-center justify-content-between mb-3">
+                    <h2 id="panel-spending-title" class="panel-title">Spending this month</h2>
+                    <span class="panel-meta-pill">{{ period_label }}</span>
+                </div>
+                {% if spending_breakdown %}
+                    {% if has_unconverted_expenses %}
+                    <div class="spending-incomplete-notice mb-3" role="status">
+                        {{ spending_unconverted_count }} expense{{ spending_unconverted_count|pluralize }} pending conversion. Percentages and distribution omitted.
                     </div>
-                    <h3 class="empty-state-title">Your spending story starts here.</h3>
-                    <p class="empty-state-text">Add transactions to see where your money goes and build a happier tomorrow.</p>
-                    <button type="button" class="btn-kawaii-primary" data-bs-toggle="modal" data-bs-target="#transactionModal">
-                        + Add transaction
-                    </button>
-                </div>
+                    {% endif %}
+                    <div class="spending-breakdown-list flex-grow-1">
+                        {% for item in spending_breakdown %}
+                        <div class="spending-item mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="spending-cat-name">{{ item.category_name }}</span>
+                                <span class="spending-cat-amount">
+                                    <strong>{{ item.formatted_amount }}</strong> {{ item.currency.code }}
+                                    {% if item.percentage is not None %}
+                                    <span class="spending-cat-pct text-muted ms-1">({{ item.percentage }}%)</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% if item.progress_pct is not None %}
+                            <div class="progress stationery-progress">
+                                <div
+                                    class="progress-bar stationery-bar-spend"
+                                    role="progressbar"
+                                    style="width: {{ item.progress_pct }}%;"
+                                    aria-valuenow="{{ item.progress_pct }}"
+                                    aria-valuemin="0"
+                                    aria-valuemax="100"
+                                ></div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% elif all_expenses_unconverted %}
+                    <div class="stationery-empty-state flex-grow-1 d-flex flex-column align-items-center justify-content-center py-4">
+                        <div class="empty-icon-wrap mb-3" aria-hidden="true">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#BD4A42" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="12" y1="8" x2="12" y2="12"/>
+                                <line x1="12" y1="16" x2="12.01" y2="16"/>
+                            </svg>
+                        </div>
+                        <h3 class="empty-state-heading">Spending unavailable: exchange rates missing</h3>
+                        <p class="empty-state-caption">Exchange rates are needed to convert and display your expenses in {{ workspace.effective_display_currency.code|default:"the active currency" }}.</p>
+                        <a href="{% url 'budgets:currencies' %}" class="btn-stationery-link">
+                            Configure exchange rates &gt;
+                        </a>
+                    </div>
+                {% else %}
+                    <div class="stationery-empty-state flex-grow-1 d-flex flex-column align-items-center justify-content-center py-4">
+                        <div class="empty-chart-wireframe mb-3" aria-hidden="true">
+                            <svg width="160" height="70" viewBox="0 0 160 70" fill="none" class="chart-wire-svg">
+                                <line x1="10" y1="15" x2="150" y2="15" stroke="#EAE8E3" stroke-width="1" stroke-dasharray="3 3"/>
+                                <line x1="10" y1="35" x2="150" y2="35" stroke="#EAE8E3" stroke-width="1" stroke-dasharray="3 3"/>
+                                <line x1="10" y1="55" x2="150" y2="55" stroke="#EAE8E3" stroke-width="1" stroke-dasharray="3 3"/>
+                                <line x1="10" y1="68" x2="150" y2="68" stroke="#DDD9D0" stroke-width="1.2"/>
+                            </svg>
+                        </div>
+                        <h3 class="empty-state-heading">No spending recorded yet</h3>
+                        <p class="empty-state-caption">Add transactions for this period to see your category breakdown.</p>
+                        <button type="button" class="btn-stationery-link" data-bs-toggle="modal" data-bs-target="#transactionModal">
+                            + Add transaction
+                        </button>
+                    </div>
                 {% endif %}
             </section>
         </div>
 
+        <!-- Monthly budgets (right, col-xl-5) -->
         <div class="col-12 col-xl-5">
-            <section class="dashboard-panel-kawaii h-100" aria-labelledby="panel-budget-overview">
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <h2 id="panel-budget-overview" class="panel-header-title">Monthly Budgets ({{ current_period }})</h2>
-                    <a href="{% url 'budgets:budgets' %}" class="panel-header-link">Manage budgets</a>
+            <section class="stationery-panel h-100 d-flex flex-column" aria-labelledby="panel-budgets-title">
+                <div class="panel-header d-flex align-items-center justify-content-between mb-3">
+                    <h2 id="panel-budgets-title" class="panel-title">Monthly budgets</h2>
+                    <a href="{% url 'budgets:budgets' %}" class="panel-action-link">Manage budgets &gt;</a>
                 </div>
                 {% if budget_overview.rows %}
-                <div class="d-flex flex-column gap-2">
+                <div class="budget-items-list flex-grow-1">
                     {% for row in budget_overview.rows %}
-                    <div class="goal-budget-item">
-                        <div class="d-flex justify-content-between small mb-1">
-                            <span class="fw-semibold text-navy">{{ row.category.name }}</span>
-                            <span class="text-secondary">{{ row.formatted_spent }} / {{ row.formatted_limit }} {{ row.currency.code }}</span>
+                    <div class="budget-row-item mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="budget-row-name">{{ row.category.name }}</span>
+                            <div class="text-end">
+                                <span class="budget-row-amounts">
+                                    {% if row.is_converted and row.display_currency %}
+                                        <strong>{{ row.formatted_display_spent }}</strong> / {{ row.formatted_display_limit }} {{ row.display_currency.code }}
+                                    {% else %}
+                                        <strong>{{ row.formatted_spent }}</strong> / {{ row.formatted_limit }} {{ row.currency.code }}
+                                    {% endif %}
+                                </span>
+                                {% if row.is_converted and not row.is_same_currency %}
+                                <div class="budget-secondary-orig text-muted small" style="font-size: 0.75rem;">
+                                    Orig: {{ row.formatted_spent }} / {{ row.formatted_limit }} {{ row.currency.code }}
+                                </div>
+                                {% elif not row.is_converted and not row.is_same_currency %}
+                                <div class="budget-secondary-orig text-muted small" style="font-size: 0.75rem;">
+                                    Conversion unavailable
+                                </div>
+                                {% endif %}
+                            </div>
                         </div>
-                        <div class="progress progress-kawaii">
+                        <div class="progress stationery-progress">
                             <div
-                                class="progress-bar bg-{{ row.status_variant }}"
+                                class="progress-bar status-bar-{{ row.status_variant }}"
                                 role="progressbar"
                                 style="width: {{ row.progress_pct }}%;"
                                 aria-valuenow="{{ row.progress_pct }}"
@@ -229,18 +281,44 @@
                                 aria-valuemax="100"
                             ></div>
                         </div>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="budget-status-tag status-text-{{ row.status_variant }}">{{ row.status_label }}</span>
+                                {% if row.rate_is_stale %}
+                                <span class="badge text-bg-warning text-dark py-0 px-1" style="font-size: 0.7rem;" title="Exchange rate may be outdated">Stale rate</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-end">
+                                <span class="budget-rem-text">
+                                    {% if row.is_converted and row.display_currency %}
+                                        Remaining: {{ row.formatted_display_remaining }} {{ row.display_currency.code }}
+                                    {% else %}
+                                        Remaining: {{ row.formatted_remaining }} {{ row.currency.code }}
+                                    {% endif %}
+                                </span>
+                                {% if row.is_converted and not row.is_same_currency %}
+                                <div class="budget-secondary-orig text-muted small" style="font-size: 0.75rem;">
+                                    Orig: {{ row.formatted_remaining }} {{ row.currency.code }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="empty-state-box-kawaii">
-                    <div class="empty-state-art" aria-hidden="true">
-                        <img src="{% static 'images/dashboard/empty-budgets.png' %}" alt="" width="100" height="80" class="img-fluid" onerror="this.style.display='none'">
+                <div class="stationery-empty-state flex-grow-1 d-flex flex-column align-items-center justify-content-center py-4">
+                    <div class="empty-icon-wrap mb-3" aria-hidden="true">
+                        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#A0A8B4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
+                            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
+                            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+                        </svg>
                     </div>
-                    <h3 class="empty-state-title">No budgets yet.</h3>
-                    <p class="empty-state-text">Set a monthly budget to plan ahead and stay on track.</p>
-                    <a href="{% url 'budgets:budgets' %}" class="btn-kawaii-primary">
-                        + Create budget
+                    <h3 class="empty-state-heading">No budgets created</h3>
+                    <p class="empty-state-caption">Create monthly budgets to track your spending and stay on target.</p>
+                    <a href="{% url 'budgets:budgets' %}" class="btn-stationery-link">
+                        Create a budget
                     </a>
                 </div>
                 {% endif %}
@@ -248,33 +326,57 @@
         </div>
     </div>
 
-    <!-- Row 2: Recent transactions (left, col-xl-7) | Savings goals (right, col-xl-5) -->
+    <!-- 4. Lower Panels (Row 2) -->
     <div class="row g-4">
+        <!-- Recent transactions (left, col-xl-7) -->
         <div class="col-12 col-xl-7">
-            <section class="dashboard-panel-kawaii h-100" aria-labelledby="panel-recent-transactions">
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <h2 id="panel-recent-transactions" class="panel-header-title">Recent Transactions</h2>
-                    <a href="{% url 'budgets:transactions' %}" class="panel-header-link">View all</a>
+            <section class="stationery-panel h-100 d-flex flex-column" aria-labelledby="panel-transactions-title">
+                <div class="panel-header d-flex align-items-center justify-content-between mb-3">
+                    <h2 id="panel-transactions-title" class="panel-title">Recent transactions</h2>
+                    <a href="{% url 'budgets:transactions' %}" class="panel-action-link">View all &gt;</a>
                 </div>
                 {% if recent_transactions %}
-                <div class="table-responsive">
-                    <table class="table-kawaii">
+                <div class="table-responsive flex-grow-1">
+                    <table class="table-stationery">
                         <thead>
                             <tr>
                                 <th>Date</th>
                                 <th>Description</th>
                                 <th>Wallet</th>
-                                <th class="text-end">Amount (Original Currency)</th>
+                                <th class="text-end">Amount</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for tx in recent_transactions %}
                             <tr>
-                                <td class="text-secondary small">{{ tx.transaction_date|date:"Y-m-d" }}</td>
-                                <td class="fw-medium">{{ tx.description|default:tx.get_transaction_type_display }}</td>
-                                <td class="small">{{ tx.wallet.name }}</td>
-                                <td class="text-end fw-semibold {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}text-kawaii-income{% else %}text-kawaii-expense{% endif %}">
-                                    {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}+{% else %}-{% endif %}{{ tx.formatted_amount }} {{ tx.currency.code }}
+                                <td class="tx-date text-nowrap">{{ tx.transaction_date|date:"Y-m-d" }}</td>
+                                <td class="tx-desc text-truncate" style="max-width: 220px;" title="{{ tx.description|default:tx.get_transaction_type_display }}">
+                                    {{ tx.description|default:tx.get_transaction_type_display }}
+                                </td>
+                                <td class="tx-wallet text-nowrap">{{ tx.wallet.name }}</td>
+                                <td class="tx-amount text-end text-nowrap">
+                                    {% if tx.display_currency and tx.currency_id != tx.display_currency.id and tx.formatted_display_amount %}
+                                        <div class="{% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}tx-positive{% else %}tx-negative{% endif %}">
+                                            {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}+{% else %}-{% endif %}{{ tx.formatted_display_amount }} {{ tx.display_currency.code }}
+                                            {% if tx.display_is_stale %}
+                                            <span class="badge text-bg-warning text-dark py-0 px-1 ms-1" style="font-size: 0.7rem;" title="Exchange rate may be outdated">Stale rate</span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="tx-secondary-orig text-muted small" style="font-size: 0.75rem;">
+                                            Orig: {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}+{% else %}-{% endif %}{{ tx.formatted_amount }} {{ tx.currency.code }}
+                                        </div>
+                                    {% elif tx.display_currency and tx.currency_id != tx.display_currency.id %}
+                                        <div class="{% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}tx-positive{% else %}tx-negative{% endif %}">
+                                            {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}+{% else %}-{% endif %}{{ tx.formatted_amount }} {{ tx.currency.code }}
+                                        </div>
+                                        <div class="tx-secondary-orig text-muted small" style="font-size: 0.75rem;">
+                                            Conversion unavailable
+                                        </div>
+                                    {% else %}
+                                        <div class="{% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}tx-positive{% else %}tx-negative{% endif %}">
+                                            {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}+{% else %}-{% endif %}{{ tx.formatted_amount }} {{ tx.currency.code }}
+                                        </div>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -282,13 +384,19 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="empty-state-box-kawaii">
-                    <div class="empty-state-art" aria-hidden="true">
-                        <img src="{% static 'images/dashboard/empty-transactions.png' %}" alt="" width="100" height="80" class="img-fluid" onerror="this.style.display='none'">
+                <div class="stationery-empty-state flex-grow-1 d-flex flex-column align-items-center justify-content-center py-4">
+                    <div class="empty-icon-wrap mb-3" aria-hidden="true">
+                        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#A0A8B4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>
                     </div>
-                    <h3 class="empty-state-title">No transactions yet.</h3>
-                    <p class="empty-state-text">Add your first transaction to keep track of your spending.</p>
-                    <button type="button" class="btn-kawaii-primary" data-bs-toggle="modal" data-bs-target="#transactionModal">
+                    <h3 class="empty-state-heading">No transactions yet</h3>
+                    <p class="empty-state-caption">Add your first transaction to keep track of your income and spending.</p>
+                    <button type="button" class="btn-stationery-link" data-bs-toggle="modal" data-bs-target="#transactionModal">
                         + Add transaction
                     </button>
                 </div>
@@ -296,23 +404,41 @@
             </section>
         </div>
 
+        <!-- Savings goals (right, col-xl-5) -->
         <div class="col-12 col-xl-5">
-            <section class="dashboard-panel-kawaii h-100" aria-labelledby="panel-savings-goals">
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <h2 id="panel-savings-goals" class="panel-header-title">Savings Goals</h2>
-                    <a href="{% url 'budgets:savings_goals' %}" class="panel-header-link">View goals</a>
+            <section class="stationery-panel h-100 d-flex flex-column" aria-labelledby="panel-goals-title">
+                <div class="panel-header d-flex align-items-center justify-content-between mb-3">
+                    <h2 id="panel-goals-title" class="panel-title">Savings goals</h2>
+                    <a href="{% url 'budgets:savings_goals' %}" class="panel-action-link">View goals &gt;</a>
                 </div>
                 {% if goals_overview.rows %}
-                <div class="d-flex flex-column gap-2">
+                <div class="goals-items-list flex-grow-1">
                     {% for item in goals_overview.rows %}
-                    <div class="goal-budget-item">
-                        <div class="d-flex justify-content-between small mb-1">
-                            <span class="fw-semibold text-navy">{{ item.goal.name }}</span>
-                            <span class="text-secondary">{{ item.formatted_saved }} / {{ item.formatted_target }} {{ item.goal.currency.code }}</span>
+                    <div class="goal-row-item mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="goal-row-name">{{ item.goal.name }}</span>
+                            <div class="text-end">
+                                <span class="goal-row-amounts">
+                                    {% if item.is_converted and item.display_currency %}
+                                        <strong>{{ item.formatted_display_saved }}</strong> / {{ item.formatted_display_target }} {{ item.display_currency.code }}
+                                    {% else %}
+                                        <strong>{{ item.formatted_saved }}</strong> / {{ item.formatted_target }} {{ item.goal.currency.code }}
+                                    {% endif %}
+                                </span>
+                                {% if item.is_converted and not item.is_same_currency %}
+                                <div class="goal-secondary-orig text-muted small" style="font-size: 0.75rem;">
+                                    Orig: {{ item.formatted_saved }} / {{ item.formatted_target }} {{ item.goal.currency.code }}
+                                </div>
+                                {% elif not item.is_converted and not item.is_same_currency %}
+                                <div class="goal-secondary-orig text-muted small" style="font-size: 0.75rem;">
+                                    Conversion unavailable
+                                </div>
+                                {% endif %}
+                            </div>
                         </div>
-                        <div class="progress progress-kawaii">
+                        <div class="progress stationery-progress">
                             <div
-                                class="progress-bar bg-primary"
+                                class="progress-bar stationery-bar-goal"
                                 role="progressbar"
                                 style="width: {{ item.progress_pct }}%;"
                                 aria-valuenow="{{ item.progress_pct }}"
@@ -320,18 +446,44 @@
                                 aria-valuemax="100"
                             ></div>
                         </div>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="goal-pct-text text-muted small">{{ item.progress_pct }}% saved</span>
+                                {% if item.rate_is_stale %}
+                                <span class="badge text-bg-warning text-dark py-0 px-1" style="font-size: 0.7rem;" title="Exchange rate may be outdated">Stale rate</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-end">
+                                <span class="goal-rem-text text-muted small">
+                                    {% if item.is_converted and item.display_currency %}
+                                        Remaining: {{ item.formatted_display_remaining }} {{ item.display_currency.code }}
+                                    {% else %}
+                                        Remaining: {{ item.formatted_remaining }} {{ item.goal.currency.code }}
+                                    {% endif %}
+                                </span>
+                                {% if item.is_converted and not item.is_same_currency %}
+                                <div class="goal-secondary-orig text-muted small" style="font-size: 0.75rem;">
+                                    Orig: {{ item.formatted_remaining }} {{ item.goal.currency.code }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="empty-state-box-kawaii">
-                    <div class="empty-state-art" aria-hidden="true">
-                        <img src="{% static 'images/dashboard/empty-goals.png' %}" alt="" width="100" height="80" class="img-fluid" onerror="this.style.display='none'">
+                <div class="stationery-empty-state flex-grow-1 d-flex flex-column align-items-center justify-content-center py-4">
+                    <div class="empty-icon-wrap mb-3" aria-hidden="true">
+                        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#A0A8B4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <circle cx="12" cy="12" r="6"/>
+                            <circle cx="12" cy="2" r="2"/>
+                        </svg>
                     </div>
-                    <h3 class="empty-state-title">Save for something lovely.</h3>
-                    <p class="empty-state-text">Set a savings goal to stay motivated for the things that matter.</p>
-                    <a href="{% url 'budgets:savings_goals' %}" class="btn-kawaii-primary">
-                        + Create savings goal
+                    <h3 class="empty-state-heading">Set a goal to start saving</h3>
+                    <p class="empty-state-caption">Track your progress towards what matters to you.</p>
+                    <a href="{% url 'budgets:savings_goals' %}" class="btn-stationery-link">
+                        Create a savings goal
                     </a>
                 </div>
                 {% endif %}

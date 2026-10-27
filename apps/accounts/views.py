@@ -418,9 +418,9 @@ def export_account_data(request):
                 "type": w.wallet_type,
                 "scope": w.ownership_scope,
                 "currency": w.currency.code,
-                "opening_balance": w.formatted_opening_balance,
+                "opening_balance": w.plain_opening_balance,
                 "opening_balance_date": w.opening_balance_date.isoformat(),
-                "current_balance": w.formatted_current_balance,
+                "current_balance": w.plain_current_balance,
                 "is_archived": w.is_archived,
             }
             for w in wallets
@@ -441,9 +441,9 @@ def export_account_data(request):
                 "name": r["goal"].name,
                 "scope": r["goal"].scope,
                 "currency": r["goal"].currency.code,
-                "target_amount": r["formatted_target"],
-                "saved_amount": r["formatted_saved"],
-                "remaining_amount": r["formatted_remaining"],
+                "target_amount": r["plain_target"],
+                "saved_amount": r["plain_saved"],
+                "remaining_amount": r["plain_remaining"],
                 "target_date": r["goal"].target_date.isoformat() if r["goal"].target_date else None,
             }
             for r in goals["rows"]

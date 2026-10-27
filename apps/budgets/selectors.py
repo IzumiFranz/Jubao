@@ -586,6 +586,7 @@ def get_budget_overview_for_period(
     period: str | None = None,
     scope: str | None = None,
     currency_code: str | None = None,
+    shared_space: SharedSpace | None = None,
 ) -> dict:
     today = timezone.localdate()
     effective_period = period if period and len(period) == 7 else today.strftime("%Y-%m")
@@ -610,7 +611,10 @@ def get_budget_overview_for_period(
         )
     )
     personal_q = Q(scope=CategoryBudget.Scope.PERSONAL, owner=user)
-    shared_q = Q(scope=CategoryBudget.Scope.SHARED, shared_space_id__in=space_ids)
+    if shared_space:
+        shared_q = Q(scope=CategoryBudget.Scope.SHARED, shared_space=shared_space)
+    else:
+        shared_q = Q(scope=CategoryBudget.Scope.SHARED, shared_space_id__in=space_ids)
 
     if scope == "personal":
         budget_qs = CategoryBudget.objects.filter(personal_q)
@@ -634,8 +638,13 @@ def get_budget_overview_for_period(
         transaction_date__gte=period_start,
         transaction_date__lte=period_end,
     )
-    if scope in ("personal", "shared"):
-        tx_qs = tx_qs.filter(scope=scope)
+    if scope == "personal":
+        tx_qs = tx_qs.filter(scope=Transaction.Scope.PERSONAL, owner=user)
+    elif scope == "shared":
+        if shared_space:
+            tx_qs = tx_qs.filter(scope=Transaction.Scope.SHARED, shared_space=shared_space)
+        else:
+            tx_qs = tx_qs.filter(scope=Transaction.Scope.SHARED)
     period_expenses = list(tx_qs)
 
     rows = []
@@ -702,10 +711,13 @@ def get_budget_overview_for_period(
                 "currency": b.currency,
                 "limit_amount": b.limit_amount,
                 "formatted_limit": format_currency_amount(b.limit_amount, b.currency),
+                "plain_limit": format_currency_amount(b.limit_amount, b.currency, grouping=False),
                 "spent_amount": spent,
                 "formatted_spent": format_currency_amount(spent, b.currency),
+                "plain_spent": format_currency_amount(spent, b.currency, grouping=False),
                 "remaining_amount": remaining,
                 "formatted_remaining": format_currency_amount(remaining, b.currency),
+                "plain_remaining": format_currency_amount(remaining, b.currency, grouping=False),
                 "progress_pct": min(Decimal("100"), max(Decimal("0"), progress_pct)),
                 "raw_progress_pct": progress_pct,
                 "status_label": status_label,
@@ -749,14 +761,23 @@ def get_budget_overview_for_period(
     }
 
 
-def get_savings_goals_overview(user, *, scope: str | None = None, include_archived: bool = False) -> dict:
+def get_savings_goals_overview(
+    user,
+    *,
+    scope: str | None = None,
+    include_archived: bool = False,
+    shared_space: SharedSpace | None = None,
+) -> dict:
     space_ids = list(
         SharedSpaceMembership.objects.filter(user=user, is_active=True).values_list(
             "shared_space_id", flat=True
         )
     )
     personal_q = Q(scope=SavingsGoal.Scope.PERSONAL, owner=user)
-    shared_q = Q(scope=SavingsGoal.Scope.SHARED, shared_space_id__in=space_ids)
+    if shared_space:
+        shared_q = Q(scope=SavingsGoal.Scope.SHARED, shared_space=shared_space)
+    else:
+        shared_q = Q(scope=SavingsGoal.Scope.SHARED, shared_space_id__in=space_ids)
 
     if scope == "personal":
         qs = SavingsGoal.objects.filter(personal_q)
@@ -789,8 +810,19 @@ def get_savings_goals_overview(user, *, scope: str | None = None, include_archiv
                 "saved_amount": saved,
                 "remaining_amount": remaining,
                 "formatted_target": g.formatted_target_amount,
+                "plain_target": g.plain_target_amount,
                 "formatted_saved": format_currency_amount(saved, g.currency),
+                "plain_saved": (
+                    format_currency_amount(saved, g.currency, grouping=False)
+                    if saved is not None and g.currency_id
+                    else ""
+                ),
                 "formatted_remaining": format_currency_amount(remaining, g.currency),
+                "plain_remaining": (
+                    format_currency_amount(remaining, g.currency, grouping=False)
+                    if remaining is not None and g.currency_id
+                    else ""
+                ),
                 "progress_pct": min(Decimal("100"), max(Decimal("0"), pct)),
                 "raw_progress_pct": pct,
                 "is_completed": saved >= g.target_amount,
@@ -868,17 +900,257 @@ def compute_income_expense_summary(
     }
 
 
-def get_dashboard_context(user) -> dict:
+def enrich_budget_overview_for_dashboard(
+    budget_overview: dict,
+    *,
+    target_currency: Currency | None,
+    user=None,
+    scope: str = "personal",
+    shared_space: SharedSpace | None = None,
+) -> dict:
+    rows = budget_overview.get("rows", [])
+    if not rows:
+        budget_overview["display_currency"] = target_currency
+        budget_overview["summary_available"] = False
+        budget_overview["formatted_total_remaining"] = "—"
+        budget_overview["summary_status"] = "empty"
+        budget_overview["has_mixed_currencies"] = False
+        return budget_overview
+
+    currencies_seen = {r["currency"].pk for r in rows}
+    budget_overview["has_mixed_currencies"] = len(currencies_seen) > 1
+
+    if target_currency is None:
+        for r in rows:
+            r["is_converted"] = False
+            r["is_same_currency"] = False
+            r["display_currency"] = None
+            r["display_limit"] = None
+            r["display_spent"] = None
+            r["display_remaining"] = None
+            r["formatted_display_limit"] = r["formatted_limit"]
+            r["formatted_display_spent"] = r["formatted_spent"]
+            r["formatted_display_remaining"] = r["formatted_remaining"]
+            r["conversion_status"] = "missing_target_currency"
+            r["rate_is_stale"] = False
+        budget_overview["display_currency"] = None
+        budget_overview["summary_available"] = False
+        budget_overview["formatted_total_remaining"] = "—"
+        budget_overview["summary_status"] = "missing_target_currency"
+        budget_overview["missing_rate_explanation"] = "Set base currency on Currencies page"
+        return budget_overview
+
+    all_converted = True
+    any_stale_rate = False
+    total_display_limit = Decimal("0.000")
+    total_display_spent = Decimal("0.000")
+
+    for r in rows:
+        b = r["budget"]
+        b_cur = r["currency"]
+        limit_amt = r["limit_amount"]
+        spent_amt = r["spent_amount"]
+        rem_amt = r["remaining_amount"]
+
+        if b_cur.pk == target_currency.pk:
+            r["is_converted"] = True
+            r["is_same_currency"] = True
+            r["display_currency"] = target_currency
+            r["display_limit"] = limit_amt
+            r["display_spent"] = spent_amt
+            r["display_remaining"] = rem_amt
+            r["formatted_display_limit"] = format_currency_amount(limit_amt, target_currency)
+            r["formatted_display_spent"] = format_currency_amount(spent_amt, target_currency)
+            r["formatted_display_remaining"] = format_currency_amount(rem_amt, target_currency)
+            r["conversion_status"] = "same_currency"
+            r["rate_is_stale"] = False
+            r["rate_metadata"] = None
+            total_display_limit += limit_amt
+            total_display_spent += spent_amt
+        else:
+            r["is_same_currency"] = False
+            lookup = get_latest_rate(
+                b_cur,
+                target_currency,
+                user=user or b.owner,
+                scope=b.scope,
+                shared_space=b.shared_space if b.scope == CategoryBudget.Scope.SHARED else None,
+            )
+            if lookup.rate is not None:
+                c_limit = convert_decimal_amount(limit_amt, lookup.rate, target_currency)
+                c_spent = convert_decimal_amount(spent_amt, lookup.rate, target_currency)
+                c_rem = c_limit - c_spent
+                r["is_converted"] = True
+                r["display_currency"] = target_currency
+                r["display_limit"] = c_limit
+                r["display_spent"] = c_spent
+                r["display_remaining"] = c_rem
+                r["formatted_display_limit"] = format_currency_amount(c_limit, target_currency)
+                r["formatted_display_spent"] = format_currency_amount(c_spent, target_currency)
+                r["formatted_display_remaining"] = format_currency_amount(c_rem, target_currency)
+                r["conversion_status"] = "converted"
+                r["rate_is_stale"] = lookup.is_stale
+                r["rate_age_hours"] = lookup.age_hours
+                r["rate_metadata"] = lookup
+                if lookup.is_stale:
+                    any_stale_rate = True
+                total_display_limit += c_limit
+                total_display_spent += c_spent
+            else:
+                all_converted = False
+                r["is_converted"] = False
+                r["display_currency"] = None
+                r["display_limit"] = None
+                r["display_spent"] = None
+                r["display_remaining"] = None
+                r["formatted_display_limit"] = r["formatted_limit"]
+                r["formatted_display_spent"] = r["formatted_spent"]
+                r["formatted_display_remaining"] = r["formatted_remaining"]
+                r["conversion_status"] = "unavailable"
+                r["rate_is_stale"] = False
+                r["rate_metadata"] = lookup
+
+    budget_overview["display_currency"] = target_currency
+    budget_overview["any_stale_rate"] = any_stale_rate
+
+    if not all_converted:
+        budget_overview["summary_available"] = False
+        budget_overview["formatted_total_remaining"] = "—"
+        budget_overview["summary_status"] = "missing_rate"
+        budget_overview["missing_rate_explanation"] = "Exchange rate unavailable for display currency"
+    elif budget_overview.get("any_incomplete_conversion"):
+        budget_overview["summary_available"] = False
+        budget_overview["formatted_total_remaining"] = "—"
+        budget_overview["summary_status"] = "incomplete_expense_conversion"
+        budget_overview["missing_rate_explanation"] = "Conversion incomplete for some expenses"
+    else:
+        total_display_remaining = total_display_limit - total_display_spent
+        budget_overview["summary_available"] = True
+        budget_overview["total_display_limit"] = total_display_limit
+        budget_overview["total_display_spent"] = total_display_spent
+        budget_overview["total_display_remaining"] = total_display_remaining
+        budget_overview["formatted_total_remaining"] = format_currency_amount(
+            total_display_remaining, target_currency
+        )
+        budget_overview["formatted_total_limit"] = format_currency_amount(
+            total_display_limit, target_currency
+        )
+        budget_overview["formatted_total_spent"] = format_currency_amount(
+            total_display_spent, target_currency
+        )
+        budget_overview["summary_status"] = "complete"
+
+    return budget_overview
+
+
+def enrich_goals_overview_for_dashboard(
+    goals_overview: dict,
+    *,
+    target_currency: Currency | None,
+    user=None,
+    scope: str = "personal",
+    shared_space: SharedSpace | None = None,
+) -> dict:
+    rows = goals_overview.get("rows", [])
+    if not rows:
+        goals_overview["display_currency"] = target_currency
+        return goals_overview
+
+    if target_currency is None:
+        for it in rows:
+            it["is_converted"] = False
+            it["is_same_currency"] = False
+            it["display_currency"] = None
+            it["display_target"] = None
+            it["display_saved"] = None
+            it["display_remaining"] = None
+            it["formatted_display_target"] = it["formatted_target"]
+            it["formatted_display_saved"] = it["formatted_saved"]
+            it["formatted_display_remaining"] = it["formatted_remaining"]
+            it["rate_is_stale"] = False
+        goals_overview["display_currency"] = None
+        return goals_overview
+
+    for it in rows:
+        g = it["goal"]
+        g_cur = g.currency
+        target_amt = g.target_amount
+        saved_amt = it["saved_amount"]
+        rem_amt = it["remaining_amount"]
+
+        if g_cur.pk == target_currency.pk:
+            it["is_converted"] = True
+            it["is_same_currency"] = True
+            it["display_currency"] = target_currency
+            it["display_target"] = target_amt
+            it["display_saved"] = saved_amt
+            it["display_remaining"] = rem_amt
+            it["formatted_display_target"] = format_currency_amount(target_amt, target_currency)
+            it["formatted_display_saved"] = format_currency_amount(saved_amt, target_currency)
+            it["formatted_display_remaining"] = format_currency_amount(rem_amt, target_currency)
+            it["rate_is_stale"] = False
+            it["rate_metadata"] = None
+        else:
+            it["is_same_currency"] = False
+            lookup = get_latest_rate(
+                g_cur,
+                target_currency,
+                user=user or g.owner,
+                scope=g.scope,
+                shared_space=g.shared_space if g.scope == SavingsGoal.Scope.SHARED else None,
+            )
+            if lookup.rate is not None:
+                c_target = convert_decimal_amount(target_amt, lookup.rate, target_currency)
+                c_saved = convert_decimal_amount(saved_amt, lookup.rate, target_currency)
+                c_rem = max(Decimal("0.000"), c_target - c_saved)
+                it["is_converted"] = True
+                it["display_currency"] = target_currency
+                it["display_target"] = c_target
+                it["display_saved"] = c_saved
+                it["display_remaining"] = c_rem
+                it["formatted_display_target"] = format_currency_amount(c_target, target_currency)
+                it["formatted_display_saved"] = format_currency_amount(c_saved, target_currency)
+                it["formatted_display_remaining"] = format_currency_amount(c_rem, target_currency)
+                it["rate_is_stale"] = lookup.is_stale
+                it["rate_age_hours"] = lookup.age_hours
+                it["rate_metadata"] = lookup
+            else:
+                it["is_converted"] = False
+                it["display_currency"] = None
+                it["display_target"] = None
+                it["display_saved"] = None
+                it["display_remaining"] = None
+                it["formatted_display_target"] = it["formatted_target"]
+                it["formatted_display_saved"] = it["formatted_saved"]
+                it["formatted_display_remaining"] = it["formatted_remaining"]
+                it["rate_is_stale"] = False
+                it["rate_metadata"] = lookup
+
+    goals_overview["display_currency"] = target_currency
+    return goals_overview
+
+
+def get_dashboard_context(user, period: str | None = None) -> dict:
     ws = get_active_workspace_context(user)
     active_scope = ws["active_scope"]
+    active_shared_space = ws.get("active_shared_space")
     target_currency = ws["effective_display_currency"]
 
-    wallets = enrich_wallets_with_balances(
+    all_accessible_wallets = enrich_wallets_with_balances(
         get_accessible_wallets_qs(user, include_archived=False)
     )
-    scoped_wallets = [
-        w for w in wallets if w.ownership_scope == active_scope
-    ] or wallets
+    if active_scope == "personal":
+        scoped_wallets = [
+            w for w in all_accessible_wallets
+            if w.ownership_scope == Wallet.OwnershipScope.PERSONAL and w.owner_id == user.id
+        ]
+    elif active_scope == "shared" and active_shared_space:
+        scoped_wallets = [
+            w for w in all_accessible_wallets
+            if w.ownership_scope == Wallet.OwnershipScope.SHARED and w.shared_space_id == active_shared_space.id
+        ]
+    else:
+        scoped_wallets = []
 
     wallet_total = Decimal("0.000")
     wallet_unconverted = 0
@@ -904,39 +1176,205 @@ def get_dashboard_context(user) -> dict:
                 wallet_unconverted += 1
 
     wallet_total_complete = target_currency is not None and wallet_unconverted == 0
+    wallet_count = len(scoped_wallets)
 
     today = timezone.localdate()
-    month_start = date(today.year, today.month, 1)
-    month_tx_qs = get_accessible_transactions_qs(user).filter(
-        transaction_date__gte=month_start,
-        transaction_date__lte=today,
-    )
-    if active_scope in ("personal", "shared"):
-        month_tx_qs = month_tx_qs.filter(scope=active_scope)
-    month_txs = list(month_tx_qs)
+    today_period = today.strftime("%Y-%m")
 
-    month_summary = compute_income_expense_summary(month_txs, target_currency, user=user)
+    base_tx_qs = get_accessible_transactions_qs(user)
+    if active_scope == "personal":
+        scoped_tx_qs = base_tx_qs.filter(
+            scope=Transaction.Scope.PERSONAL,
+            owner=user,
+        )
+        scoped_budget_qs = CategoryBudget.objects.filter(
+            scope=CategoryBudget.Scope.PERSONAL,
+            owner=user,
+            is_archived=False,
+        )
+    elif active_scope == "shared" and active_shared_space:
+        scoped_tx_qs = base_tx_qs.filter(
+            scope=Transaction.Scope.SHARED,
+            shared_space=active_shared_space,
+        )
+        scoped_budget_qs = CategoryBudget.objects.filter(
+            scope=CategoryBudget.Scope.SHARED,
+            shared_space=active_shared_space,
+            is_archived=False,
+        )
+    else:
+        scoped_tx_qs = Transaction.objects.none()
+        scoped_budget_qs = CategoryBudget.objects.none()
 
-    recent_txs = list(
-        get_accessible_transactions_qs(user).filter(
-            scope=active_scope if active_scope in ("personal", "shared") else "personal"
-        )[:8]
-    )
-    if not recent_txs:
-        recent_txs = list(get_accessible_transactions_qs(user)[:8])
+    # Collect distinct YYYY-MM periods from accessible scoped transactions and budgets
+    all_periods = set()
+    for dt in scoped_tx_qs.values_list("transaction_date", flat=True).distinct():
+        if dt:
+            if hasattr(dt, "strftime"):
+                all_periods.add(dt.strftime("%Y-%m"))
+            elif isinstance(dt, str) and len(dt) >= 7 and dt[:4].isdigit() and dt[4] == "-" and dt[5:7].isdigit():
+                all_periods.add(dt[:7])
 
-    budget_overview = get_budget_overview_for_period(
-        user,
-        period=today.strftime("%Y-%m"),
+    for p in scoped_budget_qs.values_list("period", flat=True).distinct():
+        if p and isinstance(p, str) and len(p) == 7 and p[:4].isdigit() and p[4] == "-" and p[5:7].isdigit():
+            all_periods.add(p)
+
+    sorted_periods = sorted(all_periods, reverse=True)
+
+    clean_requested_period = (period or "").strip()
+    effective_period = None
+    if sorted_periods:
+        if clean_requested_period in sorted_periods:
+            effective_period = clean_requested_period
+        elif today_period in sorted_periods:
+            effective_period = today_period
+        else:
+            effective_period = sorted_periods[0]
+
+    period_options = []
+    if sorted_periods and effective_period:
+        for p in sorted_periods:
+            try:
+                y, m = int(p[:4]), int(p[5:7])
+                opt_label = date(y, m, 1).strftime("%B %Y")
+            except (ValueError, TypeError):
+                opt_label = p
+            period_options.append({
+                "value": p,
+                "label": opt_label,
+                "selected": (p == effective_period),
+            })
+        try:
+            ey, em = int(effective_period[:4]), int(effective_period[5:7])
+            period_label = date(ey, em, 1).strftime("%B %Y")
+        except (ValueError, TypeError):
+            period_label = effective_period
+    else:
+        period_label = "No recorded periods"
+
+    if effective_period:
+        year_int, month_int = int(effective_period[:4]), int(effective_period[5:7])
+        period_start = date(year_int, month_int, 1)
+        if month_int == 12:
+            period_end = date(year_int + 1, 1, 1) - timezone.timedelta(days=1)
+        else:
+            period_end = date(year_int, month_int + 1, 1) - timezone.timedelta(days=1)
+
+        month_tx_qs = scoped_tx_qs.filter(
+            transaction_date__gte=period_start,
+            transaction_date__lte=period_end,
+        )
+        month_txs = list(month_tx_qs)
+        month_summary = compute_income_expense_summary(month_txs, target_currency, user=user)
+        budget_overview = get_budget_overview_for_period(
+            user,
+            period=effective_period,
+            scope=active_scope,
+            shared_space=active_shared_space if active_scope == "shared" else None,
+        )
+    else:
+        month_txs = []
+        month_summary = compute_income_expense_summary([], target_currency, user=user)
+        budget_overview = get_budget_overview_for_period(
+            user,
+            period=today_period,
+            scope=active_scope,
+            shared_space=active_shared_space if active_scope == "shared" else None,
+        )
+
+    # Spending this month breakdown by category
+    spending_breakdown = []
+    category_expenses = defaultdict(lambda: {"amount": Decimal("0.000"), "currency": target_currency, "count": 0})
+    total_converted_expense = Decimal("0.000")
+    total_expense_count = 0
+    converted_expenses_count = 0
+    unconverted_expenses_count = 0
+
+    for tx in month_txs:
+        if tx.transaction_type != Transaction.Type.EXPENSE:
+            continue
+        total_expense_count += 1
+        cat_name = tx.category.name if tx.category else "Uncategorized"
+        if target_currency is not None:
+            conv_amt, _ = convert_transaction_to_target(
+                tx,
+                target_currency,
+                user=user or tx.owner,
+                scope=tx.scope,
+                shared_space=tx.shared_space if tx.scope == Transaction.Scope.SHARED else None,
+            )
+        else:
+            conv_amt = None
+
+        if conv_amt is not None:
+            category_expenses[cat_name]["amount"] += conv_amt
+            category_expenses[cat_name]["count"] += 1
+            total_converted_expense += conv_amt
+            converted_expenses_count += 1
+        else:
+            unconverted_expenses_count += 1
+
+    has_unconverted_expenses = (unconverted_expenses_count > 0)
+    all_expenses_unconverted = (total_expense_count > 0 and converted_expenses_count == 0)
+
+    if not all_expenses_unconverted and converted_expenses_count > 0:
+        sorted_cats = sorted(category_expenses.items(), key=lambda x: x[1]["amount"], reverse=True)
+        for cat_name, data in sorted_cats:
+            amt = data["amount"]
+            if has_unconverted_expenses:
+                pct = None
+                pct_num = None
+            else:
+                if total_converted_expense > Decimal("0"):
+                    pct = ((amt / total_converted_expense) * Decimal("100")).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+                    pct_num = float(pct)
+                else:
+                    pct = Decimal("0.0")
+                    pct_num = 0.0
+            spending_breakdown.append({
+                "category_name": cat_name,
+                "amount": amt,
+                "currency": target_currency,
+                "formatted_amount": format_currency_amount(amt, target_currency),
+                "percentage": pct,
+                "progress_pct": min(100.0, max(0.0, pct_num)) if pct_num is not None else None,
+                "count": data["count"],
+            })
+
+    recent_txs = list(scoped_tx_qs[:8])
+    enrich_transactions_with_display_currency(
+        recent_txs,
+        display_currency=target_currency,
+        user=user,
         scope=active_scope,
-        currency_code=target_currency.code if target_currency else None,
+        shared_space=active_shared_space if active_scope == "shared" else None,
     )
-    goals_overview = get_savings_goals_overview(user, scope=active_scope)
+
+    goals_overview = get_savings_goals_overview(
+        user,
+        scope=active_scope,
+        shared_space=active_shared_space if active_scope == "shared" else None,
+    )
+
+    enrich_budget_overview_for_dashboard(
+        budget_overview,
+        target_currency=target_currency,
+        user=user,
+        scope=active_scope,
+        shared_space=active_shared_space if active_scope == "shared" else None,
+    )
+    enrich_goals_overview_for_dashboard(
+        goals_overview,
+        target_currency=target_currency,
+        user=user,
+        scope=active_scope,
+        shared_space=active_shared_space if active_scope == "shared" else None,
+    )
 
     return {
         "workspace": ws,
-        "wallets": wallets[:6],
-        "wallet_count": len(wallets),
+        "wallets": scoped_wallets[:6],
+        "wallet_count": wallet_count,
         "wallet_total_complete": wallet_total_complete,
         "formatted_wallet_total": (
             format_currency_amount(wallet_total, target_currency)
@@ -948,7 +1386,20 @@ def get_dashboard_context(user) -> dict:
         "recent_transactions": recent_txs,
         "budget_overview": budget_overview,
         "goals_overview": goals_overview,
-        "current_period": today.strftime("%Y-%m"),
+        "current_period": effective_period or "",
+        "period_label": period_label,
+        "period_options": period_options,
+        "spending_breakdown": spending_breakdown,
+        "total_period_expense": total_converted_expense,
+        "formatted_total_period_expense": (
+            format_currency_amount(total_converted_expense, target_currency)
+            if target_currency
+            else "—"
+        ),
+        "has_unconverted_expenses": has_unconverted_expenses,
+        "spending_unconverted_count": unconverted_expenses_count,
+        "all_expenses_unconverted": all_expenses_unconverted,
+        "total_expense_count": total_expense_count,
     }
 
 
@@ -1144,10 +1595,10 @@ def build_transactions_export_rows(user, params: dict) -> list[dict]:
                 ),
                 "description": sanitize_spreadsheet_cell(tx.description),
                 "notes": sanitize_spreadsheet_cell(tx.notes),
-                "amount": tx.formatted_amount,
+                "amount": tx.plain_amount,
                 "currency": tx.currency.code,
                 "base_currency": tx.base_currency.code if tx.base_currency else "",
-                "converted_amount": tx.formatted_converted_amount or "",
+                "converted_amount": tx.plain_converted_amount if tx.plain_converted_amount is not None else "",
                 "conversion_rate": str(tx.conversion_rate) if tx.conversion_rate is not None else "",
                 "conversion_status": tx.get_conversion_status_display(),
                 "paid_by": sanitize_spreadsheet_cell(
@@ -1239,9 +1690,9 @@ def get_sync_snapshot_for_user(
                 "shared_space_id": str(w.shared_space_id) if w.shared_space_id else None,
                 "currency_code": w.currency.code,
                 "decimal_places": w.currency.decimal_places,
-                "opening_balance": w.formatted_opening_balance,
+                "opening_balance": w.plain_opening_balance,
                 "opening_balance_date": w.opening_balance_date.isoformat(),
-                "current_balance": w.formatted_current_balance,
+                "current_balance": w.plain_current_balance,
                 "is_archived": w.is_archived,
                 "revision": w.revision,
             }
@@ -1269,7 +1720,7 @@ def get_sync_snapshot_for_user(
                 "wallet_name": tx.wallet.name,
                 "category_id": str(tx.category_id) if tx.category_id else None,
                 "category_name": tx.category.name if tx.category else "Uncategorized",
-                "amount": tx.formatted_amount,
+                "amount": tx.plain_amount,
                 "currency_code": tx.currency.code,
                 "decimal_places": tx.currency.decimal_places,
                 "transaction_date": tx.transaction_date.isoformat(),

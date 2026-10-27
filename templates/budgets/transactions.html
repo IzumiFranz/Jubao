@@ -161,7 +161,7 @@
                                     <input
                                         type="text"
                                         name="amount_sent"
-                                        value="{{ tr.formatted_amount_sent }}"
+                                        value="{{ tr.plain_amount_sent }}"
                                         inputmode="decimal"
                                         class="form-control form-control-sm"
                                         required
@@ -172,7 +172,7 @@
                                     <input
                                         type="text"
                                         name="amount_received"
-                                        value="{{ tr.formatted_amount_received }}"
+                                        value="{{ tr.plain_amount_received }}"
                                         inputmode="decimal"
                                         class="form-control form-control-sm"
                                     >
@@ -192,7 +192,7 @@
                                     <input
                                         type="text"
                                         name="fee_amount"
-                                        value="{{ tr.formatted_fee_amount|default:'' }}"
+                                        value="{{ tr.plain_fee_amount|default:'' }}"
                                         inputmode="decimal"
                                         class="form-control form-control-sm"
                                     >
@@ -540,7 +540,7 @@
                                 data-tx-id="{{ tx.id }}"
                                 data-tx-revision="{{ tx.revision }}"
                                 data-tx-type="{{ tx.transaction_type }}"
-                                data-tx-amount="{{ tx.formatted_amount }}"
+                                data-tx-amount="{{ tx.plain_amount }}"
                                 data-tx-wallet="{{ tx.wallet_id }}"
                                 data-tx-category="{{ tx.category_id|default:'' }}"
                                 data-tx-date="{{ tx.transaction_date|date:'Y-m-d' }}"

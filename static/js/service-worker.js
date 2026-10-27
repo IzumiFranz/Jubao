@@ -1,16 +1,16 @@
 const CACHE_PREFIX = "budget-tracker-shell-";
-const CACHE_NAME = "budget-tracker-shell-v3";
+const CACHE_NAME = "budget-tracker-shell-v8";
 const REQUIRED_PRECACHE_URLS = [
     "/static/vendor/bootstrap/bootstrap.min.css",
     "/static/vendor/bootstrap/bootstrap.bundle.min.js",
     "/static/css/app.css",
-    "/static/css/app.css?v=v3",
+    "/static/css/app.css?v=v8",
     "/static/css/dashboard.css",
-    "/static/css/dashboard.css?v=v3",
+    "/static/css/dashboard.css?v=v8",
     "/static/js/app.js",
-    "/static/js/app.js?v=v3",
+    "/static/js/app.js?v=v8",
     "/static/js/offline.js",
-    "/static/js/offline.js?v=v3",
+    "/static/js/offline.js?v=v8",
     "/static/js/pages/transaction.js",
     "/static/manifest.webmanifest",
 ];
@@ -68,6 +68,11 @@ self.addEventListener("install", function (event) {
             })
             .then(function () {
                 return self.skipWaiting();
+            })
+            .catch(function (error) {
+                return caches.delete(CACHE_NAME).catch(function () {}).then(function () {
+                    throw error;
+                });
             })
     );
 });

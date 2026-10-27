@@ -190,7 +190,7 @@
                                     <input
                                         type="text"
                                         name="target_amount"
-                                        value="{{ item.formatted_target }}"
+                                        value="{{ item.plain_target|default:item.formatted_target }}"
                                         inputmode="decimal"
                                         class="form-control form-control-sm"
                                         required

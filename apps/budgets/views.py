@@ -133,7 +133,8 @@ def _format_error_message(exc) -> str:
 
 @login_required
 def dashboard(request):
-    ctx = get_dashboard_context(request.user)
+    raw_period = (request.GET.get("period") or request.GET.get("month") or "").strip()
+    ctx = get_dashboard_context(request.user, period=raw_period or None)
     tx_form = TransactionEntryForm(user=request.user)
     accessible_wallets = enrich_wallets_with_balances(
         get_accessible_wallets_qs(request.user, include_archived=False)

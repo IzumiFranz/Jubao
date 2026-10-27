@@ -1,210 +1,521 @@
-/* Scoped Dashboard styles for Japanese kawaii stationery / kakeibo aesthetic */
+/* Scoped Dashboard styles: Japanese Stationery Aesthetic (Hobonichi / Midori / Kakeibo) */
 
+:root {
+    --stationery-bg: #F8F7F4;
+    --stationery-card-bg: #FFFFFF;
+    --stationery-border: #E5E3DE;
+    --stationery-border-light: #ECEAE5;
+    --stationery-radius: 8px;
+    --stationery-text-main: #132238;
+    --stationery-text-muted: #5A6B82;
+    --stationery-text-label: #7A8599;
+    --stationery-accent-income: #3D7A53;
+    --stationery-accent-expense: #BD4A42;
+    --stationery-accent-balance: #1E3A5F;
+    --stationery-accent-budget: #5E7356;
+}
+
+body:has(.dashboard-stationery),
+body:has(.dashboard-stationery) .app-main-column,
+body:has(.dashboard-stationery) .app-content,
 body:has(.dashboard-kawaii),
 body:has(.dashboard-kawaii) .app-main-column,
 body:has(.dashboard-kawaii) .app-content {
-    background-color: #FAF8F3 !important;
+    background-color: #F8F7F4 !important;
 }
 
+.dashboard-stationery,
 .dashboard-kawaii {
-    background-color: #FAF8F3;
-    color: #18365D;
-    font-family: inherit;
+    background-color: #F8F7F4;
+    color: var(--stationery-text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-/* 1. Welcome Banner */
-.dashboard-kawaii .dashboard-banner {
-    background: linear-gradient(135deg, #FEFBF1 0%, #FEF5DF 100%);
-    border: 1px solid #F5E6BA;
-    border-radius: 16px;
-    padding: 1.25rem 1.75rem;
-    position: relative;
-    box-shadow: 0 2px 8px rgba(180, 117, 20, 0.05);
-}
-
-.dashboard-kawaii .dashboard-banner-title {
-    color: #18365D;
-    font-size: 1.25rem;
-    font-weight: 700;
-    line-height: 1.3;
-}
-
-.dashboard-kawaii .banner-heart {
-    color: #F497A9;
-    display: inline-block;
-    margin-left: 0.25rem;
-}
-
-.dashboard-kawaii .dashboard-banner-subtitle {
-    color: #5A6B82;
-    font-size: 0.875rem;
-    margin-bottom: 0;
-}
-
-.dashboard-kawaii .dashboard-banner-art {
-    min-width: 110px;
-    height: 80px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-}
-
-.dashboard-kawaii .dashboard-banner-art img {
-    max-height: 80px;
-    width: auto;
-    object-fit: contain;
-}
-
-/* 2. Summary Cards */
-.dashboard-kawaii .summary-card-kawaii {
-    border-radius: 16px;
-    padding: 1.25rem;
-    position: relative;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-    box-shadow: 0 2px 8px rgba(24, 54, 93, 0.04);
-}
-
-.dashboard-kawaii .summary-card-label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #5A6B82;
-    margin-bottom: 0.5rem;
+/* 1. Period Header & Selector */
+.dashboard-period-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 
-.dashboard-kawaii .summary-card-icon {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
+.period-selector-block {
     display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.period-selector-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--stationery-text-label);
+    display: block;
+    margin-bottom: 0.35rem;
+}
+
+.period-selector-form {
+    margin: 0;
+}
+
+.period-dropdown-wrap {
+    background-color: var(--stationery-card-bg);
+    border: 1px solid var(--stationery-border);
+    border-radius: 6px;
+    padding: 0.35rem 0.75rem;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
+    gap: 0.5rem;
+    box-shadow: 0 1px 2px rgba(19, 34, 56, 0.04);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.period-dropdown-wrap:focus-within {
+    border-color: #A0B2C6;
+    box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
+}
+
+.period-calendar-icon,
+.period-chevron-icon {
+    color: var(--stationery-text-muted);
     flex-shrink: 0;
 }
 
-.dashboard-kawaii .summary-card-value {
-    font-size: 1.5rem;
+.period-select {
+    border: none;
+    background: transparent;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--stationery-text-main);
+    cursor: pointer;
+    outline: none;
+    padding: 0;
+    margin: 0;
+}
+
+.period-select:focus {
+    outline: none;
+}
+
+.period-dropdown-wrap.disabled-period-wrap {
+    background-color: #F3EFEA;
+    border-color: var(--stationery-border);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.period-select:disabled {
+    cursor: not-allowed;
+    color: var(--stationery-text-muted);
+}
+
+/* 2. Summary Strip */
+.summary-strip-card {
+    background-color: var(--stationery-card-bg);
+    border: 1px solid var(--stationery-border);
+    border-radius: var(--stationery-radius);
+    box-shadow: 0 1px 3px rgba(19, 34, 56, 0.04);
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.summary-strip-col {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 1.25rem 1.4rem;
+    border-right: 1px solid var(--stationery-border-light);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.summary-strip-col:last-child {
+    border-right: none;
+}
+
+.summary-strip-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+
+.summary-accent-indicator {
+    width: 18px;
+    height: 3px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.summary-accent-indicator.accent-income {
+    background-color: var(--stationery-accent-income);
+}
+
+.summary-accent-indicator.accent-expenses {
+    background-color: var(--stationery-accent-expense);
+}
+
+.summary-accent-indicator.accent-balance {
+    background-color: var(--stationery-accent-balance);
+}
+
+.summary-accent-indicator.accent-budget {
+    background-color: var(--stationery-accent-budget);
+}
+
+.summary-strip-label {
+    font-size: 0.72rem;
     font-weight: 700;
-    color: #18365D;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--stationery-text-label);
+}
+
+.summary-strip-value {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--stationery-text-main);
     line-height: 1.2;
-    margin-bottom: 0.35rem;
+    margin-bottom: 0.25rem;
     letter-spacing: -0.01em;
 }
 
-.dashboard-kawaii .summary-card-subtext {
-    font-size: 0.775rem;
-    color: #718096;
-    margin-bottom: 0;
+.summary-strip-subtext {
+    font-size: 0.75rem;
+    color: var(--stationery-text-label);
     line-height: 1.35;
+    margin: 0;
 }
 
-/* Mint - Income */
-.dashboard-kawaii .card-income {
-    background-color: #EAF7EE;
-    border: 1px solid #D1EED8;
-}
-.dashboard-kawaii .card-income .summary-card-icon {
-    background-color: #D5F1DE;
-    color: #2E7D46;
+.text-negative-balance {
+    color: var(--stationery-accent-expense) !important;
 }
 
-/* Blush - Expenses */
-.dashboard-kawaii .card-expenses {
-    background-color: #FDF0EE;
-    border: 1px solid #F8D7D3;
-}
-.dashboard-kawaii .card-expenses .summary-card-icon {
-    background-color: #FCE1DC;
-    color: #C04B3E;
-}
-
-/* Pale Blue - Balance */
-.dashboard-kawaii .card-balance {
-    background-color: #EBF3FC;
-    border: 1px solid #D5E6F8;
-}
-.dashboard-kawaii .card-balance .summary-card-icon {
-    background-color: #DCEAF9;
-    color: #1E4E8C;
+/* 3. Stationery Panels */
+.stationery-panel {
+    background-color: var(--stationery-card-bg);
+    border: 1px solid var(--stationery-border);
+    border-radius: var(--stationery-radius);
+    padding: 1.35rem 1.5rem;
+    box-shadow: 0 1px 3px rgba(19, 34, 56, 0.04);
 }
 
-/* Butter Yellow - Remaining Budget */
-.dashboard-kawaii .card-budget {
-    background-color: #FEF6E4;
-    border: 1px solid #FAE3B2;
-}
-.dashboard-kawaii .card-budget .summary-card-icon {
-    background-color: #FCEABA;
-    color: #B47514;
-}
-
-/* Negative balance text */
-.dashboard-kawaii .text-negative-balance {
-    color: #C04B3E !important;
-}
-
-/* 3. Main Panels */
-.dashboard-kawaii .dashboard-panel-kawaii {
-    background-color: #FFFFFF;
-    border: 1px solid #ECE7DE;
-    border-radius: 16px;
-    padding: 1.5rem;
-    box-shadow: 0 2px 8px rgba(24, 54, 93, 0.04);
-}
-
-.dashboard-kawaii .panel-header-title {
+.panel-title {
     font-size: 1.05rem;
     font-weight: 700;
-    color: #18365D;
+    color: var(--stationery-text-main);
+    margin: 0;
+}
+
+.panel-meta-pill {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--stationery-text-muted);
+    background-color: #F8F7F4;
+    border: 1px solid var(--stationery-border);
+    border-radius: 4px;
+    padding: 0.2rem 0.55rem;
+}
+
+.panel-action-link {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--stationery-accent-balance);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.panel-action-link:hover {
+    color: #0F1D30;
+    text-decoration: underline;
+}
+
+/* 4. Spending Breakdown */
+.spending-incomplete-notice {
+    background-color: #FEF8EC;
+    border: 1px solid #F5E5BA;
+    color: #8C5E00;
+    font-size: 0.775rem;
+    font-weight: 500;
+    border-radius: 6px;
+    padding: 0.45rem 0.75rem;
+    line-height: 1.4;
+}
+
+.spending-breakdown-list {
+    margin: 0;
+}
+
+.spending-item {
+    margin-bottom: 1.1rem;
+}
+
+.spending-item:last-child {
     margin-bottom: 0;
 }
 
-.dashboard-kawaii .panel-header-link {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: #18365D;
-    text-decoration: none;
-    opacity: 0.85;
-    transition: opacity 0.15s ease;
+.spending-cat-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--stationery-text-main);
 }
 
-.dashboard-kawaii .panel-header-link:hover {
-    opacity: 1;
-    text-decoration: underline;
-    color: #0B1630;
+.spending-cat-amount {
+    font-size: 0.875rem;
+    color: var(--stationery-text-main);
 }
 
-/* Buttons */
-.dashboard-kawaii .btn-kawaii-primary {
-    background-color: #18365D;
-    color: #FFFFFF;
-    border: none;
+.spending-cat-pct {
+    font-size: 0.775rem;
+    color: var(--stationery-text-label);
+}
+
+/* Progress bars */
+.stationery-progress {
+    height: 6px;
+    background-color: #EFECE6;
     border-radius: 9999px;
+    overflow: hidden;
+    box-shadow: none;
+    margin-top: 0.35rem;
+}
+
+.stationery-bar-spend {
+    background-color: #5A738E;
+    border-radius: 9999px;
+}
+
+.stationery-bar-goal {
+    background-color: var(--stationery-accent-balance);
+    border-radius: 9999px;
+}
+
+.status-bar-success {
+    background-color: var(--stationery-accent-income);
+    border-radius: 9999px;
+}
+
+.status-bar-warning {
+    background-color: #C98A2C;
+    border-radius: 9999px;
+}
+
+.status-bar-danger {
+    background-color: var(--stationery-accent-expense);
+    border-radius: 9999px;
+}
+
+/* 5. Budgets items */
+.budget-items-list {
+    margin: 0;
+}
+
+.budget-row-item {
+    margin-bottom: 1.1rem;
+}
+
+.budget-row-item:last-child {
+    margin-bottom: 0;
+}
+
+.budget-row-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--stationery-text-main);
+}
+
+.budget-row-amounts {
     font-size: 0.85rem;
+    color: var(--stationery-text-muted);
+}
+
+.budget-status-tag {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-text-success {
+    color: var(--stationery-accent-income);
+}
+
+.status-text-warning {
+    color: #9E6613;
+}
+
+.status-text-danger {
+    color: var(--stationery-accent-expense);
+}
+
+.budget-rem-text {
+    font-size: 0.75rem;
+    color: var(--stationery-text-label);
+}
+
+/* 6. Savings Goals */
+.goals-items-list {
+    margin: 0;
+}
+
+.goal-row-item {
+    margin-bottom: 1.1rem;
+}
+
+.goal-row-item:last-child {
+    margin-bottom: 0;
+}
+
+.goal-row-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--stationery-text-main);
+}
+
+.goal-row-amounts {
+    font-size: 0.85rem;
+    color: var(--stationery-text-muted);
+}
+
+.goal-pct-text {
+    font-size: 0.75rem;
+    color: var(--stationery-text-label);
+}
+
+.goal-date-text {
+    font-size: 0.75rem;
+    color: var(--stationery-text-label);
+}
+
+/* 7. Tables */
+.table-stationery {
+    width: 100%;
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.table-stationery thead th {
+    background-color: #FAF9F6;
+    color: var(--stationery-text-label);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.65rem 0.75rem;
+    border-top: none;
+    border-bottom: 1px solid var(--stationery-border);
+}
+
+.table-stationery tbody td {
+    padding: 0.75rem;
+    border-top: none;
+    border-bottom: 1px solid var(--stationery-border-light);
+    color: var(--stationery-text-main);
+    vertical-align: middle;
+    font-size: 0.875rem;
+}
+
+.table-stationery tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.tx-date {
+    color: var(--stationery-text-label);
+    font-size: 0.82rem;
+}
+
+.tx-desc {
     font-weight: 500;
-    padding: 0.4rem 1.1rem;
-    transition: background-color 0.15s ease, box-shadow 0.15s ease;
-    display: inline-flex;
+    color: var(--stationery-text-main);
+}
+
+.tx-wallet {
+    color: var(--stationery-text-muted);
+    font-size: 0.82rem;
+}
+
+.tx-amount {
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.tx-positive {
+    color: var(--stationery-accent-income);
+}
+
+.tx-negative {
+    color: var(--stationery-accent-expense);
+}
+
+/* 8. Empty States */
+.stationery-empty-state {
+    padding: 2rem 1.5rem;
+    text-align: center;
+}
+
+.empty-chart-wireframe,
+.empty-icon-wrap {
+    display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.35rem;
-    text-decoration: none;
 }
 
-.dashboard-kawaii .btn-kawaii-primary:hover,
-.dashboard-kawaii .btn-kawaii-primary:focus {
-    background-color: #0B1630;
-    color: #FFFFFF;
+.chart-wire-svg {
+    max-width: 100%;
+    height: auto;
 }
 
-.dashboard-kawaii .btn-kawaii-primary:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(24, 54, 93, 0.25);
+.empty-state-heading {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--stationery-text-main);
+    margin-bottom: 0.25rem;
 }
 
-/* Tables */
+.empty-state-caption {
+    font-size: 0.82rem;
+    color: var(--stationery-text-muted);
+    max-width: 340px;
+    margin-bottom: 0.85rem;
+    line-height: 1.4;
+}
+
+.btn-stationery-link {
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--stationery-accent-balance);
+    background: none;
+    border: none;
+    padding: 0;
+    text-decoration: underline;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    transition: color 0.15s ease;
+}
+
+.btn-stationery-link:hover,
+.btn-stationery-link:focus {
+    color: #0F1D30;
+}
+
+/* Backward compatibility classes */
+.dashboard-kawaii .dashboard-panel-kawaii {
+    background-color: var(--stationery-card-bg);
+    border: 1px solid var(--stationery-border);
+    border-radius: var(--stationery-radius);
+    padding: 1.35rem 1.5rem;
+    box-shadow: 0 1px 3px rgba(19, 34, 56, 0.04);
+}
+
+.dashboard-kawaii .summary-card-kawaii {
+    background-color: var(--stationery-card-bg);
+    border: 1px solid var(--stationery-border);
+    border-radius: var(--stationery-radius);
+    padding: 1.25rem 1.4rem;
+}
+
 .dashboard-kawaii .table-kawaii {
     width: 100%;
     margin-bottom: 0;
@@ -213,141 +524,91 @@ body:has(.dashboard-kawaii) .app-content {
 }
 
 .dashboard-kawaii .table-kawaii thead th {
-    background-color: #FAF8F3;
-    color: #5A6B82;
-    font-size: 0.775rem;
-    font-weight: 600;
+    background-color: #FAF9F6;
+    color: var(--stationery-text-label);
+    font-size: 0.72rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.05em;
     padding: 0.65rem 0.75rem;
     border-top: none;
-    border-bottom: 1px solid #ECE7DE;
+    border-bottom: 1px solid var(--stationery-border);
 }
 
 .dashboard-kawaii .table-kawaii tbody td {
     padding: 0.75rem;
     border-top: none;
-    border-bottom: 1px solid #F3EFE8;
-    color: #18365D;
+    border-bottom: 1px solid var(--stationery-border-light);
+    color: var(--stationery-text-main);
     vertical-align: middle;
     font-size: 0.875rem;
 }
 
-.dashboard-kawaii .table-kawaii tbody tr:last-child td {
-    border-bottom: none;
-}
-
-/* Badges */
-.dashboard-kawaii .badge-scope-personal {
-    background-color: #EBF3FC;
-    color: #1E4E8C;
-    border: 1px solid #D5E6F8;
-    font-size: 0.75rem;
-    font-weight: 500;
+.dashboard-kawaii .btn-kawaii-primary {
+    background-color: var(--stationery-accent-balance);
+    color: #FFFFFF;
+    border: none;
     border-radius: 9999px;
-    padding: 0.25rem 0.6rem;
-}
-
-.dashboard-kawaii .badge-scope-shared {
-    background-color: #FEF6E4;
-    color: #B47514;
-    border: 1px solid #FAE3B2;
-    font-size: 0.75rem;
-    font-weight: 500;
-    border-radius: 9999px;
-    padding: 0.25rem 0.6rem;
-}
-
-/* Amounts */
-.dashboard-kawaii .text-kawaii-income {
-    color: #2E7D46;
-}
-
-.dashboard-kawaii .text-kawaii-expense {
-    color: #C04B3E;
-}
-
-/* Budget & Goal items */
-.dashboard-kawaii .goal-budget-item {
-    background-color: #FAF8F3;
-    border: 1px solid #ECE7DE;
-    border-radius: 12px;
-    padding: 0.75rem 1rem;
-}
-
-.dashboard-kawaii .progress-kawaii {
-    background-color: #E8E3D9;
-    border-radius: 9999px;
-    height: 8px;
-    overflow: hidden;
-}
-
-.dashboard-kawaii .progress-kawaii .progress-bar {
-    border-radius: 9999px;
-}
-
-/* Empty states */
-.dashboard-kawaii .empty-state-box-kawaii {
-    padding: 2.25rem 1.5rem;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
+    font-size: 0.84rem;
+    font-weight: 600;
+    padding: 0.4rem 1rem;
+    text-decoration: none;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
-.dashboard-kawaii .empty-state-art {
-    width: 100px;
-    height: 80px;
-    margin-bottom: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.dashboard-kawaii .btn-kawaii-primary:hover {
+    background-color: #0F1D30;
+    color: #FFFFFF;
 }
 
-.dashboard-kawaii .empty-state-art img {
-    max-height: 75px;
-    max-width: 95px;
-    object-fit: contain;
+/* 9. Responsive Layout */
+@media (max-width: 991.98px) {
+    .summary-strip-card {
+        border-radius: var(--stationery-radius);
+    }
+    .summary-strip-col {
+        flex: 1 1 50%;
+        border-bottom: 1px solid var(--stationery-border-light);
+    }
+    .summary-strip-col:nth-child(2n) {
+        border-right: none;
+    }
+    .summary-strip-col:nth-last-child(-n+2) {
+        border-bottom: none;
+    }
 }
 
-.dashboard-kawaii .empty-state-title {
-    font-size: 1rem;
-    font-weight: 700;
-    color: #18365D;
-    margin-bottom: 0.35rem;
-}
-
-.dashboard-kawaii .empty-state-text {
-    font-size: 0.85rem;
-    color: #5A6B82;
-    max-width: 360px;
-    margin-bottom: 1rem;
-}
-
-/* Responsive */
-@media (max-width: 767.98px) {
-    .dashboard-kawaii .dashboard-banner {
+@media (max-width: 575.98px) {
+    .summary-strip-card {
+        flex-direction: column;
+    }
+    .summary-strip-col {
+        flex: 1 1 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--stationery-border-light);
         padding: 1rem 1.25rem;
     }
-    .dashboard-kawaii .dashboard-banner-title {
-        font-size: 1.1rem;
+    .summary-strip-col:last-child {
+        border-bottom: none;
     }
-    .dashboard-kawaii .dashboard-banner-art {
-        min-width: 70px;
-        height: 60px;
+    .summary-strip-value {
+        font-size: 1.3rem;
     }
-    .dashboard-kawaii .dashboard-banner-art img {
-        max-height: 55px;
+    .stationery-panel {
+        padding: 1.1rem 1.2rem;
     }
-    .dashboard-kawaii .summary-card-value {
-        font-size: 1.35rem;
+    .period-dropdown-wrap {
+        width: 100%;
+        justify-content: space-between;
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .dashboard-kawaii .summary-card-kawaii,
-    .dashboard-kawaii .btn-kawaii-primary {
+    .period-dropdown-wrap,
+    .panel-action-link,
+    .btn-stationery-link {
         transition: none;
     }
 }

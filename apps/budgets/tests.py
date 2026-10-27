@@ -7,13 +7,13 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import connection
 from django.db.models.deletion import ProtectedError
-from django.test import Client, TestCase
+from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
 
 from apps.accounts.models import UserPreference
 
 from .currency_catalog import SUPPORTED_CURRENCIES
-from .models import Currency, Wallet
+from .models import Currency, Wallet, format_currency_amount
 
 seed_migration = import_module("apps.budgets.migrations.0002_seed_supported_currencies")
 twd_migration = import_module("apps.budgets.migrations.0003_add_twd_currency")
@@ -117,7 +117,7 @@ class CurrencyAndWalletTests(TestCase):
         self.assertRedirects(wallet_resp, self.wallets_url)
         wallet = Wallet.objects.get(owner=self.user, name="Taipei Cash Wallet")
         self.assertEqual(wallet.currency, twd)
-        self.assertEqual(wallet.formatted_opening_balance, "3250.50")
+        self.assertEqual(wallet.formatted_opening_balance, "3,250.50")
 
         excess_resp = self.client.post(
             self.wallets_url,
@@ -183,7 +183,7 @@ class CurrencyAndWalletTests(TestCase):
         self.assertRedirects(response, self.wallets_url)
         wallet = Wallet.objects.get(owner=self.user, name="Manila Payroll Account")
         self.assertEqual(wallet.currency, php)
-        self.assertEqual(wallet.formatted_opening_balance, "18500.25")
+        self.assertEqual(wallet.formatted_opening_balance, "18,500.25")
 
     def test_anonymous_wallet_get_and_post_redirect_to_login(self):
         usd = Currency.objects.get(code="USD")
@@ -273,7 +273,7 @@ class CurrencyAndWalletTests(TestCase):
         self.assertEqual(wallet.wallet_type, Wallet.WalletType.BANK_ACCOUNT)
         self.assertEqual(wallet.currency, usd)
         self.assertEqual(wallet.opening_balance, Decimal("1250.500"))
-        self.assertEqual(wallet.formatted_opening_balance, "1250.50")
+        self.assertEqual(wallet.formatted_opening_balance, "1,250.50")
         self.assertEqual(wallet.opening_balance_date, date(2026, 10, 1))
 
     def test_submitted_owner_id_cannot_assign_wallet_to_another_user(self):
@@ -368,7 +368,7 @@ class CurrencyAndWalletTests(TestCase):
         self.client.force_login(self.user)
 
         cases = [
-            ("Yen Cash", jpy, "15000", "15000"),
+            ("Yen Cash", jpy, "15000", "15,000"),
             ("USD Card", usd, "-245.75", "-245.75"),
             ("KWD Account", kwd, "89.125", "89.125"),
         ]
@@ -711,7 +711,7 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
         )
 
         self.assertEqual(wallet.current_balance, Decimal("1374.750"))
-        self.assertEqual(wallet.formatted_current_balance, "1374.75")
+        self.assertEqual(wallet.formatted_current_balance, "1,374.75")
 
         # Once ledger activity exists, changing currency or opening_balance is blocked
         with self.assertRaises(ValidationError):
@@ -875,8 +875,8 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
             contribution_date=today,
             entry_type="contribution",
         )
-        self.assertEqual(goal.formatted_saved_amount, "5000.00")
-        self.assertEqual(goal.formatted_remaining_amount, "45000.00")
+        self.assertEqual(goal.formatted_saved_amount, "5,000.00")
+        self.assertEqual(goal.formatted_remaining_amount, "45,000.00")
         # Wallet balance is untouched by savings contribution
         self.assertEqual(w_twd.current_balance, Decimal("6800.000"))
 
@@ -1193,10 +1193,10 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
         self.assertIn('id="offline-queued-list"', html)
         self.assertIn('id="offline-bounded-notice"', html)
 
-        # Service worker uses bumped cache v3 and deletes only budget-tracker-shell-* caches
+        # Service worker uses bumped cache v8 and deletes only budget-tracker-shell-* caches
         sw_resp = self.client.get("/service-worker.js")
         sw_js = sw_resp.content.decode("utf-8")
-        self.assertIn('const CACHE_NAME = "budget-tracker-shell-v3"', sw_js)
+        self.assertIn('const CACHE_NAME = "budget-tracker-shell-v8"', sw_js)
         self.assertIn('const CACHE_PREFIX = "budget-tracker-shell-"', sw_js)
         self.assertIn("k.indexOf(CACHE_PREFIX) === 0 && k !== CACHE_NAME", sw_js)
 
@@ -1591,8 +1591,8 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
         self.assertEqual(post_goal_resp.status_code, 302)
         goal.refresh_from_db()
         self.assertEqual(goal.name, "Deluxe Japan Trip")
-        self.assertEqual(goal.formatted_target_amount, "200000")
-        self.assertEqual(goal.formatted_saved_amount, "50000")
+        self.assertEqual(goal.formatted_target_amount, "200,000")
+        self.assertEqual(goal.formatted_saved_amount, "50,000")
         # Wallet balances remain completely unchanged by savings goal edits
         self.assertEqual(w1.current_balance, Decimal("846.500"))
         self.assertEqual(w2.current_balance, Decimal("32500.000"))
@@ -2064,14 +2064,14 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
         self.assertEqual(resp_php.status_code, 200)
         self.assertContains(resp_php, "Converted (PHP)")
         self.assertContains(resp_php, "+100.00 USD")
-        self.assertContains(resp_php, "+5650.00 PHP")
+        self.assertContains(resp_php, "+5,650.00 PHP")
         self.assertContains(resp_php, f"Booked: {tx_usd.formatted_converted_amount} {tx_usd.base_currency.code}")
 
         # 3. View in TWD via ?display_currency=TWD
         resp_twd = self.client.get("/transactions/?display_currency=TWD")
         self.assertEqual(resp_twd.status_code, 200)
         self.assertContains(resp_twd, "Converted (TWD)")
-        self.assertContains(resp_twd, "+3200.00 TWD")
+        self.assertContains(resp_twd, "+3,200.00 TWD")
         self.assertContains(resp_twd, "Valuation: Available (manual)")
 
         # For EUR -> TWD, Bob has rate 99.00, but Alice has no access; must show unavailable
@@ -2090,7 +2090,7 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
         self.assertEqual(resp_filtered.status_code, 200)
         self.assertContains(resp_filtered, "Consulting USD")
         self.assertNotContains(resp_filtered, "Server hosting EUR")
-        self.assertContains(resp_filtered, "+5650.00 PHP")
+        self.assertContains(resp_filtered, "+5,650.00 PHP")
 
         # 6. Stale rate warning
         stale_time = timezone.now() - timedelta(hours=50)
@@ -2381,16 +2381,16 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
         # Check converted valuations:
         # Personal: 100 * 32.00 = 3200.00 TWD
         self.assertEqual(tx_personal.display_amount, Decimal("3200.00"))
-        self.assertEqual(tx_personal.formatted_display_amount, "3200.00")
+        self.assertEqual(tx_personal.formatted_display_amount, "3,200.00")
         # Space A1: 100 * 30.00 = 3000.00 TWD
         self.assertEqual(tx_space_a1.display_amount, Decimal("3000.00"))
-        self.assertEqual(tx_space_a1.formatted_display_amount, "3000.00")
+        self.assertEqual(tx_space_a1.formatted_display_amount, "3,000.00")
         # Space B: 100 * 35.00 = 3500.00 TWD
         self.assertEqual(tx_space_b.display_amount, Decimal("3500.00"))
-        self.assertEqual(tx_space_b.formatted_display_amount, "3500.00")
+        self.assertEqual(tx_space_b.formatted_display_amount, "3,500.00")
         # Space A2: 50 * 30.00 = 1500.00 TWD (reused Space A lookup)
         self.assertEqual(tx_space_a2.display_amount, Decimal("1500.00"))
-        self.assertEqual(tx_space_a2.formatted_display_amount, "1500.00")
+        self.assertEqual(tx_space_a2.formatted_display_amount, "1,500.00")
         # Same-currency row: 500.00 TWD
         self.assertEqual(tx_twd.display_amount, Decimal("500.00"))
         self.assertEqual(tx_twd.display_status, "identity")
@@ -2421,12 +2421,12 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
         pref.save()
         resp_p = self.client.get("/transactions/?display_currency=TWD")
         self.assertEqual(resp_p.status_code, 200)
-        self.assertContains(resp_p, "-3200.00 TWD")  # Personal row (rate 32)
-        self.assertContains(resp_p, "-3000.00 TWD")  # Space A row (rate 30)
-        self.assertContains(resp_p, "-1500.00 TWD")  # Space A2 row (rate 30)
-        self.assertContains(resp_p, "-3500.00 TWD")  # Space B row (rate 35)
-        self.assertNotContains(resp_p, "9900.00")    # Unauthorized private rate excluded
-        self.assertNotContains(resp_p, "8800.00")    # Unauthorized private rate excluded
+        self.assertContains(resp_p, "-3,200.00 TWD")  # Personal row (rate 32)
+        self.assertContains(resp_p, "-3,000.00 TWD")  # Space A row (rate 30)
+        self.assertContains(resp_p, "-1,500.00 TWD")  # Space A2 row (rate 30)
+        self.assertContains(resp_p, "-3,500.00 TWD")  # Space B row (rate 35)
+        self.assertNotContains(resp_p, "9,900.00")    # Unauthorized private rate excluded
+        self.assertNotContains(resp_p, "8,800.00")    # Unauthorized private rate excluded
 
         # Case B: Active workspace is Shared Space A
         pref.active_scope = "shared"
@@ -2434,10 +2434,10 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
         pref.save()
         resp_a = self.client.get("/transactions/?display_currency=TWD")
         self.assertEqual(resp_a.status_code, 200)
-        self.assertContains(resp_a, "-3200.00 TWD")  # Personal row STILL uses 32
-        self.assertContains(resp_a, "-3000.00 TWD")  # Space A row STILL uses 30
-        self.assertContains(resp_a, "-1500.00 TWD")  # Space A2 row STILL uses 30
-        self.assertContains(resp_a, "-3500.00 TWD")  # Space B row STILL uses 35
+        self.assertContains(resp_a, "-3,200.00 TWD")  # Personal row STILL uses 32
+        self.assertContains(resp_a, "-3,000.00 TWD")  # Space A row STILL uses 30
+        self.assertContains(resp_a, "-1,500.00 TWD")  # Space A2 row STILL uses 30
+        self.assertContains(resp_a, "-3,500.00 TWD")  # Space B row STILL uses 35
 
         # Case C: Active workspace is Shared Space B
         pref.active_scope = "shared"
@@ -2445,10 +2445,10 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
         pref.save()
         resp_b = self.client.get("/transactions/?display_currency=TWD")
         self.assertEqual(resp_b.status_code, 200)
-        self.assertContains(resp_b, "-3200.00 TWD")  # Personal row STILL uses 32
-        self.assertContains(resp_b, "-3000.00 TWD")  # Space A row STILL uses 30
-        self.assertContains(resp_b, "-1500.00 TWD")  # Space A2 row STILL uses 30
-        self.assertContains(resp_b, "-3500.00 TWD")  # Space B row STILL uses 35
+        self.assertContains(resp_b, "-3,200.00 TWD")  # Personal row STILL uses 32
+        self.assertContains(resp_b, "-3,000.00 TWD")  # Space A row STILL uses 30
+        self.assertContains(resp_b, "-1,500.00 TWD")  # Space A2 row STILL uses 30
+        self.assertContains(resp_b, "-3,500.00 TWD")  # Space B row STILL uses 35
 
 
 class ExchangeRateProviderAndCoverageTests(TestCase):
@@ -3672,7 +3672,7 @@ class PersonalTransactionSharingTests(TestCase):
         # Alice wallet: 5000.00 opening - 142.50 tx = 4857.50 USD
         bob_view = client_bob.get(reverse("budgets:shared_activity") + f"?space={self.space.id}")
         self.assertEqual(bob_view.status_code, 200)
-        self.assertContains(bob_view, "4857.50")
+        self.assertContains(bob_view, "4,857.50")
         self.assertContains(bob_view, "USD")
         self.assertContains(bob_view, "Personal balance from selected wallets")
         # Ensure zero leakage of wallet name or private details
@@ -3691,8 +3691,8 @@ class PersonalTransactionSharingTests(TestCase):
         )
         # Bob still sees only 4857.50 USD, NOT 29857.50 USD
         bob_view2 = client_bob.get(reverse("budgets:shared_activity") + f"?space={self.space.id}")
-        self.assertContains(bob_view2, "4857.50")
-        self.assertNotContains(bob_view2, "29857.50")
+        self.assertContains(bob_view2, "4,857.50")
+        self.assertNotContains(bob_view2, "29,857.50")
         self.assertNotContains(bob_view2, "Alice Offshore Stash")
 
         # 6. Stop sharing immediately revokes disclosure
@@ -3707,7 +3707,7 @@ class PersonalTransactionSharingTests(TestCase):
 
         bob_view3 = client_bob.get(reverse("budgets:shared_activity") + f"?space={self.space.id}")
         self.assertContains(bob_view3, "This member has not shared a personal balance")
-        self.assertNotContains(bob_view3, "4857.50")
+        self.assertNotContains(bob_view3, "4,857.50")
 
         # 7. Leaving shared space revokes permission permanently
         client_alice.post(
@@ -3838,7 +3838,7 @@ class PersonalTransactionSharingTests(TestCase):
         )
         self.assertEqual(preview_resp.status_code, 200)
         self.assertContains(preview_resp, "Unsaved Preview")
-        self.assertContains(preview_resp, "4857.50")
+        self.assertContains(preview_resp, "4,857.50")
         self.assertContains(preview_resp, "USD")
 
         # Crucially: no permission committed to database!
@@ -3897,7 +3897,7 @@ class PersonalTransactionSharingTests(TestCase):
         bob_view = client_bob.get(reverse("budgets:shared_activity") + f"?space={self.space.id}")
         self.assertEqual(bob_view.status_code, 200)
         self.assertContains(bob_view, "This member enabled balance sharing, but has no wallets currently selected.")
-        self.assertNotContains(bob_view, "4857.50")
+        self.assertNotContains(bob_view, "4,857.50")
 
     def test_security_headers_and_export_absence(self):
         client_alice = Client()
@@ -3964,7 +3964,7 @@ class PersonalTransactionSharingTests(TestCase):
         self.assertEqual(preview_resp.status_code, 200)
         self.assertContains(preview_resp, "Unsaved Preview")
         # 4857.50 USD * 150 = 728625 JPY (quantized to 0 decimal places for JPY)
-        self.assertContains(preview_resp, "728625")
+        self.assertContains(preview_resp, "728,625")
         self.assertContains(preview_resp, "JPY")
         self.assertContains(preview_resp, "displayed value may differ if they use an authorized personal rate")
 
@@ -3988,7 +3988,7 @@ class PersonalTransactionSharingTests(TestCase):
         )
         self.assertEqual(preview_fallback.status_code, 200)
         # Should fall back to Bob's personal base currency (USD)
-        self.assertContains(preview_fallback, "4857.50")
+        self.assertContains(preview_fallback, "4,857.50")
         self.assertContains(preview_fallback, "USD")
         jpy.is_active = True
         jpy.save()
@@ -4006,7 +4006,7 @@ class PersonalTransactionSharingTests(TestCase):
             },
         )
         self.assertEqual(preview_no_pref.status_code, 200)
-        self.assertContains(preview_no_pref, "4857.50")
+        self.assertContains(preview_no_pref, "4,857.50")
         self.assertContains(preview_no_pref, "USD")
         # Ensure NO UserPreference was created for Bob
         self.assertEqual(UserPreference.objects.filter(user=self.bob).count(), 0)
@@ -4269,7 +4269,7 @@ class PersonalTransactionSharingTests(TestCase):
         )
         resp_same = client_bob.get(reverse("budgets:shared_activity") + f"?space={self.space.id}")
         self.assertEqual(resp_same.status_code, 200)
-        self.assertContains(resp_same, "4857.50")
+        self.assertContains(resp_same, "4,857.50")
         self.assertNotContains(resp_same, "Uses stale exchange rates")
 
 
@@ -5374,6 +5374,3104 @@ class OfflineSyncBrowserRuntimeTests(TestCase):
             httpd.shutdown()
             httpd.server_close()
             shutil.rmtree(user_data_dir, ignore_errors=True)
+
+
+class JapaneseStationeryDashboardTests(TestCase):
+    def setUp(self):
+        from django.utils import timezone
+        self.user = User.objects.create_user(
+            username="stationery_user",
+            password="Str0ng!Password#2026",
+        )
+        self.usd, _ = Currency.objects.get_or_create(
+            code="USD",
+            defaults={"name": "US Dollar", "decimal_places": 2, "is_active": True},
+        )
+        self.dashboard_url = reverse("budgets:dashboard")
+
+    def test_empty_dashboard_renders_stationery_layout_and_empty_states(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.dashboard_url)
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+
+        # Visual layout classes
+        self.assertIn("dashboard-stationery", html)
+        self.assertIn("dashboard-period-header", html)
+        self.assertIn("summary-strip-card", html)
+        self.assertIn("summary-strip-col", html)
+        self.assertIn("stationery-panel", html)
+
+        # Monthly overview dropdown & header
+        self.assertIn("Monthly overview", html)
+        self.assertIn('name="period"', html)
+        self.assertIn("No recorded periods", html)
+        self.assertIn("disabled", html)
+
+        # No broken mascot images or previous decorative watercolor banners
+        self.assertNotIn("banner-mascot.png", html)
+        self.assertNotIn("empty-spending.png", html)
+        self.assertNotIn("empty-budgets.png", html)
+        self.assertNotIn("empty-transactions.png", html)
+        self.assertNotIn("empty-goals.png", html)
+        self.assertNotIn("A little saved, a little happier", html)
+
+        # Main content area does not render an h1 (topbar handles the h1)
+        content_after_start = html.split('class="dashboard-stationery')[1].split('id="transactionModal"')[0]
+        self.assertNotIn("<h1", content_after_start)
+
+        # Calm empty states
+        self.assertIn("No spending recorded yet", html)
+        self.assertIn("No budgets created", html)
+        self.assertIn("No transactions yet", html)
+        self.assertIn("Set a goal to start saving", html)
+
+        # Working modal trigger and links
+        self.assertIn('data-bs-target="#transactionModal"', html)
+        self.assertIn(reverse("budgets:budgets"), html)
+        self.assertIn(reverse("budgets:transactions"), html)
+        self.assertIn(reverse("budgets:savings_goals"), html)
+
+    def test_populated_dashboard_renders_real_metrics_and_breakdowns(self):
+        from django.utils import timezone
+        from .services import (
+            create_category,
+            create_savings_goal,
+            create_transaction_entry,
+            record_savings_contribution,
+            save_category_budget,
+        )
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        wallet = Wallet.objects.create(
+            owner=self.user,
+            name="Main Checking",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("1500.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        today = timezone.localdate()
+        cat_food = create_category(user=self.user, name="Groceries", kind="expense")
+        cat_tech = create_category(user=self.user, name="Electronics", kind="expense")
+        cat_salary = create_category(user=self.user, name="Salary", kind="income")
+
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="income",
+            amount=Decimal("3000.00"),
+            wallet=wallet,
+            transaction_date=today,
+            category=cat_salary,
+            description="Monthly Paycheck",
+        )
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("200.00"),
+            wallet=wallet,
+            transaction_date=today,
+            category=cat_food,
+            description="Supermarket trip",
+        )
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("100.00"),
+            wallet=wallet,
+            transaction_date=today,
+            category=cat_tech,
+            description="USB-C Hub",
+        )
+        save_category_budget(
+            user=self.user,
+            category=cat_food,
+            period=today.strftime("%Y-%m"),
+            currency=self.usd,
+            limit_amount=Decimal("500.00"),
+        )
+        goal = create_savings_goal(
+            user=self.user,
+            name="Emergency Fund",
+            target_amount=Decimal("5000.00"),
+            currency=self.usd,
+        )
+        record_savings_contribution(
+            user=self.user,
+            goal=goal,
+            amount=Decimal("1250.00"),
+            contribution_date=today,
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(self.dashboard_url)
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+
+        # Summary strip numbers
+        self.assertIn("3,000.00", html)
+        self.assertIn("300.00", html)
+
+        # Spending this month category breakdown
+        self.assertIn("Groceries", html)
+        self.assertIn("200.00", html)
+        self.assertIn("66.7%", html)
+        self.assertIn("Electronics", html)
+        self.assertIn("100.00", html)
+        self.assertIn("33.3%", html)
+
+        # Monthly budgets
+        self.assertIn("500.00", html)
+        self.assertIn("Remaining: 300.00 USD", html)
+
+        # Recent transactions table
+        self.assertIn("Supermarket trip", html)
+        self.assertIn("Main Checking", html)
+        self.assertIn("-200.00 USD", html)
+        self.assertIn("+3,000.00 USD", html)
+
+        # Savings goals
+        self.assertIn("Emergency Fund", html)
+        self.assertIn("1,250.00", html)
+        self.assertIn("5,000.00", html)
+
+    def test_period_filter_via_get_param_and_invalid_fallback(self):
+        from django.utils import timezone
+        from .services import (
+            create_category,
+            create_transaction_entry,
+            save_category_budget,
+        )
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        wallet = Wallet.objects.create(
+            owner=self.user,
+            name="Bank",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        cat = create_category(user=self.user, name="Books", kind="expense")
+
+        # Create past transaction in 2026-03
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("45.00"),
+            wallet=wallet,
+            transaction_date=date(2026, 3, 15),
+            category=cat,
+            description="Design Book",
+        )
+        save_category_budget(
+            user=self.user,
+            category=cat,
+            period="2026-03",
+            currency=self.usd,
+            limit_amount=Decimal("100.00"),
+        )
+
+        self.client.force_login(self.user)
+
+        # 1. Query for 2026-03
+        resp_mar = self.client.get(f"{self.dashboard_url}?period=2026-03")
+        self.assertEqual(resp_mar.status_code, 200)
+        html_mar = resp_mar.content.decode("utf-8")
+        self.assertIn("March 2026", html_mar)
+        self.assertIn("45.00", html_mar)
+        self.assertIn("Books", html_mar)
+
+        # 2. Query with invalid period falls back to latest recorded month when current month is not available
+        resp_invalid = self.client.get(f"{self.dashboard_url}?period=invalid-period")
+        self.assertEqual(resp_invalid.status_code, 200)
+        self.assertIn("March 2026", resp_invalid.content.decode("utf-8"))
+
+        # 3. When current month IS available, invalid period falls back to current month
+        today = timezone.localdate()
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("15.00"),
+            wallet=wallet,
+            transaction_date=today,
+            category=cat,
+            description="Today Item",
+        )
+        resp_invalid_today = self.client.get(f"{self.dashboard_url}?period=invalid-period")
+        self.assertEqual(resp_invalid_today.status_code, 200)
+        self.assertIn(today.strftime("%B %Y"), resp_invalid_today.content.decode("utf-8"))
+
+    def test_distinguish_zero_from_missing_data(self):
+        self.client.force_login(self.user)
+
+        # When no base currency is set, show dash "—" and prompt to set base currency
+        resp_unconfigured = self.client.get(self.dashboard_url)
+        self.assertEqual(resp_unconfigured.status_code, 200)
+        html_unconf = resp_unconfigured.content.decode("utf-8")
+        self.assertIn("Set base currency on Currencies page", html_unconf)
+
+        # When base currency is set and user has 0 activity, show "0.00", not "—"
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        resp_zero = self.client.get(self.dashboard_url)
+        self.assertEqual(resp_zero.status_code, 200)
+        html_zero = resp_zero.content.decode("utf-8")
+        self.assertIn("0.00", html_zero)
+        self.assertIn("USD &middot; Personal scope", html_zero)
+
+    def test_empty_chart_has_no_fabricated_axis_labels(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.dashboard_url)
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertNotIn("50k", html)
+        self.assertNotIn("25k", html)
+        self.assertIn("chart-wire-svg", html)
+
+    def test_two_expenses_different_currencies_where_one_rate_missing(self):
+        from django.utils import timezone
+        from .services import (
+            create_category,
+            create_transaction_entry,
+        )
+        eur, _ = Currency.objects.get_or_create(
+            code="EUR",
+            defaults={"name": "Euro", "decimal_places": 2, "is_active": True},
+        )
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        w_usd = Wallet.objects.create(
+            owner=self.user,
+            name="USD Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        w_eur = Wallet.objects.create(
+            owner=self.user,
+            name="EUR Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=eur,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        today = timezone.localdate()
+        cat_groceries = create_category(user=self.user, name="Groceries", kind="expense")
+        cat_dining = create_category(user=self.user, name="Dining", kind="expense")
+
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("100.00"),
+            wallet=w_usd,
+            transaction_date=today,
+            category=cat_groceries,
+            description="Supermarket",
+        )
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("50.00"),
+            wallet=w_eur,
+            transaction_date=today,
+            category=cat_dining,
+            description="Paris Bistro",
+        )
+
+        self.client.force_login(self.user)
+        resp = self.client.get(self.dashboard_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Mixed total 150.00 should NEVER exist
+        self.assertNotIn("150.00", html)
+        # Converted expense 100.00 USD is aggregated for Groceries
+        self.assertIn("100.00", html)
+        # Visible incomplete-data notice
+        self.assertIn("1 expense pending conversion. Percentages and distribution omitted.", html)
+        # Proportion bar and percentage are omitted
+        self.assertNotIn("stationery-bar-spend", html)
+        self.assertNotIn("%", html.split('id="panel-spending-title"')[1].split('</section>')[0])
+
+    def test_all_expenses_missing_conversion_shows_unavailable_state(self):
+        from django.utils import timezone
+        from .services import (
+            create_category,
+            create_transaction_entry,
+        )
+        eur, _ = Currency.objects.get_or_create(
+            code="EUR",
+            defaults={"name": "Euro", "decimal_places": 2, "is_active": True},
+        )
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        w_eur = Wallet.objects.create(
+            owner=self.user,
+            name="EUR Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=eur,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        today = timezone.localdate()
+        cat = create_category(user=self.user, name="Dining", kind="expense")
+
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("50.00"),
+            wallet=w_eur,
+            transaction_date=today,
+            category=cat,
+            description="Paris Bistro",
+        )
+
+        self.client.force_login(self.user)
+        resp = self.client.get(self.dashboard_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        self.assertIn("Spending unavailable: exchange rates missing", html)
+        self.assertNotIn("No spending recorded yet", html)
+
+    def test_personal_and_selected_shared_space_isolation(self):
+        from django.utils import timezone
+        from .services import (
+            create_category,
+            create_shared_space,
+            create_shared_space_invitation,
+            accept_shared_space_invitation,
+            create_transaction_entry,
+            share_personal_transaction,
+        )
+        bob = User.objects.create_user(username="bob_iso", password="Str0ng!Password#2026")
+        pref = UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        UserPreference.objects.create(user=bob, personal_base_currency=self.usd)
+
+        # 1. Personal wallet & transaction
+        w_personal = Wallet.objects.create(
+            owner=self.user,
+            name="Alice Personal Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("500.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        today = timezone.localdate()
+        cat_p = create_category(user=self.user, name="Personal Stuff", kind="expense", scope="personal")
+        tx_personal = create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("50.00"),
+            wallet=w_personal,
+            transaction_date=today,
+            category=cat_p,
+            description="Alice Personal Coffee",
+        )
+
+        # 2. Shared Space 1 with wallet & transaction
+        space1 = create_shared_space(user=self.user, name="Space One", base_currency=self.usd)
+        w_space1 = Wallet.objects.create(
+            owner=self.user,
+            name="Space One Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            ownership_scope=Wallet.OwnershipScope.SHARED,
+            shared_space=space1,
+            opening_balance=Decimal("800.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        cat_s1 = create_category(user=self.user, name="Space One Groceries", kind="expense", scope="shared", shared_space=space1)
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("80.00"),
+            wallet=w_space1,
+            transaction_date=today,
+            category=cat_s1,
+            scope="shared",
+            shared_space=space1,
+            description="Space One Milk",
+        )
+
+        # 3. Shared Space 2 with wallet & transaction
+        space2 = create_shared_space(user=self.user, name="Space Two", base_currency=self.usd)
+        w_space2 = Wallet.objects.create(
+            owner=self.user,
+            name="Space Two Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            ownership_scope=Wallet.OwnershipScope.SHARED,
+            shared_space=space2,
+            opening_balance=Decimal("1200.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        cat_s2 = create_category(user=self.user, name="Space Two Tools", kind="expense", scope="shared", shared_space=space2)
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("120.00"),
+            wallet=w_space2,
+            transaction_date=today,
+            category=cat_s2,
+            scope="shared",
+            shared_space=space2,
+            description="Space Two Hammer",
+        )
+
+        # 4. Empty Shared Space 3
+        space3 = create_shared_space(user=self.user, name="Space Three", base_currency=self.usd)
+
+        self.client.force_login(self.user)
+
+        # Verification A: Personal View
+        pref.active_scope = "personal"
+        pref.active_shared_space = None
+        pref.save()
+        resp_p = self.client.get(self.dashboard_url)
+        html_p = resp_p.content.decode("utf-8")
+        self.assertIn("Alice Personal Coffee", html_p)
+        self.assertIn("1 active wallet", html_p)
+        self.assertNotIn("Space One Milk", html_p)
+        self.assertNotIn("Space Two Hammer", html_p)
+        self.assertIn("50.00", html_p)
+        self.assertNotIn("80.00", html_p)
+
+        # Verification B: Shared Space 1 View
+        pref.active_scope = "shared"
+        pref.active_shared_space = space1
+        pref.save()
+        resp_s1 = self.client.get(self.dashboard_url)
+        html_s1 = resp_s1.content.decode("utf-8")
+        self.assertIn("Space One Milk", html_s1)
+        self.assertIn("1 active wallet", html_s1)
+        self.assertNotIn("Alice Personal Coffee", html_s1)
+        self.assertNotIn("Space Two Hammer", html_s1)
+        self.assertIn("80.00", html_s1)
+        self.assertNotIn("120.00", html_s1)
+
+        # Verification C: Empty Shared Space 3 stays empty with records elsewhere
+        pref.active_scope = "shared"
+        pref.active_shared_space = space3
+        pref.save()
+        resp_s3 = self.client.get(self.dashboard_url)
+        html_s3 = resp_s3.content.decode("utf-8")
+        self.assertIn("0 active wallets", html_s3)
+        self.assertIn("No transactions yet", html_s3)
+        self.assertIn("No spending recorded yet", html_s3)
+        self.assertNotIn("Space One Milk", html_s3)
+        self.assertNotIn("Alice Personal Coffee", html_s3)
+
+        # Verification D: Disclosed personal transactions for visibility are excluded from shared financial totals
+        inv = create_shared_space_invitation(user=self.user, shared_space=space1)
+        accept_shared_space_invitation(user=bob, code=inv.code)
+        w_bob = Wallet.objects.create(
+            owner=bob,
+            name="Bob Personal",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("999.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        bob_tx = create_transaction_entry(
+            user=bob,
+            transaction_type="expense",
+            amount=Decimal("333.00"),
+            wallet=w_bob,
+            transaction_date=today,
+            description="Bob Secret Dinner",
+        )
+        share_personal_transaction(user=bob, transaction_id=bob_tx.id, shared_space_id=space1.id)
+
+        pref.active_scope = "shared"
+        pref.active_shared_space = space1
+        pref.save()
+        resp_s1_after = self.client.get(self.dashboard_url)
+        html_s1_after = resp_s1_after.content.decode("utf-8")
+        # Disclosed personal transaction 333.00 must NOT be added to Space One expenses or balance
+        self.assertNotIn("333.00", html_s1_after)
+        self.assertNotIn("413.00", html_s1_after)
+        self.assertIn("80.00", html_s1_after)
+
+    def test_month_selector_deduplication_and_newest_first_ordering(self):
+        from .services import create_category, create_transaction_entry, save_category_budget
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        wallet = Wallet.objects.create(
+            owner=self.user,
+            name="Bank",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2025, 1, 1),
+        )
+        cat = create_category(user=self.user, name="General", kind="expense")
+
+        # Multiple transactions and budgets in 2026-02
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("10.00"),
+            wallet=wallet,
+            transaction_date=date(2026, 2, 5),
+            category=cat,
+        )
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("20.00"),
+            wallet=wallet,
+            transaction_date=date(2026, 2, 20),
+            category=cat,
+        )
+        save_category_budget(
+            user=self.user,
+            category=cat,
+            period="2026-02",
+            currency=self.usd,
+            limit_amount=Decimal("100.00"),
+        )
+
+        # Multiple transactions and budgets in 2026-05
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("30.00"),
+            wallet=wallet,
+            transaction_date=date(2026, 5, 10),
+            category=cat,
+        )
+        save_category_budget(
+            user=self.user,
+            category=cat,
+            period="2026-05",
+            currency=self.usd,
+            limit_amount=Decimal("200.00"),
+        )
+
+        # Single transaction in 2025-11
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("40.00"),
+            wallet=wallet,
+            transaction_date=date(2025, 11, 15),
+            category=cat,
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(self.dashboard_url)
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+
+        # Each month appears exactly once in the period selector options (deduplication)
+        self.assertEqual(html.count('value="2026-05"'), 1)
+        self.assertEqual(html.count('value="2026-02"'), 1)
+        self.assertEqual(html.count('value="2025-11"'), 1)
+
+        # Newest-first ordering: 2026-05 before 2026-02 before 2025-11
+        pos_05 = html.find('value="2026-05"')
+        pos_02 = html.find('value="2026-02"')
+        pos_11 = html.find('value="2025-11"')
+        self.assertTrue(pos_05 < pos_02 < pos_11)
+
+    def test_month_selector_budget_only_and_transaction_only_months(self):
+        from .services import create_category, create_transaction_entry, save_category_budget
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        wallet = Wallet.objects.create(
+            owner=self.user,
+            name="Bank",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        cat = create_category(user=self.user, name="Subscriptions", kind="expense")
+
+        # Month 2026-04 has only a budget (no transactions)
+        save_category_budget(
+            user=self.user,
+            category=cat,
+            period="2026-04",
+            currency=self.usd,
+            limit_amount=Decimal("75.00"),
+        )
+
+        # Month 2026-08 has only a transaction (no budgets)
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("35.00"),
+            wallet=wallet,
+            transaction_date=date(2026, 8, 12),
+            category=cat,
+            description="Book Purchase",
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(self.dashboard_url)
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+
+        # Both months are options in the selector
+        self.assertIn('value="2026-08"', html)
+        self.assertIn('value="2026-04"', html)
+
+        # Query budget-only month 2026-04
+        resp_budget = self.client.get(f"{self.dashboard_url}?period=2026-04")
+        html_b = resp_budget.content.decode("utf-8")
+        self.assertIn("April 2026", html_b)
+        self.assertIn("75.00", html_b)
+        self.assertIn("Subscriptions", html_b)
+        self.assertIn("No spending recorded yet", html_b)
+
+        # Query transaction-only month 2026-08
+        resp_tx = self.client.get(f"{self.dashboard_url}?period=2026-08")
+        html_t = resp_tx.content.decode("utf-8")
+        self.assertIn("August 2026", html_t)
+        self.assertIn("35.00", html_t)
+        self.assertIn("No budgets created", html_t)
+
+    def test_month_selector_no_records_disables_selector_and_preserves_wallet(self):
+        from django.utils import timezone
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        Wallet.objects.create(
+            owner=self.user,
+            name="Emergency Cash",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=self.usd,
+            opening_balance=Decimal("650.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(self.dashboard_url)
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+
+        # Selector is disabled and shows 'No recorded periods'
+        self.assertIn("disabled", html)
+        self.assertIn("No recorded periods", html)
+        self.assertIn("disabled-period-wrap", html)
+
+        # Does not invent a selectable month
+        today = timezone.localdate()
+        today_val = today.strftime("%Y-%m")
+        self.assertNotIn(f'value="{today_val}"', html)
+
+        # Current wallet balance is preserved
+        self.assertIn("650.00", html)
+        self.assertIn("1 active wallet", html)
+
+        # Add transaction action and modal trigger are preserved
+        self.assertIn('data-bs-target="#transactionModal"', html)
+        self.assertIn("+ Add transaction", html)
+
+        # Empty states
+        self.assertIn("No spending recorded yet", html)
+        self.assertIn("No budgets created", html)
+        self.assertIn("No transactions yet", html)
+
+    def test_month_selector_workspace_and_disclosure_isolation(self):
+        from .services import (
+            create_category,
+            create_shared_space,
+            create_shared_space_invitation,
+            accept_shared_space_invitation,
+            create_transaction_entry,
+            save_category_budget,
+            share_personal_transaction,
+        )
+        bob = User.objects.create_user(username="bob_month_iso", password="Str0ng!Password#2026")
+        pref = UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        UserPreference.objects.create(user=bob, personal_base_currency=self.usd)
+
+        # 1. Alice personal wallet, transaction (2026-01), budget (2026-03)
+        w_alice = Wallet.objects.create(
+            owner=self.user,
+            name="Alice Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        cat_p = create_category(user=self.user, name="Personal Stuff", kind="expense", scope="personal")
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("20.00"),
+            wallet=w_alice,
+            transaction_date=date(2026, 1, 10),
+            category=cat_p,
+        )
+        save_category_budget(
+            user=self.user,
+            category=cat_p,
+            period="2026-03",
+            currency=self.usd,
+            limit_amount=Decimal("100.00"),
+        )
+
+        # Alice soft-deleted personal transaction (2026-11)
+        del_tx = create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("99.00"),
+            wallet=w_alice,
+            transaction_date=date(2026, 11, 5),
+            category=cat_p,
+        )
+        del_tx.is_deleted = True
+        del_tx.save()
+
+        # Alice archived personal budget (2026-12)
+        arch_budget = save_category_budget(
+            user=self.user,
+            category=cat_p,
+            period="2026-12",
+            currency=self.usd,
+            limit_amount=Decimal("150.00"),
+        )
+        arch_budget.is_archived = True
+        arch_budget.save()
+
+        # 2. Shared Space 1 with transaction (2026-05) and budget (2026-06)
+        space1 = create_shared_space(user=self.user, name="Space Alpha", base_currency=self.usd)
+        w_space1 = Wallet.objects.create(
+            owner=self.user,
+            name="Space Alpha Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            ownership_scope=Wallet.OwnershipScope.SHARED,
+            shared_space=space1,
+            opening_balance=Decimal("500.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        cat_s1 = create_category(user=self.user, name="Alpha Food", kind="expense", scope="shared", shared_space=space1)
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("50.00"),
+            wallet=w_space1,
+            transaction_date=date(2026, 5, 14),
+            category=cat_s1,
+            scope="shared",
+            shared_space=space1,
+        )
+        save_category_budget(
+            user=self.user,
+            category=cat_s1,
+            period="2026-06",
+            currency=self.usd,
+            limit_amount=Decimal("200.00"),
+            scope="shared",
+            shared_space=space1,
+        )
+
+        # 3. Shared Space 2 (another space Alice is in) with transaction (2026-07)
+        space2 = create_shared_space(user=self.user, name="Space Beta", base_currency=self.usd)
+        w_space2 = Wallet.objects.create(
+            owner=self.user,
+            name="Space Beta Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            ownership_scope=Wallet.OwnershipScope.SHARED,
+            shared_space=space2,
+            opening_balance=Decimal("700.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        cat_s2 = create_category(user=self.user, name="Beta Stuff", kind="expense", scope="shared", shared_space=space2)
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("70.00"),
+            wallet=w_space2,
+            transaction_date=date(2026, 7, 20),
+            category=cat_s2,
+            scope="shared",
+            shared_space=space2,
+        )
+
+        # 4. Bob joins Space 1 and shares his personal transaction (2026-09) for visibility
+        inv = create_shared_space_invitation(user=self.user, shared_space=space1)
+        accept_shared_space_invitation(user=bob, code=inv.code)
+        w_bob = Wallet.objects.create(
+            owner=bob,
+            name="Bob Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("300.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        bob_tx = create_transaction_entry(
+            user=bob,
+            transaction_type="expense",
+            amount=Decimal("90.00"),
+            wallet=w_bob,
+            transaction_date=date(2026, 9, 10),
+            description="Bob Personal Disclosed Dinner",
+        )
+        share_personal_transaction(user=bob, transaction_id=bob_tx.id, shared_space_id=space1.id)
+
+        self.client.force_login(self.user)
+
+        # --- Check Personal View ---
+        pref.active_scope = "personal"
+        pref.active_shared_space = None
+        pref.save()
+        resp_p = self.client.get(self.dashboard_url)
+        html_p = resp_p.content.decode("utf-8")
+        # Personal months present
+        self.assertIn('value="2026-03"', html_p)
+        self.assertIn('value="2026-01"', html_p)
+        # Excluded from Personal view
+        self.assertNotIn('value="2026-05"', html_p)  # Space 1
+        self.assertNotIn('value="2026-06"', html_p)  # Space 1
+        self.assertNotIn('value="2026-07"', html_p)  # Space 2
+        self.assertNotIn('value="2026-09"', html_p)  # Disclosed personal transaction from Bob
+        self.assertNotIn('value="2026-11"', html_p)  # Deleted transaction
+        self.assertNotIn('value="2026-12"', html_p)  # Archived budget
+        self.assertNotIn('value="2035-01"', html_p)  # Unrecorded future month
+
+        # Requesting an out-of-scope period in Personal view (e.g. 2026-05) falls back to authorized latest
+        resp_p_hack = self.client.get(f"{self.dashboard_url}?period=2026-05")
+        html_p_hack = resp_p_hack.content.decode("utf-8")
+        self.assertIn("March 2026", html_p_hack)
+
+        # --- Check Shared Space 1 View ---
+        pref.active_scope = "shared"
+        pref.active_shared_space = space1
+        pref.save()
+        resp_s1 = self.client.get(self.dashboard_url)
+        html_s1 = resp_s1.content.decode("utf-8")
+        # Space 1 months present
+        self.assertIn('value="2026-06"', html_s1)
+        self.assertIn('value="2026-05"', html_s1)
+        # Excluded from Space 1 view
+        self.assertNotIn('value="2026-01"', html_s1)  # Personal
+        self.assertNotIn('value="2026-03"', html_s1)  # Personal
+        self.assertNotIn('value="2026-07"', html_s1)  # Space 2
+        self.assertNotIn('value="2026-09"', html_s1)  # Disclosed personal transaction for visibility
+        self.assertNotIn('value="2026-11"', html_s1)  # Deleted
+        self.assertNotIn('value="2026-12"', html_s1)  # Archived
+
+        # --- Check Future Month when real record exists ---
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("10.00"),
+            wallet=w_space1,
+            transaction_date=date(2035, 3, 1),
+            category=cat_s1,
+            scope="shared",
+            shared_space=space1,
+        )
+        resp_future = self.client.get(self.dashboard_url)
+        html_future = resp_future.content.decode("utf-8")
+        self.assertIn('value="2035-03"', html_future)
+        # Ordered newest first
+        pos_future = html_future.find('value="2035-03"')
+        pos_s1_06 = html_future.find('value="2026-06"')
+        self.assertTrue(pos_future < pos_s1_06)
+
+    def test_consistent_v8_cache_version_references(self):
+        sw_resp = self.client.get("/service-worker.js")
+        sw_js = sw_resp.content.decode("utf-8")
+        self.assertIn('const CACHE_NAME = "budget-tracker-shell-v8"', sw_js)
+        self.assertIn('"/static/css/dashboard.css?v=v8"', sw_js)
+        self.assertIn('"/static/css/app.css?v=v8"', sw_js)
+        self.assertIn('"/static/js/app.js?v=v8"', sw_js)
+        self.assertIn('"/static/js/offline.js?v=v8"', sw_js)
+
+        self.client.force_login(self.user)
+        dash_resp = self.client.get(self.dashboard_url)
+        dash_html = dash_resp.content.decode("utf-8")
+        self.assertIn('css/dashboard.css?v=v8', dash_html)
+        self.assertIn('css/app.css?v=v8', dash_html)
+        self.assertIn('js/app.js?v=v8', dash_html)
+        self.assertIn('js/offline.js?v=v8', dash_html)
+
+        off_resp = self.client.get(reverse("budgets:offline"))
+        off_html = off_resp.content.decode("utf-8")
+        self.assertIn('css/app.css?v=v8', off_html)
+        self.assertIn('js/offline.js?v=v8', off_html)
+
+        login_resp = self.client.get(reverse("accounts:login"))
+        login_html = login_resp.content.decode("utf-8")
+        self.assertIn('css/app.css?v=v8', login_html)
+
+    def test_dashboard_budgets_independent_of_display_currency_and_scoped(self):
+        from .services import (
+            create_category,
+            create_shared_space,
+            create_transaction_entry,
+            save_category_budget,
+        )
+
+        pref = UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        twd, _ = Currency.objects.get_or_create(
+            code="TWD",
+            defaults={"name": "New Taiwan Dollar", "decimal_places": 0, "is_active": True},
+        )
+        eur, _ = Currency.objects.get_or_create(
+            code="EUR",
+            defaults={"name": "Euro", "decimal_places": 2, "is_active": True},
+        )
+
+        cat_twd = create_category(user=self.user, name="Franz Books", kind="expense")
+        save_category_budget(
+            user=self.user,
+            category=cat_twd,
+            period="2026-10",
+            currency=twd,
+            limit_amount=Decimal("5000.00"),
+        )
+        w_twd = Wallet.objects.create(
+            owner=self.user,
+            name="Franz TWD Wallet",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=twd,
+            opening_balance=Decimal("10000.00"),
+            opening_balance_date=date(2026, 10, 1),
+        )
+
+        # 1. TWD budget appears on USD-display dashboard for same month and workspace
+        self.client.force_login(self.user)
+        resp = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+        self.assertIn("Franz Books", html)
+        self.assertIn("5,000", html)
+        self.assertIn("TWD", html)
+        self.assertNotIn("No budgets created", html)
+
+        # 2. Switching display currency does not change which budget records appear
+        pref.personal_base_currency = eur
+        pref.save()
+        resp_eur = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        self.assertEqual(resp_eur.status_code, 200)
+        html_eur = resp_eur.content.decode("utf-8")
+        self.assertIn("Franz Books", html_eur)
+        self.assertIn("5,000", html_eur)
+        self.assertIn("TWD", html_eur)
+        self.assertNotIn("No budgets created", html_eur)
+
+        # 3. Another month remains excluded
+        cat_nov = create_category(user=self.user, name="Nov Holiday", kind="expense")
+        save_category_budget(
+            user=self.user,
+            category=cat_nov,
+            period="2026-11",
+            currency=twd,
+            limit_amount=Decimal("2000.00"),
+        )
+        resp_oct = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        html_oct = resp_oct.content.decode("utf-8")
+        budget_panel_oct = html_oct.split('id="panel-budgets-title"')[1].split("</section>")[0]
+        self.assertIn("Franz Books", budget_panel_oct)
+        self.assertNotIn("Nov Holiday", budget_panel_oct)
+        self.assertEqual(
+            [r["category"].name for r in resp_oct.context["budget_overview"]["rows"]],
+            ["Franz Books"],
+        )
+
+        # 4. Another shared space remains excluded
+        space1 = create_shared_space(user=self.user, name="Flat Share", base_currency=self.usd)
+        cat_s1 = create_category(
+            user=self.user, name="Flat Rent", kind="expense", scope="shared", shared_space=space1
+        )
+        save_category_budget(
+            user=self.user,
+            category=cat_s1,
+            period="2026-10",
+            currency=self.usd,
+            limit_amount=Decimal("800.00"),
+            scope="shared",
+            shared_space=space1,
+        )
+        # While in personal workspace, shared budget is excluded
+        resp_personal = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        budget_panel_p = resp_personal.content.decode("utf-8").split('id="panel-budgets-title"')[1].split("</section>")[0]
+        self.assertNotIn("Flat Rent", budget_panel_p)
+        self.assertEqual(
+            [r["category"].name for r in resp_personal.context["budget_overview"]["rows"]],
+            ["Franz Books"],
+        )
+
+        # Switch to space1: Flat Rent appears, space2 and personal are excluded
+        self.client.post(reverse("accounts:switch_scope"), {"view_choice": f"shared:{space1.id}"})
+        space2 = create_shared_space(user=self.user, name="Project Share", base_currency=self.usd)
+        cat_s2 = create_category(
+            user=self.user, name="Server Hosting", kind="expense", scope="shared", shared_space=space2
+        )
+        save_category_budget(
+            user=self.user,
+            category=cat_s2,
+            period="2026-10",
+            currency=self.usd,
+            limit_amount=Decimal("150.00"),
+            scope="shared",
+            shared_space=space2,
+        )
+        resp_s1 = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        html_s1 = resp_s1.content.decode("utf-8")
+        budget_panel_s1 = html_s1.split('id="panel-budgets-title"')[1].split("</section>")[0]
+        self.assertIn("Flat Rent", budget_panel_s1)
+        self.assertNotIn("Server Hosting", budget_panel_s1)
+        self.assertNotIn("Franz Books", budget_panel_s1)
+        self.assertEqual(
+            [r["category"].name for r in resp_s1.context["budget_overview"]["rows"]],
+            ["Flat Rent"],
+        )
+
+        # 5. Another user's private budgets remain excluded
+        self.client.post(reverse("accounts:switch_scope"), {"view_choice": "personal"})
+        bob = User.objects.create_user(username="bob_privacy_check", password="Str0ng!Password#2026")
+        cat_bob = create_category(user=bob, name="Bob Secret Category", kind="expense")
+        save_category_budget(
+            user=bob,
+            category=cat_bob,
+            period="2026-10",
+            currency=twd,
+            limit_amount=Decimal("9999.00"),
+        )
+        resp_p = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        html_p = resp_p.content.decode("utf-8")
+        self.assertNotIn("Bob Secret Category", html_p)
+        self.assertNotIn(
+            "Bob Secret Category",
+            [r["category"].name for r in resp_p.context["budget_overview"]["rows"]],
+        )
+
+        # 6. Explicit currency filtering on Budgets page still works
+        cat_usd = create_category(user=self.user, name="Franz USD Gadgets", kind="expense")
+        save_category_budget(
+            user=self.user,
+            category=cat_usd,
+            period="2026-10",
+            currency=self.usd,
+            limit_amount=Decimal("300.00"),
+        )
+        b_twd = self.client.get(reverse("budgets:budgets") + "?period=2026-10&currency=TWD")
+        self.assertEqual(b_twd.status_code, 200)
+        html_b_twd = b_twd.content.decode("utf-8")
+        table_twd = html_b_twd.split('aria-labelledby="category-budgets-heading"')[1].split("</section>")[0]
+        self.assertIn("Franz Books", table_twd)
+        self.assertNotIn("Franz USD Gadgets", table_twd)
+        self.assertEqual([r["category"].name for r in b_twd.context["overview"]["rows"]], ["Franz Books"])
+
+        b_usd = self.client.get(reverse("budgets:budgets") + "?period=2026-10&currency=USD&scope=personal")
+        self.assertEqual(b_usd.status_code, 200)
+        html_b_usd = b_usd.content.decode("utf-8")
+        table_usd = html_b_usd.split('aria-labelledby="category-budgets-heading"')[1].split("</section>")[0]
+        self.assertIn("Franz USD Gadgets", table_usd)
+        self.assertNotIn("Franz Books", table_usd)
+        self.assertEqual([r["category"].name for r in b_usd.context["overview"]["rows"]], ["Franz USD Gadgets"])
+
+        # 7. Mixed-currency budgets keep summary unavailable with clear guidance and show overspent state
+        resp_mixed = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        html_mixed = resp_mixed.content.decode("utf-8")
+        self.assertIn("Franz Books", html_mixed)
+        self.assertIn("Franz USD Gadgets", html_mixed)
+        self.assertIn("Multi-currency budgets", html_mixed)
+
+        create_transaction_entry(
+            user=self.user,
+            wallet=w_twd,
+            transaction_type="expense",
+            amount=Decimal("6000.00"),
+            currency=twd,
+            transaction_date=date(2026, 10, 15),
+            category=cat_twd,
+            description="Huge book haul",
+        )
+        resp_over = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        html_over = resp_over.content.decode("utf-8")
+        self.assertIn("Over budget", html_over)
+
+    def test_twd_budget_and_goal_displayed_in_php_then_usd(self):
+        from .exchange_rates import record_manual_exchange_rate
+        from .models import CategoryBudget, SavingsGoal
+        from .services import (
+            create_category,
+            create_savings_goal,
+            create_transaction_entry,
+            record_savings_contribution,
+            save_category_budget,
+        )
+
+        php, _ = Currency.objects.get_or_create(
+            code="PHP", defaults={"name": "Philippine Peso", "decimal_places": 2, "is_active": True}
+        )
+        twd, _ = Currency.objects.get_or_create(
+            code="TWD", defaults={"name": "New Taiwan Dollar", "decimal_places": 0, "is_active": True}
+        )
+
+        pref = UserPreference.objects.create(user=self.user, personal_base_currency=php)
+
+        # 1 TWD = 1.75 PHP; 1 TWD = 0.03125 USD
+        record_manual_exchange_rate(
+            user=self.user,
+            from_currency=twd,
+            to_currency=php,
+            rate=Decimal("1.75000000"),
+            scope="personal",
+        )
+        record_manual_exchange_rate(
+            user=self.user,
+            from_currency=twd,
+            to_currency=self.usd,
+            rate=Decimal("0.03125000"),
+            scope="personal",
+        )
+
+        w_twd = Wallet.objects.create(
+            owner=self.user,
+            name="Cash TWD",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=twd,
+            opening_balance=Decimal("50000.00"),
+            opening_balance_date=date(2026, 10, 1),
+        )
+        cat_travel = create_category(user=self.user, name="TWD Travel", kind="expense")
+        budget_twd = save_category_budget(
+            user=self.user,
+            category=cat_travel,
+            period="2026-10",
+            currency=twd,
+            limit_amount=Decimal("10000.00"),
+        )
+        create_transaction_entry(
+            user=self.user,
+            wallet=w_twd,
+            transaction_type="expense",
+            amount=Decimal("4000.00"),
+            currency=twd,
+            transaction_date=date(2026, 10, 10),
+            category=cat_travel,
+            description="Train tickets",
+        )
+
+        goal_twd = create_savings_goal(
+            user=self.user,
+            name="Taipei Trip",
+            target_amount=Decimal("20000.00"),
+            currency=twd,
+        )
+        record_savings_contribution(
+            user=self.user,
+            goal=goal_twd,
+            amount=Decimal("5000.00"),
+            contribution_date=date(2026, 10, 12),
+        )
+
+        self.client.force_login(self.user)
+
+        # View in PHP
+        resp_php = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        self.assertEqual(resp_php.status_code, 200)
+        html_php = resp_php.content.decode("utf-8")
+
+        # Converted budget: Limit 10000*1.75 = 17,500.00 PHP, Spent 4000*1.75 = 7,000.00 PHP, Rem 10,500.00 PHP
+        self.assertIn("17,500.00 PHP", html_php)
+        self.assertIn("7,000.00", html_php)
+        self.assertIn("Remaining: 10,500.00 PHP", html_php)
+        self.assertIn("Orig: 4,000.00 / 10,000.00 TWD", html_php)
+        self.assertIn("Orig: 6,000.00 TWD", html_php)
+        self.assertIn("40.0%", html_php)
+
+        # Converted goal: Target 20000*1.75 = 35,000.00 PHP, Saved 5000*1.75 = 8,750.00 PHP, Rem 26,250.00 PHP
+        self.assertIn("35,000.00 PHP", html_php)
+        self.assertIn("8,750.00", html_php)
+        self.assertIn("Remaining: 26,250.00 PHP", html_php)
+        self.assertIn("Orig: 5,000.00 / 20,000.00 TWD", html_php)
+        self.assertIn("Orig: 15,000.00 TWD", html_php)
+        self.assertIn("25.0% saved", html_php)
+
+        # Summary strip in PHP
+        self.assertIn("10,500.00", html_php)
+        self.assertIn("PHP &middot; 1 active budget", html_php)
+
+        # View in USD
+        pref.personal_base_currency = self.usd
+        pref.save()
+
+        resp_usd = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        self.assertEqual(resp_usd.status_code, 200)
+        html_usd = resp_usd.content.decode("utf-8")
+
+        # Converted budget: Limit 10000*0.03125 = 312.50 USD, Spent 4000*0.03125 = 125.00 USD, Rem 187.50 USD
+        self.assertIn("312.50 USD", html_usd)
+        self.assertIn("125.00", html_usd)
+        self.assertIn("Remaining: 187.50 USD", html_usd)
+        self.assertIn("Orig: 4,000.00 / 10,000.00 TWD", html_usd)
+
+        # Converted goal: Target 20000*0.03125 = 625.00 USD, Saved 5000*0.03125 = 156.25 USD, Rem 468.75 USD
+        self.assertIn("625.00 USD", html_usd)
+        self.assertIn("156.25", html_usd)
+        self.assertIn("Remaining: 468.75 USD", html_usd)
+        self.assertIn("Orig: 5,000.00 / 20,000.00 TWD", html_usd)
+
+        # Summary strip in USD
+        self.assertIn("187.50", html_usd)
+        self.assertIn("USD &middot; 1 active budget", html_usd)
+
+        # Verify original database records unchanged
+        budget_db = CategoryBudget.objects.get(id=budget_twd.id)
+        self.assertEqual(budget_db.limit_amount, Decimal("10000.000"))
+        self.assertEqual(budget_db.currency, twd)
+
+        goal_db = SavingsGoal.objects.get(id=goal_twd.id)
+        self.assertEqual(goal_db.target_amount, Decimal("20000.000"))
+        self.assertEqual(goal_db.currency, twd)
+
+    def test_mixed_currency_budget_summary_and_missing_rates(self):
+        from .exchange_rates import record_manual_exchange_rate
+        from .models import ExchangeRate
+        from .services import (
+            create_category,
+            create_transaction_entry,
+            save_category_budget,
+        )
+
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        eur, _ = Currency.objects.get_or_create(
+            code="EUR", defaults={"name": "Euro", "decimal_places": 2, "is_active": True}
+        )
+
+        w_usd = Wallet.objects.create(
+            owner=self.user,
+            name="W USD",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=self.usd,
+            opening_balance=Decimal("2000.00"),
+            opening_balance_date=date(2026, 10, 1),
+        )
+        w_eur = Wallet.objects.create(
+            owner=self.user,
+            name="W EUR",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=eur,
+            opening_balance=Decimal("2000.00"),
+            opening_balance_date=date(2026, 10, 1),
+        )
+
+        cat_usd = create_category(user=self.user, name="Dining USD", kind="expense")
+        cat_eur = create_category(user=self.user, name="Travel EUR", kind="expense")
+
+        save_category_budget(
+            user=self.user, category=cat_usd, period="2026-10", currency=self.usd, limit_amount=Decimal("500.00")
+        )
+        create_transaction_entry(
+            user=self.user,
+            wallet=w_usd,
+            transaction_type="expense",
+            amount=Decimal("200.00"),
+            currency=self.usd,
+            transaction_date=date(2026, 10, 5),
+            category=cat_usd,
+            description="Dinner",
+        )
+
+        save_category_budget(
+            user=self.user, category=cat_eur, period="2026-10", currency=eur, limit_amount=Decimal("200.00")
+        )
+        create_transaction_entry(
+            user=self.user,
+            wallet=w_eur,
+            transaction_type="expense",
+            amount=Decimal("50.00"),
+            currency=eur,
+            transaction_date=date(2026, 10, 6),
+            category=cat_eur,
+            description="Train",
+        )
+
+        # Complete rate: 1 EUR = 1.10 USD
+        rate_record = record_manual_exchange_rate(
+            user=self.user,
+            from_currency=eur,
+            to_currency=self.usd,
+            rate=Decimal("1.10000000"),
+            scope="personal",
+        )
+
+        self.client.force_login(self.user)
+        resp_complete = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        self.assertEqual(resp_complete.status_code, 200)
+        html_complete = resp_complete.content.decode("utf-8")
+
+        # Converted EUR budget: 200 * 1.10 = 220.00 USD, spent 50 * 1.10 = 55.00 USD, rem 165.00 USD
+        # USD budget: 500.00 USD, spent 200.00 USD, rem 300.00 USD
+        # Total remaining = 300.00 + 165.00 = 465.00 USD
+        self.assertIn("465.00", html_complete)
+        self.assertIn("USD &middot; 2 active budgets", html_complete)
+        self.assertIn("220.00 USD", html_complete)
+        self.assertIn("Orig: 50.00 / 200.00 EUR", html_complete)
+
+        # Now remove the exchange rate: missing rate scenario
+        ExchangeRate.objects.filter(id=rate_record.id).delete()
+
+        resp_missing = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        self.assertEqual(resp_missing.status_code, 200)
+        html_missing = resp_missing.content.decode("utf-8")
+
+        # Summary strip shows "—" and missing rate explanation; raw amounts (500+200=700) never summed
+        self.assertNotIn("465.00", html_missing)
+        self.assertNotIn("700.00", html_missing)
+        self.assertIn("Multi-currency budgets &middot; missing exchange rate", html_missing)
+
+        # EUR row shows original EUR currency with "Conversion unavailable" badge/label; never relabeled as USD
+        budget_panel = html_missing.split('id="panel-budgets-title"')[1].split("</section>")[0]
+        self.assertIn("200.00 EUR", budget_panel)
+        self.assertNotIn("200.00 USD", budget_panel)
+        self.assertIn("Conversion unavailable", budget_panel)
+
+    def test_same_currency_negative_remaining_and_progress(self):
+        from .services import create_category, create_transaction_entry, save_category_budget
+
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        wallet = Wallet.objects.create(
+            owner=self.user,
+            name="Cash USD",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=self.usd,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 10, 1),
+        )
+        cat = create_category(user=self.user, name="Shopping", kind="expense")
+
+        save_category_budget(
+            user=self.user, category=cat, period="2026-10", currency=self.usd, limit_amount=Decimal("200.00")
+        )
+        create_transaction_entry(
+            user=self.user,
+            wallet=wallet,
+            transaction_type="expense",
+            amount=Decimal("350.00"),
+            currency=self.usd,
+            transaction_date=date(2026, 10, 15),
+            category=cat,
+            description="Clothes",
+        )
+
+        self.client.force_login(self.user)
+        resp = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        html = resp.content.decode("utf-8")
+
+        # Same currency: no "Orig:" line
+        self.assertNotIn("Orig:", html)
+        # Negative remaining budget: 200 - 350 = -150.00 USD
+        self.assertIn("Remaining: -150.00 USD", html)
+        self.assertIn("-150.00", html)
+        self.assertIn("Over budget", html)
+        # Progress 175.0%
+        self.assertIn("status-bar-danger", html)
+
+    def test_personal_shared_rate_authorization_and_workspace_isolation(self):
+        from .exchange_rates import record_manual_exchange_rate
+        from .services import (
+            create_category,
+            save_category_budget,
+        )
+
+        bob = User.objects.create_user(username="bob_rate_auth", password="Str0ng!Password#2026")
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        UserPreference.objects.create(user=bob, personal_base_currency=self.usd)
+
+        twd, _ = Currency.objects.get_or_create(
+            code="TWD", defaults={"name": "New Taiwan Dollar", "decimal_places": 0, "is_active": True}
+        )
+
+        # Bob creates a private manual rate: 1 TWD = 0.50 USD
+        record_manual_exchange_rate(
+            user=bob,
+            from_currency=twd,
+            to_currency=self.usd,
+            rate=Decimal("0.50000000"),
+            scope="personal",
+        )
+
+        # self.user has a TWD budget
+        cat = create_category(user=self.user, name="Personal TWD", kind="expense")
+        save_category_budget(
+            user=self.user, category=cat, period="2026-10", currency=twd, limit_amount=Decimal("1000.00")
+        )
+
+        self.client.force_login(self.user)
+        resp = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        html = resp.content.decode("utf-8")
+
+        # self.user must NOT use Bob's private personal rate -> Conversion unavailable
+        self.assertIn("Conversion unavailable", html)
+        self.assertNotIn("500.00 USD", html)
+
+
+class GlobalToastNotificationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="toast_user",
+            password="Str0ng!Password#2026",
+        )
+        self.usd, _ = Currency.objects.get_or_create(
+            code="USD",
+            defaults={"name": "US Dollar", "decimal_places": 2, "is_active": True},
+        )
+        self.dashboard_url = reverse("budgets:dashboard")
+        self.switch_scope_url = reverse("accounts:switch_scope")
+
+    def _find_browser_binary(self):
+        import os
+        candidates = [
+            os.environ.get("CHROME_BIN"),
+            os.environ.get("EDGE_BIN"),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        ]
+        for c in candidates:
+            if c and os.path.exists(c):
+                return c
+        return None
+
+    def test_workspace_switch_displays_one_toast_instead_of_page_banner(self):
+        from .services import create_shared_space
+        space = create_shared_space(user=self.user, name="Family Space", base_currency=self.usd)
+        self.client.force_login(self.user)
+
+        # POST to switch scope to the shared space
+        response = self.client.post(
+            self.switch_scope_url,
+            {"view_choice": f"shared:{space.id}", "next": self.dashboard_url},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+
+        # 1. Toast container is present
+        self.assertIn('id="app-toast-container"', html)
+        self.assertIn("toast-container", html)
+
+        # 2. Displays exactly one toast for this switch
+        self.assertEqual(html.count("app-toast-success"), 1)
+        self.assertEqual(html.count('class="toast show app-toast'), 1)
+        self.assertIn('class="toast show app-toast app-toast-success', html)
+        self.assertIn('role="status"', html)
+        self.assertIn('Switched workspace to Shared Space &quot;Family Space&quot;.', html)
+
+        # 3. Toast attributes: auto-dismiss after ~4 seconds, polite semantics
+        self.assertIn('data-bs-autohide="true"', html)
+        self.assertIn('data-bs-delay="4000"', html)
+        self.assertIn('aria-live="polite"', html)
+
+        # 4. Accessible close button present
+        self.assertIn('data-bs-dismiss="toast"', html)
+        self.assertIn('aria-label="Close"', html)
+
+        # 5. Page banner alert is NOT present in content
+        self.assertNotIn('<div class="alert alert-success', html)
+        self.assertNotIn('alert-danger', html)
+
+        # 6. Persistent offline banner and review panel remain present and preserved
+        self.assertIn('id="offline-sync-banner"', html)
+        self.assertIn('id="offline-queue-review-panel"', html)
+
+    def test_message_levels_semantics_and_persistence(self):
+        from django.contrib.messages import success, info, warning, error
+        from django.contrib.sessions.middleware import SessionMiddleware
+        from django.contrib.messages.middleware import MessageMiddleware
+        from django.test import RequestFactory
+        from django.template.loader import render_to_string
+
+        factory = RequestFactory()
+        request = factory.get(self.dashboard_url)
+        request.user = self.user
+        SessionMiddleware(lambda req: None).process_request(request)
+        MessageMiddleware(lambda req: None).process_request(request)
+
+        success(request, "Transaction saved successfully.")
+        info(request, "Display currency set to USD.")
+        warning(request, "Exchange rate is older than 24 hours.")
+        error(request, "Unable to connect to synchronization service.")
+
+        html = render_to_string("base.html", {"page_title": "Test Page"}, request=request)
+
+        # Verify container
+        self.assertIn('id="app-toast-container"', html)
+
+        # Verify routine success & info auto-hide and use polite status semantics
+        self.assertIn("Transaction saved successfully.", html)
+        self.assertIn("Display currency set to USD.", html)
+        self.assertIn("app-toast-success", html)
+        self.assertIn("app-toast-info", html)
+
+        # Verify warning and error are persistent (data-bs-autohide="false") and use assertive alert semantics
+        self.assertIn("Exchange rate is older than 24 hours.", html)
+        self.assertIn("Unable to connect to synchronization service.", html)
+        self.assertIn("app-toast-warning", html)
+        self.assertIn("app-toast-error", html)
+        self.assertIn('role="alert"', html)
+        self.assertIn('aria-live="assertive"', html)
+        self.assertIn('data-bs-autohide="false"', html)
+
+        # Verify close buttons on each toast
+        self.assertEqual(html.count('data-bs-dismiss="toast"'), 4)
+        self.assertEqual(html.count('aria-label="Close"'), 4)
+
+        # Verify rendered once only
+        self.assertEqual(html.count("Transaction saved successfully."), 1)
+        self.assertEqual(html.count("Unable to connect to synchronization service."), 1)
+
+    def test_html_escaping_in_toast_messages(self):
+        from django.contrib.messages import success
+        from django.contrib.sessions.middleware import SessionMiddleware
+        from django.contrib.messages.middleware import MessageMiddleware
+        from django.test import RequestFactory
+        from django.template.loader import render_to_string
+
+        factory = RequestFactory()
+        request = factory.get(self.dashboard_url)
+        request.user = self.user
+        SessionMiddleware(lambda req: None).process_request(request)
+        MessageMiddleware(lambda req: None).process_request(request)
+
+        success(request, "<script>alert('xss')</script><b>Dangerous</b> & unsafe \"text\"")
+
+        html = render_to_string("base.html", {"page_title": "Test Page"}, request=request)
+
+        # Must not contain unescaped script tag or bold tag
+        self.assertNotIn("<script>alert('xss')</script>", html)
+        self.assertNotIn("<b>Dangerous</b>", html)
+        # Must contain escaped entities
+        self.assertIn("&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;", html)
+        self.assertIn("&lt;b&gt;Dangerous&lt;/b&gt;", html)
+
+    def test_noscript_fallback_present_when_messages_exist(self):
+        from django.contrib.messages import info
+        from django.contrib.sessions.middleware import SessionMiddleware
+        from django.contrib.messages.middleware import MessageMiddleware
+        from django.test import RequestFactory
+        from django.template.loader import render_to_string
+
+        # 1. With messages -> noscript fallback included
+        factory = RequestFactory()
+        request = factory.get(self.dashboard_url)
+        request.user = self.user
+        SessionMiddleware(lambda req: None).process_request(request)
+        MessageMiddleware(lambda req: None).process_request(request)
+        info(request, "Offline changes pending.")
+
+        html_with_msg = render_to_string("base.html", {"page_title": "Test Page"}, request=request)
+        self.assertIn("<noscript>", html_with_msg)
+        self.assertIn(".app-toast-container", html_with_msg)
+        self.assertIn("position: static !important", html_with_msg)
+        self.assertIn("display: block !important", html_with_msg)
+
+        # 2. Without messages -> toast container and noscript not rendered
+        request_empty = factory.get(self.dashboard_url)
+        request_empty.user = self.user
+        SessionMiddleware(lambda req: None).process_request(request_empty)
+        MessageMiddleware(lambda req: None).process_request(request_empty)
+
+        html_no_msg = render_to_string("base.html", {"page_title": "Test Page"}, request=request_empty)
+        self.assertNotIn('id="app-toast-container"', html_no_msg)
+
+    def test_server_messages_rendered_visibly_by_default(self):
+        from django.contrib.messages import success, error
+        from django.contrib.sessions.middleware import SessionMiddleware
+        from django.contrib.messages.middleware import MessageMiddleware
+        from django.test import RequestFactory
+        from django.template.loader import render_to_string
+
+        factory = RequestFactory()
+        request = factory.get(self.dashboard_url)
+        request.user = self.user
+        SessionMiddleware(lambda req: None).process_request(request)
+        MessageMiddleware(lambda req: None).process_request(request)
+
+        success(request, "Default visible success note")
+        error(request, "Default visible error note")
+
+        html = render_to_string("base.html", {"page_title": "Test Page"}, request=request)
+        # Server-rendered toasts must include 'show' class so they are displayed visibly without JS
+        self.assertIn('class="toast show app-toast app-toast-success', html)
+        self.assertIn('class="toast show app-toast app-toast-error', html)
+
+    def test_login_and_register_pages_retain_existing_banners_not_toasts(self):
+        from django.contrib.auth.models import AnonymousUser
+        from django.contrib.messages import error, success
+        from django.contrib.sessions.middleware import SessionMiddleware
+        from django.contrib.messages.middleware import MessageMiddleware
+        from django.test import RequestFactory
+        from django.template.loader import render_to_string
+
+        factory = RequestFactory()
+        req_login = factory.get(reverse("accounts:login"))
+        req_login.user = AnonymousUser()
+        SessionMiddleware(lambda req: None).process_request(req_login)
+        MessageMiddleware(lambda req: None).process_request(req_login)
+        error(req_login, "Invalid login credentials.")
+
+        html_login = render_to_string("accounts/login.html", request=req_login)
+        # Login page retains existing alert banner
+        self.assertIn("alert-danger", html_login)
+        self.assertIn("Invalid login credentials.", html_login)
+        # Login page does NOT use toast container or toasts
+        self.assertNotIn("app-toast", html_login)
+        self.assertNotIn("app-toast-container", html_login)
+
+        req_reg = factory.get(reverse("accounts:register"))
+        req_reg.user = AnonymousUser()
+        SessionMiddleware(lambda req: None).process_request(req_reg)
+        MessageMiddleware(lambda req: None).process_request(req_reg)
+        success(req_reg, "Registration note.")
+
+        html_reg = render_to_string("accounts/register.html", request=req_reg)
+        self.assertIn("alert-success", html_reg)
+        self.assertNotIn("app-toast", html_reg)
+        self.assertNotIn("app-toast-container", html_reg)
+
+    def test_form_validation_errors_remain_beside_their_fields(self):
+        self.client.force_login(self.user)
+        # Post invalid transaction (missing required amount)
+        resp = self.client.post(
+            reverse("budgets:transactions"),
+            {"action": "create_transaction", "amount": "", "scope": "personal"},
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+        # Form field error remains on the form / beside fields
+        self.assertIn("This field is required.", html)
+
+    def test_toast_browser_interaction_and_mobile_layout(self):
+        import http.server
+        import json
+        import pathlib
+        import shutil
+        import socket
+        import subprocess
+        import tempfile
+        import threading
+        from django.conf import settings
+
+        browser_bin = self._find_browser_binary()
+        if not browser_bin:
+            self.skipTest("No browser binary found for headless verification.")
+
+        static_dir = pathlib.Path(settings.BASE_DIR) / "static"
+        bs_js = (static_dir / "vendor" / "bootstrap" / "bootstrap.bundle.min.js").read_text(encoding="utf-8")
+        bs_css = (static_dir / "vendor" / "bootstrap" / "bootstrap.min.css").read_text(encoding="utf-8")
+        app_css = (static_dir / "css" / "app.css").read_text(encoding="utf-8")
+        app_js = (static_dir / "js" / "app.js").read_text(encoding="utf-8")
+
+        results_holder = {}
+        done_event = threading.Event()
+
+        harness_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>{bs_css}</style>
+    <style>{app_css}</style>
+</head>
+<body class="app-body">
+    <div id="main-content">
+        <div id="app-toast-container" class="toast-container position-fixed p-3 app-toast-container" aria-label="Notifications">
+            <div id="toast-success" class="toast show app-toast app-toast-success fade" role="status" aria-live="polite" data-bs-autohide="true" data-bs-delay="600">
+                <div class="d-flex align-items-center p-2">
+                    <div class="toast-body app-toast-body p-0 me-2">Workspace switched</div>
+                    <button id="btn-close-success" type="button" class="btn-close ms-auto flex-shrink-0" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+            <div id="toast-error" class="toast show app-toast app-toast-error fade" role="alert" aria-live="assertive" data-bs-autohide="false">
+                <div class="d-flex align-items-center p-2">
+                    <div class="toast-body app-toast-body p-0 me-2">Persistent system error</div>
+                    <button id="btn-close-error" type="button" class="btn-close ms-auto flex-shrink-0" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>{bs_js}</script>
+    <script>{app_js}</script>
+    <script>
+    window.addEventListener('DOMContentLoaded', async function () {{
+        await new Promise(r => setTimeout(r, 100));
+
+        var sToast = document.getElementById('toast-success');
+        var eToast = document.getElementById('toast-error');
+        var container = document.getElementById('app-toast-container');
+
+        var sShown = sToast ? (getComputedStyle(sToast).display !== 'none' && sToast.classList.contains('show')) : false;
+        var eShown = eToast ? (getComputedStyle(eToast).display !== 'none' && eToast.classList.contains('show')) : false;
+
+        var containerRect = container.getBoundingClientRect();
+        var fitsMobile = containerRect.right <= (window.innerWidth + 5);
+
+        var closeErrorBtn = document.getElementById('btn-close-error');
+        if (closeErrorBtn) {{
+            closeErrorBtn.click();
+        }}
+        await new Promise(r => setTimeout(r, 300));
+        var eHidden = eToast ? (!eToast.classList.contains('show') || getComputedStyle(eToast).display === 'none') : false;
+
+        // Wait for auto-dismiss of success toast (delay was 600ms)
+        await new Promise(r => setTimeout(r, 600));
+        var sHiddenAfterDelay = sToast ? (!sToast.classList.contains('show') || getComputedStyle(sToast).display === 'none') : false;
+
+        fetch('/__test_done__', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{
+                sShown: sShown,
+                eShown: eShown,
+                fitsMobile: fitsMobile,
+                eHiddenAfterClick: eHidden,
+                sHiddenAfterDelay: sHiddenAfterDelay
+            }})
+        }}).catch(function () {{}});
+    }});
+    </script>
+</body>
+</html>"""
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+            def do_GET(self):
+                data = harness_html.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length).decode("utf-8")
+                results_holder["report"] = json.loads(raw)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "11")
+                self.end_headers()
+                self.wfile.write(b'{"ok":true}')
+                done_event.set()
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+
+        httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+
+        user_data_dir = tempfile.mkdtemp(prefix="toast_browser_test_")
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                [
+                    browser_bin,
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--window-size=375,667",
+                    f"--user-data-dir={user_data_dir}",
+                    f"http://127.0.0.1:{port}/",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            finished = done_event.wait(timeout=20)
+            self.assertTrue(finished, "Headless browser toast verification timed out")
+            rep = results_holder.get("report", {})
+            self.assertTrue(rep.get("sShown"), "Success toast should be visible initially")
+            self.assertTrue(rep.get("eShown"), "Error toast should be visible initially")
+            self.assertTrue(rep.get("fitsMobile"), "Toast container should fit within mobile viewport width")
+            self.assertTrue(rep.get("eHiddenAfterClick"), "Error toast should hide when close button is clicked")
+            self.assertTrue(rep.get("sHiddenAfterDelay"), "Success toast should auto-dismiss after delay")
+        finally:
+            if proc:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+            httpd.shutdown()
+            httpd.server_close()
+            shutil.rmtree(user_data_dir, ignore_errors=True)
+
+    def test_toast_hover_and_focus_pause_and_resume_and_persistent_errors(self):
+        import http.server
+        import json
+        import pathlib
+        import shutil
+        import socket
+        import subprocess
+        import tempfile
+        import threading
+        from django.conf import settings
+
+        browser_bin = self._find_browser_binary()
+        if not browser_bin:
+            self.skipTest("No browser binary found for headless verification.")
+
+        static_dir = pathlib.Path(settings.BASE_DIR) / "static"
+        bs_js = (static_dir / "vendor" / "bootstrap" / "bootstrap.bundle.min.js").read_text(encoding="utf-8")
+        bs_css = (static_dir / "vendor" / "bootstrap" / "bootstrap.min.css").read_text(encoding="utf-8")
+        app_css = (static_dir / "css" / "app.css").read_text(encoding="utf-8")
+        app_js = (static_dir / "js" / "app.js").read_text(encoding="utf-8")
+
+        results_holder = {}
+        done_event = threading.Event()
+
+        harness_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>{bs_css}</style>
+    <style>{app_css}</style>
+</head>
+<body class="app-body">
+    <div id="main-content">
+        <div id="app-toast-container" class="toast-container position-fixed p-3 app-toast-container">
+            <div id="toast-hover" class="toast show app-toast app-toast-success fade" role="status" aria-live="polite" data-bs-autohide="true" data-bs-delay="500">
+                <div class="d-flex align-items-center p-2">
+                    <div class="toast-body app-toast-body p-0 me-2">Hover pause test</div>
+                    <button type="button" class="btn-close ms-auto flex-shrink-0" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+            <div id="toast-focus" class="toast show app-toast app-toast-info fade" role="status" aria-live="polite" data-bs-autohide="true" data-bs-delay="500">
+                <div class="d-flex align-items-center p-2">
+                    <div class="toast-body app-toast-body p-0 me-2">Focus pause test</div>
+                    <button id="focus-btn-close" type="button" class="btn-close ms-auto flex-shrink-0" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+            <div id="toast-warning" class="toast show app-toast app-toast-warning fade" role="alert" aria-live="assertive" data-bs-autohide="false">
+                <div class="d-flex align-items-center p-2">
+                    <div class="toast-body app-toast-body p-0 me-2">Persistent warning</div>
+                    <button id="btn-close-warn" type="button" class="btn-close ms-auto flex-shrink-0" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>{bs_js}</script>
+    <script>{app_js}</script>
+    <script>
+    window.addEventListener('DOMContentLoaded', async function () {{
+        await new Promise(r => setTimeout(r, 50));
+
+        var tHover = document.getElementById('toast-hover');
+        var tFocus = document.getElementById('toast-focus');
+        var tWarn = document.getElementById('toast-warning');
+
+        // 1. Hover pause on tHover at 100ms
+        await new Promise(r => setTimeout(r, 100));
+        tHover.dispatchEvent(new MouseEvent('mouseenter', {{ bubbles: false }}));
+
+        // 2. Focus pause on tFocus
+        tFocus.dispatchEvent(new FocusEvent('focusin', {{ bubbles: true }}));
+
+        // 3. Wait past the 500ms delay mark (at 700ms total)
+        await new Promise(r => setTimeout(r, 600));
+        var hoverStillShown = tHover.classList.contains('show') && getComputedStyle(tHover).display !== 'none';
+        var focusStillShown = tFocus.classList.contains('show') && getComputedStyle(tFocus).display !== 'none';
+        var warnStillShown = tWarn.classList.contains('show') && getComputedStyle(tWarn).display !== 'none';
+
+        // 4. Resume hover: mouseleave
+        tHover.dispatchEvent(new MouseEvent('mouseleave', {{ bubbles: false }}));
+
+        // 5. Resume focus: focusout
+        tFocus.dispatchEvent(new FocusEvent('focusout', {{ bubbles: true }}));
+
+        // 6. Wait for remaining duration and transition to finish (~700ms)
+        await new Promise(r => setTimeout(r, 700));
+        var hoverDismissed = !tHover.classList.contains('show') || getComputedStyle(tHover).display === 'none';
+        var focusDismissed = !tFocus.classList.contains('show') || getComputedStyle(tFocus).display === 'none';
+        var warnPersistent = tWarn.classList.contains('show') && getComputedStyle(tWarn).display !== 'none';
+
+        // 7. Click warning close button
+        document.getElementById('btn-close-warn').click();
+        await new Promise(r => setTimeout(r, 300));
+        var warnDismissed = !tWarn.classList.contains('show') || getComputedStyle(tWarn).display === 'none';
+
+        fetch('/__test_done__', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{
+                hoverStillShown: hoverStillShown,
+                focusStillShown: focusStillShown,
+                warnStillShown: warnStillShown,
+                hoverDismissed: hoverDismissed,
+                focusDismissed: focusDismissed,
+                warnPersistent: warnPersistent,
+                warnDismissed: warnDismissed
+            }})
+        }}).catch(function () {{}});
+    }});
+    </script>
+</body>
+</html>"""
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args): pass
+            def do_GET(self):
+                data = harness_html.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                results_holder["report"] = json.loads(self.rfile.read(length).decode("utf-8"))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "11")
+                self.end_headers()
+                self.wfile.write(b'{"ok":true}')
+                done_event.set()
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+
+        httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+
+        user_data_dir = tempfile.mkdtemp(prefix="toast_hover_test_")
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                [
+                    browser_bin,
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    f"--user-data-dir={user_data_dir}",
+                    f"http://127.0.0.1:{port}/",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            finished = done_event.wait(timeout=20)
+            self.assertTrue(finished, "Headless browser hover/focus test timed out")
+            rep = results_holder.get("report", {})
+            self.assertTrue(rep.get("hoverStillShown"), "Toast should remain visible while hovered beyond initial delay")
+            self.assertTrue(rep.get("focusStillShown"), "Toast should remain visible while focused beyond initial delay")
+            self.assertTrue(rep.get("warnStillShown"), "Warning toast should remain visible beyond delay")
+            self.assertTrue(rep.get("hoverDismissed"), "Toast should dismiss after mouseleave completes delay")
+            self.assertTrue(rep.get("focusDismissed"), "Toast should dismiss after focusout completes delay")
+            self.assertTrue(rep.get("warnPersistent"), "Warning toast should persist indefinitely until clicked")
+            self.assertTrue(rep.get("warnDismissed"), "Warning toast should dismiss after close button click")
+        finally:
+            if proc:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+            httpd.shutdown()
+            httpd.server_close()
+            shutil.rmtree(user_data_dir, ignore_errors=True)
+
+    def test_toast_fallback_when_app_js_or_bootstrap_blocked(self):
+        import http.server
+        import json
+        import pathlib
+        import shutil
+        import socket
+        import subprocess
+        import tempfile
+        import threading
+        from django.conf import settings
+
+        browser_bin = self._find_browser_binary()
+        if not browser_bin:
+            self.skipTest("No browser binary found for headless verification.")
+
+        static_dir = pathlib.Path(settings.BASE_DIR) / "static"
+        bs_js = (static_dir / "vendor" / "bootstrap" / "bootstrap.bundle.min.js").read_text(encoding="utf-8")
+        bs_css = (static_dir / "vendor" / "bootstrap" / "bootstrap.min.css").read_text(encoding="utf-8")
+        app_css = (static_dir / "css" / "app.css").read_text(encoding="utf-8")
+        app_js = (static_dir / "js" / "app.js").read_text(encoding="utf-8")
+
+        def run_harness(include_bs_js, include_app_js):
+            results = {}
+            done = threading.Event()
+            harness = f"""<!DOCTYPE html>
+<html>
+<head>
+<style>{bs_css}</style>
+<style>{app_css}</style>
+</head>
+<body class="app-body">
+<div id="main-content">
+  <div id="app-toast-container" class="toast-container position-fixed p-3 app-toast-container">
+    <div id="fb-toast" class="toast show app-toast app-toast-info fade" role="status" data-bs-autohide="false">
+      <div class="d-flex align-items-center p-2">
+        <div class="toast-body app-toast-body p-0 me-2">Fallback test message</div>
+        <button id="fb-close" type="button" class="btn-close ms-auto flex-shrink-0" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+</div>
+{f'<script>{bs_js}</script>' if include_bs_js else ''}
+{f'<script>{app_js}</script>' if include_app_js else ''}
+<script>
+window.addEventListener('DOMContentLoaded', async function () {{
+    await new Promise(r => setTimeout(r, 100));
+    var el = document.getElementById('fb-toast');
+    var isVisible = el ? (getComputedStyle(el).display !== 'none' && el.classList.contains('show')) : false;
+    var btn = document.getElementById('fb-close');
+    if (btn) btn.click();
+    await new Promise(r => setTimeout(r, 300));
+    var isHiddenAfterClose = el ? (getComputedStyle(el).display === 'none' || !el.classList.contains('show')) : false;
+
+    fetch('/__test_done__', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ isVisible: isVisible, isHiddenAfterClose: isHiddenAfterClose }})
+    }}).catch(function () {{}});
+}});
+</script>
+</body>
+</html>"""
+
+            class H(http.server.BaseHTTPRequestHandler):
+                def log_message(self, *args): pass
+                def do_GET(self):
+                    d = harness.encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(d)))
+                    self.end_headers()
+                    self.wfile.write(d)
+                def do_POST(self):
+                    l = int(self.headers.get("Content-Length", 0))
+                    results["data"] = json.loads(self.rfile.read(l).decode("utf-8"))
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b'{"ok":true}')
+                    done.set()
+
+            s = socket.socket()
+            s.bind(("127.0.0.1", 0))
+            p = s.getsockname()[1]
+            s.close()
+            srv = http.server.ThreadingHTTPServer(("127.0.0.1", p), H)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            tmp = tempfile.mkdtemp()
+            pr = None
+            try:
+                pr = subprocess.Popen([
+                    browser_bin,
+                    "--headless=new",
+                    "--disable-gpu",
+                    f"--user-data-dir={tmp}",
+                    f"http://127.0.0.1:{p}/"
+                ])
+                done.wait(timeout=15)
+                return results.get("data", {})
+            finally:
+                if pr:
+                    try:
+                        pr.kill()
+                        pr.wait(timeout=5)
+                    except Exception: pass
+                srv.shutdown()
+                srv.server_close()
+                shutil.rmtree(tmp, ignore_errors=True)
+
+        # 1. Block app.js (Bootstrap JS only): server message must be visible and close button works
+        rep_no_app = run_harness(include_bs_js=True, include_app_js=False)
+        self.assertTrue(rep_no_app.get("isVisible"), "Message must remain visible when app.js is blocked")
+        self.assertTrue(rep_no_app.get("isHiddenAfterClose"), "Close button should work via Bootstrap when app.js is blocked")
+
+        # 2. Block Bootstrap JS (app.js only): server message must be visible and close button works via app.js fallback
+        rep_no_bs = run_harness(include_bs_js=False, include_app_js=True)
+        self.assertTrue(rep_no_bs.get("isVisible"), "Message must remain visible when Bootstrap JS is blocked")
+        self.assertTrue(rep_no_bs.get("isHiddenAfterClose"), "Close button should work via app.js fallback when Bootstrap is blocked")
+
+        # 3. Block both (pure CSS / no JS): server message must remain visible
+        rep_no_js = run_harness(include_bs_js=False, include_app_js=False)
+        self.assertTrue(rep_no_js.get("isVisible"), "Message must remain visible when all JS fails to load")
+
+
+class CurrencyAmountFormatterTests(SimpleTestCase):
+    def setUp(self):
+        self.jpy = Currency(code="JPY", name="Japanese Yen", decimal_places=0)
+        self.usd = Currency(code="USD", name="US Dollar", decimal_places=2)
+        self.php = Currency(code="PHP", name="Philippine Peso", decimal_places=2)
+        self.twd = Currency(code="TWD", name="New Taiwan Dollar", decimal_places=2)
+        self.eur = Currency(code="EUR", name="Euro", decimal_places=2)
+        self.kwd = Currency(code="KWD", name="Kuwaiti Dinar", decimal_places=3)
+
+    def test_thousands_grouping_and_currency_precision(self):
+        # Primary requirement cases
+        self.assertEqual(format_currency_amount(Decimal("175140.59"), self.usd), "175,140.59")
+        self.assertEqual(format_currency_amount(Decimal("-12345.67"), self.usd), "-12,345.67")
+
+        # 2 decimal currencies (USD, PHP, TWD, EUR)
+        self.assertEqual(format_currency_amount(Decimal("175140.59"), self.php), "175,140.59")
+        self.assertEqual(format_currency_amount(Decimal("175140.59"), self.twd), "175,140.59")
+        self.assertEqual(format_currency_amount(Decimal("175140.59"), self.eur), "175,140.59")
+
+        # 0 decimal currencies (JPY)
+        self.assertEqual(format_currency_amount(Decimal("15000"), self.jpy), "15,000")
+        self.assertEqual(format_currency_amount(Decimal("1234567"), self.jpy), "1,234,567")
+        self.assertEqual(format_currency_amount(Decimal("999"), self.jpy), "999")
+
+        # 3 decimal currencies (KWD)
+        self.assertEqual(format_currency_amount(Decimal("89.125"), self.kwd), "89.125")
+        self.assertEqual(format_currency_amount(Decimal("12345.678"), self.kwd), "12,345.678")
+        self.assertEqual(format_currency_amount(Decimal("175140.590"), self.kwd), "175,140.590")
+
+    def test_negative_values(self):
+        self.assertEqual(format_currency_amount(Decimal("-12345.67"), self.usd), "-12,345.67")
+        self.assertEqual(format_currency_amount(Decimal("-245.75"), self.usd), "-245.75")
+        self.assertEqual(format_currency_amount(Decimal("-50000"), self.jpy), "-50,000")
+        self.assertEqual(format_currency_amount(Decimal("-12345.678"), self.kwd), "-12,345.678")
+
+    def test_zero_values(self):
+        self.assertEqual(format_currency_amount(Decimal("0"), self.usd), "0.00")
+        self.assertEqual(format_currency_amount(Decimal("-0"), self.usd), "0.00")
+        self.assertEqual(format_currency_amount(Decimal("0.00"), self.usd), "0.00")
+        self.assertEqual(format_currency_amount(Decimal("0"), self.jpy), "0")
+        self.assertEqual(format_currency_amount(Decimal("0"), self.kwd), "0.000")
+        self.assertEqual(format_currency_amount(0, self.usd), "0.00")
+
+    def test_unavailable_value_em_dashes(self):
+        self.assertEqual(format_currency_amount(None, self.usd), "—")
+        self.assertEqual(format_currency_amount(Decimal("100"), None), "—")
+        self.assertEqual(format_currency_amount(None, None), "—")
+        self.assertEqual(format_currency_amount("", self.usd), "—")
+        self.assertEqual(format_currency_amount("invalid-amount", self.usd), "—")
+
+    def test_rounding_preservation(self):
+        self.assertEqual(format_currency_amount(Decimal("1234.566"), self.usd), "1,234.57")
+        self.assertEqual(format_currency_amount(Decimal("1234.5"), self.jpy), "1,234")
+
+    def test_plain_ungrouped_formatting_for_editable_inputs(self):
+        self.assertEqual(
+            format_currency_amount(Decimal("175140.59"), self.usd, grouping=False),
+            "175140.59",
+        )
+        self.assertEqual(
+            format_currency_amount(Decimal("-12345.67"), self.usd, grouping=False),
+            "-12345.67",
+        )
+        self.assertEqual(
+            format_currency_amount(Decimal("15000"), self.jpy, grouping=False),
+            "15000",
+        )
+
+
+class MonetarySerializationBoundaryTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="serial_user",
+            password="Str0ng!Password#2026",
+        )
+        self.usd, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "decimal_places": 2, "is_active": True})
+        self.jpy, _ = Currency.objects.get_or_create(code="JPY", defaults={"name": "Japanese Yen", "decimal_places": 0, "is_active": True})
+        self.kwd, _ = Currency.objects.get_or_create(code="KWD", defaults={"name": "Kuwaiti Dinar", "decimal_places": 3, "is_active": True})
+        self.eur, _ = Currency.objects.get_or_create(code="EUR", defaults={"name": "Euro", "decimal_places": 2, "is_active": True})
+
+        self.wallet_usd = Wallet.objects.create(
+            owner=self.user,
+            name="USD Main Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("175140.59"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        self.wallet_jpy = Wallet.objects.create(
+            owner=self.user,
+            name="JPY Cash Wallet",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=self.jpy,
+            opening_balance=Decimal("15000"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        self.wallet_kwd = Wallet.objects.create(
+            owner=self.user,
+            name="KWD Savings Wallet",
+            wallet_type=Wallet.WalletType.OTHER,
+            currency=self.kwd,
+            opening_balance=Decimal("1089.125"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+
+    def test_model_properties_grouping_vs_ungrouped(self):
+        from apps.budgets.models import Transaction, Transfer, CategoryBudget, SavingsGoal, SavingsContribution
+        from apps.budgets.models import Category
+
+        # Wallet opening & current balances
+        self.assertEqual(self.wallet_usd.formatted_opening_balance, "175,140.59")
+        self.assertEqual(self.wallet_usd.plain_opening_balance, "175140.59")
+        self.assertEqual(self.wallet_usd.formatted_current_balance, "175,140.59")
+        self.assertEqual(self.wallet_usd.plain_current_balance, "175140.59")
+
+        self.assertEqual(self.wallet_jpy.formatted_opening_balance, "15,000")
+        self.assertEqual(self.wallet_jpy.plain_opening_balance, "15000")
+
+        self.assertEqual(self.wallet_kwd.formatted_opening_balance, "1,089.125")
+        self.assertEqual(self.wallet_kwd.plain_opening_balance, "1089.125")
+
+        # Transaction amounts (positive > 1000, negative, 0/2/3 decimals, converted amount, null converted)
+        tx_pos = Transaction.objects.create(
+            owner=self.user,
+            wallet=self.wallet_usd,
+            transaction_type=Transaction.Type.INCOME,
+            amount=Decimal("175140.59"),
+            currency=self.usd,
+            base_currency=self.eur,
+            converted_amount=Decimal("160000.50"),
+            transaction_date=date(2026, 10, 1),
+            description="Big consulting income",
+        )
+        self.assertEqual(tx_pos.formatted_amount, "175,140.59")
+        self.assertEqual(tx_pos.plain_amount, "175140.59")
+        self.assertEqual(tx_pos.formatted_converted_amount, "160,000.50")
+        self.assertEqual(tx_pos.plain_converted_amount, "160000.50")
+
+        tx_neg = Transaction.objects.create(
+            owner=self.user,
+            wallet=self.wallet_usd,
+            transaction_type=Transaction.Type.EXPENSE,
+            amount=Decimal("-12345.67"),
+            currency=self.usd,
+            transaction_date=date(2026, 10, 2),
+            description="Negative adjustment",
+        )
+        self.assertEqual(tx_neg.formatted_amount, "-12,345.67")
+        self.assertEqual(tx_neg.plain_amount, "-12345.67")
+        self.assertIsNone(tx_neg.formatted_converted_amount)
+        self.assertIsNone(tx_neg.plain_converted_amount)
+
+        tx_jpy = Transaction.objects.create(
+            owner=self.user,
+            wallet=self.wallet_jpy,
+            transaction_type=Transaction.Type.EXPENSE,
+            amount=Decimal("15000"),
+            currency=self.jpy,
+            transaction_date=date(2026, 10, 3),
+            description="Dinner in Tokyo",
+        )
+        self.assertEqual(tx_jpy.formatted_amount, "15,000")
+        self.assertEqual(tx_jpy.plain_amount, "15000")
+
+        tx_kwd = Transaction.objects.create(
+            owner=self.user,
+            wallet=self.wallet_kwd,
+            transaction_type=Transaction.Type.INCOME,
+            amount=Decimal("89.125"),
+            currency=self.kwd,
+            transaction_date=date(2026, 10, 4),
+            description="Dividend",
+        )
+        self.assertEqual(tx_kwd.formatted_amount, "89.125")
+        self.assertEqual(tx_kwd.plain_amount, "89.125")
+
+        # Transfer amounts and fees
+        transfer = Transfer.objects.create(
+            created_by=self.user,
+            source_wallet=self.wallet_usd,
+            destination_wallet=self.wallet_usd,
+            source_currency=self.usd,
+            destination_currency=self.usd,
+            amount_sent=Decimal("12345.67"),
+            amount_received=Decimal("12300.00"),
+            fee_amount=Decimal("45.67"),
+            transfer_date=date(2026, 10, 5),
+        )
+        self.assertEqual(transfer.formatted_amount_sent, "12,345.67")
+        self.assertEqual(transfer.plain_amount_sent, "12345.67")
+        self.assertEqual(transfer.formatted_amount_received, "12,300.00")
+        self.assertEqual(transfer.plain_amount_received, "12300.00")
+        self.assertEqual(transfer.formatted_fee_amount, "45.67")
+        self.assertEqual(transfer.plain_fee_amount, "45.67")
+
+        # CategoryBudget
+        cat = Category.objects.create(name="Groceries", owner=self.user)
+        budget = CategoryBudget.objects.create(
+            owner=self.user,
+            category=cat,
+            currency=self.usd,
+            limit_amount=Decimal("2500.00"),
+            period="2026-10",
+        )
+        self.assertEqual(budget.formatted_limit_amount, "2,500.00")
+        self.assertEqual(budget.plain_limit_amount, "2500.00")
+
+        # SavingsGoal & Contribution
+        goal = SavingsGoal.objects.create(
+            owner=self.user,
+            name="Emergency Fund",
+            currency=self.usd,
+            target_amount=Decimal("50000.00"),
+        )
+        self.assertEqual(goal.formatted_target_amount, "50,000.00")
+        self.assertEqual(goal.plain_target_amount, "50000.00")
+        self.assertEqual(goal.formatted_saved_amount, "0.00")
+        self.assertEqual(goal.plain_saved_amount, "0.00")
+
+        contrib = SavingsContribution.objects.create(
+            goal=goal,
+            created_by=self.user,
+            amount=Decimal("1500.00"),
+            contribution_date=date(2026, 10, 6),
+        )
+        self.assertEqual(contrib.formatted_amount, "1,500.00")
+        self.assertEqual(contrib.plain_amount, "1500.00")
+        self.assertEqual(goal.formatted_saved_amount, "1,500.00")
+        self.assertEqual(goal.plain_saved_amount, "1500.00")
+        self.assertEqual(goal.formatted_remaining_amount, "48,500.00")
+        self.assertEqual(goal.plain_remaining_amount, "48500.00")
+
+    def test_null_and_empty_handling(self):
+        from apps.budgets.models import Transaction, Transfer, Wallet, SavingsGoal
+
+        tx_null = Transaction(owner=self.user, wallet=self.wallet_usd, currency=self.usd)
+        self.assertEqual(tx_null.plain_amount, "")
+        self.assertIsNone(tx_null.plain_converted_amount)
+
+        w_null = Wallet(owner=self.user, currency=self.usd)
+        self.assertEqual(w_null.plain_opening_balance, "")
+        self.assertEqual(w_null.plain_current_balance, "")
+
+        tr_null = Transfer(created_by=self.user)
+        self.assertEqual(tr_null.plain_amount_sent, "")
+        self.assertEqual(tr_null.plain_amount_received, "")
+        self.assertEqual(tr_null.plain_fee_amount, "")
+
+        g_null = SavingsGoal(owner=self.user, currency=self.usd)
+        self.assertEqual(g_null.plain_target_amount, "")
+
+    def test_transactions_export_csv_and_json_serialization(self):
+        from apps.budgets.models import Transaction
+        from apps.budgets.selectors import build_transactions_export_rows
+
+        Transaction.objects.create(
+            owner=self.user,
+            wallet=self.wallet_usd,
+            transaction_type=Transaction.Type.INCOME,
+            amount=Decimal("175140.59"),
+            currency=self.usd,
+            base_currency=self.eur,
+            converted_amount=Decimal("160000.50"),
+            transaction_date=date(2026, 10, 1),
+            description="Large client payment",
+        )
+        Transaction.objects.create(
+            owner=self.user,
+            wallet=self.wallet_usd,
+            transaction_type=Transaction.Type.EXPENSE,
+            amount=Decimal("-12345.67"),
+            currency=self.usd,
+            transaction_date=date(2026, 10, 2),
+            description="Chargeback",
+        )
+        Transaction.objects.create(
+            owner=self.user,
+            wallet=self.wallet_jpy,
+            transaction_type=Transaction.Type.EXPENSE,
+            amount=Decimal("15000"),
+            currency=self.jpy,
+            transaction_date=date(2026, 10, 3),
+            description="Hotel reservation",
+        )
+        Transaction.objects.create(
+            owner=self.user,
+            wallet=self.wallet_kwd,
+            transaction_type=Transaction.Type.EXPENSE,
+            amount=Decimal("1089.125"),
+            currency=self.kwd,
+            transaction_date=date(2026, 10, 4),
+            description="Fuel",
+        )
+
+        rows = build_transactions_export_rows(self.user, {})
+        row_by_desc = {r["description"]: r for r in rows}
+
+        self.assertEqual(row_by_desc["Large client payment"]["amount"], "175140.59")
+        self.assertEqual(row_by_desc["Large client payment"]["converted_amount"], "160000.50")
+        self.assertEqual(row_by_desc["Chargeback"]["amount"], "-12345.67")
+        self.assertEqual(row_by_desc["Chargeback"]["converted_amount"], "")
+        self.assertEqual(row_by_desc["Hotel reservation"]["amount"], "15000")
+        self.assertEqual(row_by_desc["Fuel"]["amount"], "1089.125")
+
+        self.client.force_login(self.user)
+
+        # CSV endpoint
+        csv_resp = self.client.get(reverse("budgets:export_transactions") + "?format=csv")
+        self.assertEqual(csv_resp.status_code, 200)
+        csv_content = csv_resp.content.decode("utf-8")
+        self.assertIn("175140.59", csv_content)
+        self.assertNotIn("175,140.59", csv_content)
+        self.assertIn("-12345.67", csv_content)
+        self.assertNotIn("-12,345.67", csv_content)
+        self.assertIn("15000", csv_content)
+        self.assertNotIn("15,000", csv_content)
+        self.assertIn("1089.125", csv_content)
+        self.assertNotIn("1,089.125", csv_content)
+
+        # JSON endpoint
+        json_resp = self.client.get(reverse("budgets:export_transactions") + "?format=json")
+        self.assertEqual(json_resp.status_code, 200)
+        json_data = json_resp.json()
+        exported_txs = {t["description"]: t for t in json_data["transactions"]}
+        self.assertEqual(exported_txs["Large client payment"]["amount"], "175140.59")
+        self.assertEqual(exported_txs["Large client payment"]["converted_amount"], "160000.50")
+        self.assertEqual(exported_txs["Chargeback"]["amount"], "-12345.67")
+        self.assertEqual(exported_txs["Chargeback"]["converted_amount"], "")
+        self.assertEqual(exported_txs["Hotel reservation"]["amount"], "15000")
+        self.assertEqual(exported_txs["Fuel"]["amount"], "1089.125")
+
+    def test_sync_snapshot_and_account_export_serialization(self):
+        from apps.budgets.models import Transaction, SavingsGoal, SavingsContribution
+        from apps.budgets.selectors import get_sync_snapshot_for_user
+
+        Transaction.objects.create(
+            owner=self.user,
+            wallet=self.wallet_usd,
+            transaction_type=Transaction.Type.INCOME,
+            amount=Decimal("175140.59"),
+            currency=self.usd,
+            transaction_date=date(2026, 10, 1),
+            description="Snapshot tx",
+        )
+        goal = SavingsGoal.objects.create(
+            owner=self.user,
+            name="House Downpayment",
+            currency=self.usd,
+            target_amount=Decimal("250000.00"),
+        )
+        SavingsContribution.objects.create(
+            goal=goal,
+            created_by=self.user,
+            amount=Decimal("50000.00"),
+            contribution_date=date(2026, 10, 2),
+        )
+
+        snapshot = get_sync_snapshot_for_user(self.user)
+        snap_wallets = {w["name"]: w for w in snapshot["wallets"]}
+        snap_txs = {t["description"]: t for t in snapshot["transactions"]}
+
+        # Check wallets in sync snapshot have ungrouped balances
+        self.assertEqual(snap_wallets["USD Main Wallet"]["opening_balance"], "175140.59")
+        self.assertEqual(snap_wallets["USD Main Wallet"]["current_balance"], "350281.18")
+        self.assertEqual(snap_wallets["JPY Cash Wallet"]["opening_balance"], "15000")
+        self.assertEqual(snap_wallets["KWD Savings Wallet"]["opening_balance"], "1089.125")
+        # Check transactions in sync snapshot have ungrouped amount
+        self.assertEqual(snap_txs["Snapshot tx"]["amount"], "175140.59")
+
+        # Decimal parses cleanly without ValueError from comma
+        self.assertEqual(Decimal(snap_wallets["USD Main Wallet"]["current_balance"]), Decimal("350281.18"))
+        self.assertEqual(Decimal(snap_txs["Snapshot tx"]["amount"]), Decimal("175140.59"))
+
+        # Account export endpoint (/accounts/export/?format=json)
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("accounts:export_data") + "?format=json")
+        self.assertEqual(resp.status_code, 200)
+        acc_data = resp.json()
+
+        acc_wallets = {w["name"]: w for w in acc_data["wallets"]}
+        self.assertEqual(acc_wallets["USD Main Wallet"]["opening_balance"], "175140.59")
+        self.assertEqual(acc_wallets["USD Main Wallet"]["current_balance"], "350281.18")
+        self.assertEqual(acc_wallets["JPY Cash Wallet"]["opening_balance"], "15000")
+        self.assertEqual(acc_wallets["KWD Savings Wallet"]["opening_balance"], "1089.125")
+
+        acc_goals = {g["name"]: g for g in acc_data["savings_goals"]}
+        self.assertEqual(acc_goals["House Downpayment"]["target_amount"], "250000.00")
+        self.assertEqual(acc_goals["House Downpayment"]["saved_amount"], "50000.00")
+        self.assertEqual(acc_goals["House Downpayment"]["remaining_amount"], "200000.00")
+
+    def test_contrast_website_html_displays_grouping_separators(self):
+        from apps.budgets.models import Transaction
+
+        Transaction.objects.create(
+            owner=self.user,
+            wallet=self.wallet_usd,
+            transaction_type=Transaction.Type.INCOME,
+            amount=Decimal("175140.59"),
+            currency=self.usd,
+            transaction_date=date(2026, 10, 1),
+            description="Paycheck",
+        )
+        self.client.force_login(self.user)
+
+        # Website transactions page must render with comma separators
+        tx_resp = self.client.get(reverse("budgets:transactions"))
+        self.assertEqual(tx_resp.status_code, 200)
+        self.assertContains(tx_resp, "175,140.59")
+
+        # Website wallets page must render with comma separators
+        w_resp = self.client.get(reverse("budgets:wallets"))
+        self.assertEqual(w_resp.status_code, 200)
+        self.assertContains(w_resp, "175,140.59")
+
+
+class GlobalNavbarRestylingTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="navbar_tester",
+            password="Str0ng!Password#2026",
+        )
+        self.usd, _ = Currency.objects.get_or_create(
+            code="USD",
+            defaults={"name": "US Dollar", "decimal_places": 2, "is_active": True},
+        )
+        self.eur, _ = Currency.objects.get_or_create(
+            code="EUR",
+            defaults={"name": "Euro", "decimal_places": 2, "is_active": True},
+        )
+        self.dashboard_url = reverse("budgets:dashboard")
+
+    def test_navbar_rendering_authenticated(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(self.dashboard_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Topbar container & sticky positioning
+        self.assertIn('class="app-topbar sticky-top"', html)
+
+        # 1. Single h1 page title on the left
+        self.assertEqual(html.count("<h1"), 1)
+        self.assertIn('class="topbar-page-title', html)
+        self.assertIn("Dashboard</h1>", html)
+
+        # 2. Mobile sidebar toggle
+        self.assertIn('btn-topbar-menu', html)
+        self.assertIn('data-bs-toggle="offcanvas"', html)
+        self.assertIn('data-bs-target="#appSidebar"', html)
+        self.assertIn('aria-label="Open navigation menu"', html)
+
+        # 3. Labeled Workspace selector
+        self.assertIn('id="workspace-view-form"', html)
+        self.assertIn(f'action="{reverse("accounts:switch_scope")}"', html)
+        self.assertIn('for="workspace-view-select"', html)
+        self.assertIn('class="topbar-select-label', html)
+        self.assertIn('id="workspace-view-select"', html)
+        self.assertIn('name="view_choice"', html)
+        self.assertIn('onchange="this.form.requestSubmit()"', html)
+
+        # 4. Labeled Display currency selector
+        self.assertIn('id="display-currency-form"', html)
+        self.assertIn(f'action="{reverse("accounts:set_display_currency")}"', html)
+        self.assertIn('for="display-currency-select"', html)
+        self.assertIn('id="display-currency-select"', html)
+        self.assertIn('name="currency_code"', html)
+        self.assertIn('onchange="this.form.requestSubmit()"', html)
+
+        # 5. Navy "+ Add transaction" button
+        self.assertIn('btn-topbar-action', html)
+        self.assertIn('data-bs-target="#transactionModal"', html)
+        self.assertIn("Add transaction", html)
+
+        # 6. Compact account dropdown
+        self.assertIn('topbar-account-dropdown', html)
+        self.assertIn('id="topbarAccountDropdown"', html)
+        self.assertIn('data-bs-toggle="dropdown"', html)
+        # Circular initial avatar with first letter capitalized
+        self.assertIn('class="topbar-avatar"', html)
+        self.assertIn('>N<', html)
+        # Username
+        self.assertIn('class="topbar-username', html)
+        self.assertIn("navbar_tester", html)
+        # Dropdown menu items
+        self.assertIn('topbar-dropdown-menu', html)
+        self.assertIn("Signed in as", html)
+        self.assertIn(reverse("accounts:settings"), html)
+        self.assertIn("Settings", html)
+
+        # 7. Offline queue badge preserved
+        self.assertIn('id="offline-queue-badge"', html)
+
+        # 8. Topbar logout form removed, sidebar logout form retained
+        self.assertNotIn('id="logout-form"', html)
+        self.assertIn('id="sidebar-logout-form"', html)
+
+    def test_navbar_workspace_and_currency_switching(self):
+        from .services import create_shared_space
+
+        space = create_shared_space(user=self.user, name="Team Space", base_currency=self.usd)
+        self.client.force_login(self.user)
+
+        # Switch workspace
+        switch_resp = self.client.post(
+            reverse("accounts:switch_scope"),
+            {"view_choice": f"shared:{space.id}", "next": self.dashboard_url},
+            follow=True,
+        )
+        self.assertEqual(switch_resp.status_code, 200)
+        switch_html = switch_resp.content.decode("utf-8")
+        self.assertIn(f'value="shared:{space.id}" selected', switch_html)
+
+        # Set display currency
+        curr_resp = self.client.post(
+            reverse("accounts:set_display_currency"),
+            {"currency_code": "EUR", "next": self.dashboard_url},
+            follow=True,
+        )
+        self.assertEqual(curr_resp.status_code, 200)
+        curr_html = curr_resp.content.decode("utf-8")
+        self.assertIn('value="EUR" selected', curr_html)
+
+    def test_navbar_unauthenticated(self):
+        resp = self.client.get(reverse("accounts:login"))
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Public auth pages do not render private selector forms or account dropdown
+        self.assertNotIn('id="workspace-view-form"', html)
+        self.assertNotIn('id="display-currency-form"', html)
+        self.assertNotIn('id="topbarAccountDropdown"', html)
+
+    def test_navbar_responsive_layout_in_headless_browser(self):
+        import http.server
+        import json
+        import os
+        import shutil
+        import socket
+        import subprocess
+        import tempfile
+        import threading
+
+        browser_bin = OfflineSyncBrowserRuntimeTests._find_browser_binary()
+        if not browser_bin:
+            self.skipTest("No Chrome/Edge browser binary found for headless inspection")
+
+        self.client.force_login(self.user)
+        resp = self.client.get(self.dashboard_url)
+        html_content = resp.content.decode("utf-8")
+
+        temp_dir = tempfile.mkdtemp(prefix="navbar_test_")
+        try:
+            doc_file = os.path.join(temp_dir, "index.html")
+            with open(doc_file, "w", encoding="utf-8") as f:
+                f.write(html_content)
+
+            static_dir = os.path.join(temp_dir, "static")
+            repo_static = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
+            shutil.copytree(repo_static, static_dir)
+
+            results_holder = {}
+            done_event = threading.Event()
+
+            class QuietHandler(http.server.SimpleHTTPRequestHandler):
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, directory=temp_dir, **kwargs)
+
+                def log_message(self, format, *args):
+                    pass
+
+                def do_POST(self):
+                    if self.path == "/__test_done__":
+                        length = int(self.headers.get("Content-Length", "0"))
+                        raw = self.rfile.read(length).decode("utf-8")
+                        results_holder["report"] = json.loads(raw)
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", "11")
+                        self.end_headers()
+                        self.wfile.write(b'{"ok":true}')
+                        done_event.set()
+                    else:
+                        self.send_response(404)
+                        self.end_headers()
+
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+            sock.close()
+
+            httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), QuietHandler)
+            server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+            server_thread.start()
+
+            for width, height, is_mobile in [(1280, 800, False), (375, 667, True)]:
+                done_event.clear()
+                results_holder.clear()
+
+                runner_html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0; padding:0;">
+<iframe id="test-frame" src="http://127.0.0.1:{port}/index.html" style="width:{width}px; height:{height}px; border:none;"></iframe>
+<script>
+var frame = document.getElementById('test-frame');
+frame.onload = function() {{
+    setTimeout(function() {{
+        try {{
+            var doc = frame.contentDocument;
+            var topbar = doc.querySelector('.app-topbar');
+            var pageTitle = doc.querySelector('.topbar-page-title');
+            var menuBtn = doc.querySelector('.btn-topbar-menu');
+            var actionBtn = doc.querySelector('.btn-topbar-action');
+            var accountDropdown = doc.querySelector('.topbar-account-dropdown');
+            var menuDisplay = menuBtn ? frame.contentWindow.getComputedStyle(menuBtn).display : 'none';
+            var scrollW = doc.documentElement.scrollWidth;
+            var clientW = doc.documentElement.clientWidth;
+
+            var result = {{
+                width: {width},
+                is_mobile: {str(is_mobile).lower()},
+                has_topbar: !!topbar,
+                topbar_height: topbar ? topbar.getBoundingClientRect().height : 0,
+                has_title: !!pageTitle,
+                has_action_btn: !!actionBtn,
+                has_account_dropdown: !!accountDropdown,
+                menu_btn_visible: menuDisplay !== 'none',
+                zero_overflow: scrollW <= clientW + 2,
+                scrollW: scrollW,
+                clientW: clientW
+            }};
+            fetch('/__test_done__', {{ method: 'POST', body: JSON.stringify(result) }});
+        }} catch(err) {{
+            fetch('/__test_done__', {{ method: 'POST', body: JSON.stringify({{error: err.toString()}}) }});
+        }}
+    }}, 400);
+}};
+</script>
+</body>
+</html>"""
+                runner_path = os.path.join(temp_dir, f"runner_{width}.html")
+                with open(runner_path, "w", encoding="utf-8") as rf:
+                    rf.write(runner_html)
+
+                proc = subprocess.Popen(
+                    [
+                        browser_bin,
+                        "--headless=new",
+                        "--disable-gpu",
+                        "--no-first-run",
+                        "--no-default-browser-check",
+                        f"--window-size={width},{height}",
+                        f"http://127.0.0.1:{port}/runner_{width}.html",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                try:
+                    done_event.wait(timeout=10)
+                finally:
+                    proc.kill()
+                    proc.wait()
+
+                self.assertIn("report", results_holder, f"Headless browser timed out at {width}x{height}")
+                data = results_holder["report"]
+                self.assertNotIn("error", data, f"Browser inspection error: {data.get('error')}")
+
+                self.assertTrue(data["has_topbar"])
+                self.assertTrue(data["has_title"])
+                self.assertTrue(data["has_action_btn"])
+                self.assertTrue(data["has_account_dropdown"])
+                self.assertTrue(data["zero_overflow"], f"Horizontal overflow at {width}px: scrollW={data['scrollW']}, clientW={data['clientW']}")
+                if is_mobile:
+                    self.assertTrue(data["menu_btn_visible"], "Mobile sidebar toggle should be visible on 375px")
+                else:
+                    self.assertFalse(data["menu_btn_visible"], "Mobile sidebar toggle should be hidden on 1280px")
+
+            httpd.shutdown()
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+class DashboardRecentTransactionsConversionAndMonthSelectorTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="recent_tx_user",
+            password="Str0ng!Password#2026",
+        )
+        self.usd, _ = Currency.objects.get_or_create(
+            code="USD",
+            defaults={"name": "US Dollar", "decimal_places": 2, "is_active": True},
+        )
+        self.eur, _ = Currency.objects.get_or_create(
+            code="EUR",
+            defaults={"name": "Euro", "decimal_places": 2, "is_active": True},
+        )
+        self.twd, _ = Currency.objects.get_or_create(
+            code="TWD",
+            defaults={"name": "New Taiwan Dollar", "decimal_places": 2, "is_active": True},
+        )
+        self.dashboard_url = reverse("budgets:dashboard")
+
+    def test_month_selector_single_arrow_and_accessibility(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(self.dashboard_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Duplicate custom chevron SVG removed
+        self.assertNotIn("period-chevron-icon", html)
+
+        # Single select remains with accessible attributes and submission binding
+        self.assertIn('class="period-select"', html)
+        self.assertIn('name="period"', html)
+        self.assertIn('aria-label="Select month"', html)
+
+    def test_recent_transactions_foreign_currency_conversion_and_signs(self):
+        from .exchange_rates import record_manual_exchange_rate
+        from .services import create_category, create_transaction_entry
+
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        w_eur = Wallet.objects.create(
+            owner=self.user,
+            name="Euro Wallet",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=self.eur,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 10, 1),
+        )
+        cat_food = create_category(user=self.user, name="Food", kind="both")
+
+        # 1 EUR = 1.10 USD
+        record_manual_exchange_rate(
+            user=self.user,
+            from_currency=self.eur,
+            to_currency=self.usd,
+            rate=Decimal("1.10000000"),
+            scope="personal",
+        )
+
+        # Expense: 50.00 EUR -> Converted: 55.00 USD
+        tx_expense = create_transaction_entry(
+            user=self.user,
+            wallet=w_eur,
+            transaction_type="expense",
+            amount=Decimal("50.00"),
+            currency=self.eur,
+            transaction_date=date(2026, 10, 15),
+            category=cat_food,
+            description="Paris Lunch",
+        )
+        # Income: 100.00 EUR -> Converted: 110.00 USD
+        tx_income = create_transaction_entry(
+            user=self.user,
+            wallet=w_eur,
+            transaction_type="income",
+            amount=Decimal("100.00"),
+            currency=self.eur,
+            transaction_date=date(2026, 10, 16),
+            category=cat_food,
+            description="Consulting EUR",
+        )
+
+        self.client.force_login(self.user)
+        resp = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Converted expense: primary -55.00 USD, secondary Orig: -50.00 EUR
+        self.assertIn("-55.00 USD", html)
+        self.assertIn("Orig: -50.00 EUR", html)
+
+        # Converted income: primary +110.00 USD, secondary Orig: +100.00 EUR
+        self.assertIn("+110.00 USD", html)
+        self.assertIn("Orig: +100.00 EUR", html)
+
+        # Verify original database records and snapshots untouched
+        tx_expense.refresh_from_db()
+        tx_income.refresh_from_db()
+        self.assertEqual(tx_expense.amount, Decimal("50.000"))
+        self.assertEqual(tx_expense.currency, self.eur)
+        self.assertEqual(tx_income.amount, Decimal("100.000"))
+        self.assertEqual(tx_income.currency, self.eur)
+
+    def test_recent_transactions_same_currency_no_secondary_line(self):
+        from .services import create_category, create_transaction_entry
+
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        w_usd = Wallet.objects.create(
+            owner=self.user,
+            name="USD Wallet",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=self.usd,
+            opening_balance=Decimal("2000.00"),
+            opening_balance_date=date(2026, 10, 1),
+        )
+        cat_usd = create_category(user=self.user, name="Local", kind="expense")
+
+        create_transaction_entry(
+            user=self.user,
+            wallet=w_usd,
+            transaction_type="expense",
+            amount=Decimal("250.00"),
+            currency=self.usd,
+            transaction_date=date(2026, 10, 10),
+            category=cat_usd,
+            description="Office Supplies",
+        )
+
+        self.client.force_login(self.user)
+        resp = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        html = resp.content.decode("utf-8")
+
+        # Primary amount shown
+        self.assertIn("-250.00 USD", html)
+        # No secondary line for this same-currency transaction
+        recent_section = html.split('id="panel-transactions-title"')[1].split("</section>")[0]
+        self.assertNotIn("Orig:", recent_section)
+        self.assertNotIn("Conversion unavailable", recent_section)
+
+    def test_recent_transactions_missing_rate_and_stale_rate(self):
+        from django.utils import timezone
+        from .exchange_rates import record_manual_exchange_rate
+        from .models import ExchangeRate
+        from .services import create_category, create_transaction_entry
+
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        w_twd = Wallet.objects.create(
+            owner=self.user,
+            name="TWD Wallet",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=self.twd,
+            opening_balance=Decimal("10000.00"),
+            opening_balance_date=date(2026, 10, 1),
+        )
+        cat_twd = create_category(user=self.user, name="Trip", kind="expense")
+
+        create_transaction_entry(
+            user=self.user,
+            wallet=w_twd,
+            transaction_type="expense",
+            amount=Decimal("1500.00"),
+            currency=self.twd,
+            transaction_date=date(2026, 10, 12),
+            category=cat_twd,
+            description="Night Market",
+        )
+
+        self.client.force_login(self.user)
+
+        # 1. Missing rate: shows original currency with "Conversion unavailable"
+        resp_missing = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        html_missing = resp_missing.content.decode("utf-8")
+        self.assertIn("-1,500.00 TWD", html_missing)
+        self.assertIn("Conversion unavailable", html_missing)
+        self.assertNotIn("-1,500.00 USD", html_missing)
+
+        # 2. Add stale rate: 1 TWD = 0.03125 USD with an old timestamp (> 24h)
+        stale_time = timezone.now() - timezone.timedelta(hours=48)
+        rate_rec = record_manual_exchange_rate(
+            user=self.user,
+            from_currency=self.twd,
+            to_currency=self.usd,
+            rate=Decimal("0.03125000"),
+            scope="personal",
+        )
+        ExchangeRate.objects.filter(id=rate_rec.id).update(rate_timestamp=stale_time)
+
+        resp_stale = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        html_stale = resp_stale.content.decode("utf-8")
+        # 1500 * 0.03125 = 46.88 USD
+        self.assertIn("-46.88 USD", html_stale)
+        self.assertIn("Orig: -1,500.00 TWD", html_stale)
+        self.assertIn("Stale rate", html_stale)
+
+    def test_recent_transactions_workspace_authorization(self):
+        from .exchange_rates import record_manual_exchange_rate
+        from .services import create_category, create_transaction_entry
+
+        bob = User.objects.create_user(username="bob_tx_auth", password="Str0ng!Password#2026")
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        UserPreference.objects.create(user=bob, personal_base_currency=self.usd)
+
+        w_eur = Wallet.objects.create(
+            owner=self.user,
+            name="User EUR Wallet",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=self.eur,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 10, 1),
+        )
+        cat = create_category(user=self.user, name="Shopping", kind="expense")
+        create_transaction_entry(
+            user=self.user,
+            wallet=w_eur,
+            transaction_type="expense",
+            amount=Decimal("80.00"),
+            currency=self.eur,
+            transaction_date=date(2026, 10, 20),
+            category=cat,
+            description="Coat",
+        )
+
+        # Bob creates a personal rate 1 EUR = 2.00 USD
+        record_manual_exchange_rate(
+            user=bob,
+            from_currency=self.eur,
+            to_currency=self.usd,
+            rate=Decimal("2.00000000"),
+            scope="personal",
+        )
+
+        self.client.force_login(self.user)
+        resp = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        html = resp.content.decode("utf-8")
+
+        # self.user must NOT use Bob's personal rate: 80 * 2.00 = 160.00 USD must not appear
+        self.assertNotIn("-160.00 USD", html)
+        self.assertIn("-80.00 EUR", html)
+        self.assertIn("Conversion unavailable", html)
+
+    def test_recent_transactions_transfer_signs_and_comma_grouping(self):
+        from .exchange_rates import record_manual_exchange_rate
+        from .services import create_transfer_entry
+
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.usd)
+        w_usd = Wallet.objects.create(
+            owner=self.user,
+            name="USD Main",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("10000.00"),
+            opening_balance_date=date(2026, 10, 1),
+        )
+        w_eur = Wallet.objects.create(
+            owner=self.user,
+            name="EUR Main",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.eur,
+            opening_balance=Decimal("10000.00"),
+            opening_balance_date=date(2026, 10, 1),
+        )
+
+        record_manual_exchange_rate(
+            user=self.user,
+            from_currency=self.eur,
+            to_currency=self.usd,
+            rate=Decimal("1.10000000"),
+            scope="personal",
+        )
+
+        # Transfer 1,500.00 EUR from w_eur to w_usd (destination 1,650.00 USD)
+        create_transfer_entry(
+            user=self.user,
+            source_wallet=w_eur,
+            destination_wallet=w_usd,
+            amount_sent=Decimal("1500.00"),
+            amount_received=Decimal("1650.00"),
+            transfer_date=date(2026, 10, 22),
+            notes="Inter-account funding",
+        )
+
+        self.client.force_login(self.user)
+        resp = self.client.get(f"{self.dashboard_url}?period=2026-10")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Destination leg in USD: +1,650.00 USD (same currency)
+        self.assertIn("+1,650.00 USD", html)
+        # Source leg in EUR converted: -1,650.00 USD, Orig: -1,500.00 EUR
+        self.assertIn("-1,650.00 USD", html)
+        self.assertIn("Orig: -1,500.00 EUR", html)
 
 
 

@@ -1,17 +1,18 @@
 const CACHE_PREFIX = "budget-tracker-shell-";
-const CACHE_NAME = "budget-tracker-shell-v8";
+const CACHE_NAME = "budget-tracker-shell-v11";
 const REQUIRED_PRECACHE_URLS = [
     "/static/vendor/bootstrap/bootstrap.min.css",
     "/static/vendor/bootstrap/bootstrap.bundle.min.js",
     "/static/css/app.css",
-    "/static/css/app.css?v=v8",
+    "/static/css/app.css?v=v11",
     "/static/css/dashboard.css",
-    "/static/css/dashboard.css?v=v8",
+    "/static/css/dashboard.css?v=v11",
     "/static/js/app.js",
-    "/static/js/app.js?v=v8",
+    "/static/js/app.js?v=v11",
     "/static/js/offline.js",
-    "/static/js/offline.js?v=v8",
+    "/static/js/offline.js?v=v11",
     "/static/js/pages/transaction.js",
+    "/static/js/pages/transaction.js?v=v11",
     "/static/manifest.webmanifest",
 ];
 const PRECACHE_URLS = REQUIRED_PRECACHE_URLS;

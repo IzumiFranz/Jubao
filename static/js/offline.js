@@ -747,6 +747,12 @@
         if (typeof rawValue !== "string") return false;
         var trimmed = rawValue.trim();
         if (!trimmed) return false;
+        if (trimmed.indexOf(",") !== -1) {
+            if (!/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(trimmed)) {
+                return false;
+            }
+            trimmed = trimmed.replace(/,/g, "");
+        }
         var places = typeof decimalPlaces === "number" && !isNaN(decimalPlaces) ? decimalPlaces : 2;
         var pattern =
             places === 0
@@ -3136,7 +3142,9 @@
             payload: {
                 transaction_type: (formElement.querySelector('[name="transaction_type"]') || {})
                     .value,
-                amount: ((formElement.querySelector('[name="amount"]') || {}).value || "").trim(),
+                amount: ((formElement.querySelector('[name="amount"]') || {}).value || "")
+                    .trim()
+                    .replace(/,/g, ""),
                 wallet_id: (walletSelect || {}).value,
                 category_id: (formElement.querySelector('[name="category"]') || {}).value || null,
                 transaction_date: (formElement.querySelector('[name="transaction_date"]') || {})
@@ -3761,6 +3769,29 @@
             });
         }
 
+        var offlineAmountInput = document.getElementById("offline-tx-amount");
+        if (offlineAmountInput) {
+            offlineAmountInput.addEventListener("blur", function () {
+                var val = offlineAmountInput.value.trim();
+                if (!val) return;
+                var opt =
+                    walletSelect &&
+                    walletSelect.selectedOptions &&
+                    walletSelect.selectedOptions.length
+                        ? walletSelect.selectedOptions[0]
+                        : null;
+                var places = opt ? parseInt(opt.getAttribute("data-decimal-places") || "2", 10) : 2;
+                if (!isValidCurrencyAmountString(val, places)) return;
+                var uncomma = val.replace(/,/g, "");
+                var parts = uncomma.split(".");
+                var intPart = parts[0];
+                var fracPart = parts.length > 1 ? parts[1] : null;
+                var cleanInt = intPart.replace(/^0+/, "") || "0";
+                var groupedInt = cleanInt.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                offlineAmountInput.value = fracPart !== null ? groupedInt + "." + fracPart : groupedInt;
+            });
+        }
+
         if (loadMoreBtn) {
             loadMoreBtn.addEventListener("click", function () {
                 if (tabInvalidated) return;
@@ -3884,7 +3915,7 @@
                         transaction_type: (
                             document.getElementById("offline-tx-type") || {}
                         ).value || "expense",
-                        amount: amountRaw,
+                        amount: amountRaw.replace(/,/g, ""),
                         wallet_id: walletId,
                         category_id:
                             (document.getElementById("offline-tx-category") || {}).value || null,

@@ -3,255 +3,326 @@
 
 {% block title %}Transactions | Budget Tracker{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=v11">
+<style>
+/* Scoped Transactions Page Stationery Styles */
+.transactions-stationery {
+    background-color: var(--stationery-bg, #F8F7F4);
+    color: var(--stationery-text-main, #132238);
+}
+.transactions-stationery .stationery-panel {
+    background-color: var(--stationery-card-bg, #FFFFFF);
+    border: 1px solid var(--stationery-border, #E5E3DE);
+    border-radius: var(--stationery-radius, 8px);
+    box-shadow: 0 1px 3px rgba(19, 34, 56, 0.04);
+}
+.transactions-stationery .transactions-table thead th {
+    background-color: #FAF9F6;
+    color: var(--stationery-text-label, #7A8599);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.65rem 0.75rem;
+    border-top: none;
+    border-bottom: 1px solid var(--stationery-border, #E5E3DE);
+}
+.transactions-stationery .transactions-table tbody td {
+    padding: 0.75rem;
+    border-top: none;
+    border-bottom: 1px solid var(--stationery-border-light, #ECEAE5);
+    color: var(--stationery-text-main, #132238);
+    vertical-align: middle;
+}
+.transactions-stationery .btn-primary {
+    background-color: var(--stationery-accent-balance, #1E3A5F);
+    border-color: var(--stationery-accent-balance, #1E3A5F);
+}
+.transactions-stationery .btn-primary:hover,
+.transactions-stationery .btn-primary:focus {
+    background-color: #152943;
+    border-color: #152943;
+}
+.transactions-stationery .btn-outline-primary {
+    color: var(--stationery-accent-balance, #1E3A5F);
+    border-color: var(--stationery-accent-balance, #1E3A5F);
+}
+.transactions-stationery .btn-outline-primary:hover,
+.transactions-stationery .btn-outline-primary:focus {
+    background-color: var(--stationery-accent-balance, #1E3A5F);
+    border-color: var(--stationery-accent-balance, #1E3A5F);
+    color: #FFFFFF;
+}
+.transactions-table .text-nowrap {
+    white-space: nowrap;
+}
+.filter-chevron {
+    transition: transform 0.2s ease;
+}
+#btn-toggle-filters[aria-expanded="true"] .filter-chevron {
+    transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+    .filter-chevron {
+        transition: none;
+    }
+}
+</style>
+<noscript>
+<style>
+#transaction-filter-collapse {
+    display: block !important;
+}
+#btn-toggle-filters {
+    display: none !important;
+}
+</style>
+</noscript>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
-    <p class="text-secondary mb-0">
-        Record manual income, expenses, and wallet transfers. Each transaction keeps its original amount and wallet currency alongside its conversion snapshot.
-    </p>
-    <div class="d-flex flex-wrap gap-2">
-        <a
-            href="{% url 'budgets:export_transactions' %}?format=csv&amp;{{ request.GET.urlencode }}"
-            class="btn btn-outline-secondary btn-sm"
-        >
-            Export CSV
-        </a>
-        <a
-            href="{% url 'budgets:export_transactions' %}?format=json&amp;{{ request.GET.urlencode }}"
-            class="btn btn-outline-secondary btn-sm"
-        >
-            Export JSON
-        </a>
-        <button
-            type="button"
-            class="btn btn-primary btn-sm"
-            data-bs-toggle="modal"
-            data-bs-target="#transactionModal"
-            id="btn-open-new-transaction"
-        >
-            Add transaction
-        </button>
-    </div>
-</div>
-
-<div class="row g-3 mb-4">
-    <div class="col-12 col-xl-7">
-        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="transfer-entry-heading">
-            <h2 id="transfer-entry-heading" class="h6 fw-semibold mb-2">Record wallet transfer</h2>
-            <p class="small text-secondary mb-3">
-                Move funds between two distinct personal wallets or two shared wallets in the same shared space. Transfer legs adjust wallet balances without counting as income or expense. Optional fees are recorded as a linked expense.
-            </p>
-            <form method="post" action="{% url 'budgets:transactions' %}" novalidate>
-                {% csrf_token %}
-                <input type="hidden" name="action" value="create_transfer">
-                <div class="row g-2">
-                    <div class="col-12 col-sm-6">
-                        <label class="form-label small fw-medium">From wallet</label>
-                        {{ transfer_form.source_wallet }}
-                    </div>
-                    <div class="col-12 col-sm-6">
-                        <label class="form-label small fw-medium">To wallet</label>
-                        {{ transfer_form.destination_wallet }}
-                    </div>
-                    <div class="col-12 col-sm-4">
-                        <label class="form-label small fw-medium">Amount sent</label>
-                        {{ transfer_form.amount_sent }}
-                    </div>
-                    <div class="col-12 col-sm-4">
-                        <label class="form-label small fw-medium">Amount received (if cross-currency)</label>
-                        {{ transfer_form.amount_received }}
-                    </div>
-                    <div class="col-12 col-sm-4">
-                        <label class="form-label small fw-medium">Explicit rate (optional)</label>
-                        {{ transfer_form.manual_rate }}
-                    </div>
-                    <div class="col-12 col-sm-4">
-                        <label class="form-label small fw-medium">Fee (optional)</label>
-                        {{ transfer_form.fee_amount }}
-                    </div>
-                    <div class="col-12 col-sm-4">
-                        <label class="form-label small fw-medium">Date</label>
-                        {{ transfer_form.transfer_date }}
-                    </div>
-                    <div class="col-12 col-sm-4">
-                        <label class="form-label small fw-medium">Notes</label>
-                        {{ transfer_form.notes }}
-                    </div>
-                </div>
-                <div class="d-flex justify-content-end mt-3">
-                    <button type="submit" class="btn btn-outline-primary btn-sm">
-                        Record transfer
-                    </button>
-                </div>
-            </form>
-
-            {% if recent_transfers %}
-            <hr class="my-3">
-            <h3 class="h6 fw-semibold mb-2">Recent transfers</h3>
-            <div class="vstack gap-2">
-                {% for tr in recent_transfers %}
-                <div class="border rounded p-2">
-                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-                        <div class="small">
-                            <span class="fw-semibold">{{ tr.transfer_date|date:"Y-m-d" }}</span>:
-                            {{ tr.source_wallet.name }} ({{ tr.formatted_amount_sent }} {{ tr.source_currency.code }})
-                            &rarr;
-                            {{ tr.destination_wallet.name }} ({{ tr.formatted_amount_received }} {{ tr.destination_currency.code }})
-                            {% if tr.fee_amount %}
-                            <span class="text-secondary">· Fee: {{ tr.formatted_fee_amount }} {{ tr.source_currency.code }}</span>
-                            {% endif %}
-                            {% if tr.notes %}
-                            <span class="text-secondary">· {{ tr.notes }}</span>
-                            {% endif %}
-                        </div>
-                        {% if tr.created_by_id == request.user.id %}
-                        <div class="d-inline-flex gap-1">
-                            <button
-                                class="btn btn-outline-secondary btn-sm py-0 px-2"
-                                type="button"
-                                data-bs-toggle="collapse"
-                                data-bs-target="#edit-transfer-{{ tr.id }}"
-                                aria-expanded="false"
-                                aria-controls="edit-transfer-{{ tr.id }}"
-                            >
-                                Edit transfer
-                            </button>
-                            <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="delete_transfer">
-                                <input type="hidden" name="transfer_id" value="{{ tr.id }}">
-                                <input type="hidden" name="expected_revision" value="{{ tr.revision }}">
-                                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">
-                                    Delete
-                                </button>
-                            </form>
-                        </div>
-                        {% endif %}
-                    </div>
-
-                    {% if tr.created_by_id == request.user.id %}
-                    <div class="collapse mt-2 pt-2 border-top" id="edit-transfer-{{ tr.id }}">
-                        <form method="post" action="{% url 'budgets:transactions' %}" novalidate>
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="update_transfer">
-                            <input type="hidden" name="transfer_id" value="{{ tr.id }}">
-                            <input type="hidden" name="expected_revision" value="{{ tr.revision }}">
-                            <div class="row g-2">
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small fw-medium mb-1">From wallet</label>
-                                    <select name="source_wallet" class="form-select form-select-sm" required>
-                                        {% for w in all_accessible_wallets %}
-                                        <option value="{{ w.id }}" {% if w.id == tr.source_wallet_id %}selected{% endif %}>
-                                            {{ w.name }} ({{ w.currency.code }})
-                                        </option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small fw-medium mb-1">To wallet</label>
-                                    <select name="destination_wallet" class="form-select form-select-sm" required>
-                                        {% for w in all_accessible_wallets %}
-                                        <option value="{{ w.id }}" {% if w.id == tr.destination_wallet_id %}selected{% endif %}>
-                                            {{ w.name }} ({{ w.currency.code }})
-                                        </option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="col-12 col-sm-4">
-                                    <label class="form-label small fw-medium mb-1">Amount sent</label>
-                                    <input
-                                        type="text"
-                                        name="amount_sent"
-                                        value="{{ tr.plain_amount_sent }}"
-                                        inputmode="decimal"
-                                        class="form-control form-control-sm"
-                                        required
-                                    >
-                                </div>
-                                <div class="col-12 col-sm-4">
-                                    <label class="form-label small fw-medium mb-1">Amount received</label>
-                                    <input
-                                        type="text"
-                                        name="amount_received"
-                                        value="{{ tr.plain_amount_received }}"
-                                        inputmode="decimal"
-                                        class="form-control form-control-sm"
-                                    >
-                                </div>
-                                <div class="col-12 col-sm-4">
-                                    <label class="form-label small fw-medium mb-1">Explicit rate</label>
-                                    <input
-                                        type="text"
-                                        name="manual_rate"
-                                        value="{{ tr.exchange_rate|default:'' }}"
-                                        inputmode="decimal"
-                                        class="form-control form-control-sm"
-                                    >
-                                </div>
-                                <div class="col-12 col-sm-4">
-                                    <label class="form-label small fw-medium mb-1">Fee (optional)</label>
-                                    <input
-                                        type="text"
-                                        name="fee_amount"
-                                        value="{{ tr.plain_fee_amount|default:'' }}"
-                                        inputmode="decimal"
-                                        class="form-control form-control-sm"
-                                    >
-                                </div>
-                                <div class="col-12 col-sm-4">
-                                    <label class="form-label small fw-medium mb-1">Date</label>
-                                    <input
-                                        type="date"
-                                        name="transfer_date"
-                                        value="{{ tr.transfer_date|date:'Y-m-d' }}"
-                                        class="form-control form-control-sm"
-                                        required
-                                    >
-                                </div>
-                                <div class="col-12 col-sm-4">
-                                    <label class="form-label small fw-medium mb-1">Notes</label>
-                                    <input
-                                        type="text"
-                                        name="notes"
-                                        value="{{ tr.notes }}"
-                                        class="form-control form-control-sm"
-                                    >
-                                </div>
-                                <div class="col-12 d-flex justify-content-end mt-2">
-                                    <button type="submit" class="btn btn-primary btn-sm">
-                                        Save transfer changes
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                    {% endif %}
-                </div>
-                {% endfor %}
+<div class="transactions-stationery dashboard-stationery pb-4">
+    <!-- Compact toolbar and filters above transaction list -->
+    <section class="stationery-panel p-3 p-md-4 mb-4" aria-labelledby="transactions-toolbar-heading">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 pb-3 border-bottom">
+            <div>
+                <h2 id="transactions-toolbar-heading" class="h6 fw-semibold mb-1">Filter transactions</h2>
+                <p class="small text-secondary mb-0">
+                    Filter and review manual income, expenses, and wallet transfers.
+                    <span class="badge text-bg-light border text-secondary fw-normal ms-1">
+                        {{ total_count }} matching record{{ total_count|pluralize }}
+                    </span>
+                </p>
             </div>
-            {% endif %}
-        </section>
-    </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#transaction-filter-collapse"
+                    aria-expanded="{% if has_active_filters %}true{% else %}false{% endif %}"
+                    aria-controls="transaction-filter-collapse"
+                    id="btn-toggle-filters"
+                >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                    <span>Filters</span>
+                    {% if has_active_filters %}
+                    <span class="badge text-bg-primary ms-1" id="active-filters-indicator">Active filters</span>
+                    {% endif %}
+                    <svg class="filter-chevron ms-1" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+                <a
+                    href="{% url 'budgets:export_transactions' %}?format=csv&amp;{{ request.GET.urlencode }}"
+                    class="btn btn-outline-secondary btn-sm"
+                    id="btn-export-csv"
+                >
+                    Export CSV
+                </a>
+                <a
+                    href="{% url 'budgets:export_transactions' %}?format=json&amp;{{ request.GET.urlencode }}"
+                    class="btn btn-outline-secondary btn-sm"
+                    id="btn-export-json"
+                >
+                    Export JSON
+                </a>
+                <button
+                    type="button"
+                    class="btn btn-outline-primary btn-sm"
+                    data-bs-toggle="modal"
+                    data-bs-target="#transferModal"
+                    id="btn-record-transfer"
+                >
+                    Record transfer
+                </button>
+                <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#manageCategoriesCollapse"
+                    aria-expanded="{% if category_form.errors %}true{% else %}false{% endif %}"
+                    aria-controls="manageCategoriesCollapse"
+                    id="btn-manage-categories"
+                >
+                    Manage categories
+                </button>
+            </div>
+        </div>
 
-    <div class="col-12 col-xl-5">
-        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="categories-manage-heading">
-            <h2 id="categories-manage-heading" class="h6 fw-semibold mb-2">Categories</h2>
+        <div class="collapse {% if has_active_filters %}show{% endif %}" id="transaction-filter-collapse">
+            <form id="transaction-filter-form" method="get" action="{% url 'budgets:transactions' %}" class="pt-2">
+            <div class="row g-3">
+                <div class="col-12 col-md-6 col-xl-3">
+                    <label for="filter-search-notes" class="form-label small fw-medium">Search</label>
+                    <input
+                        type="search"
+                        id="filter-search-notes"
+                        name="q"
+                        value="{{ filters.q }}"
+                        class="form-control form-control-sm"
+                        placeholder="Description, notes, category, wallet"
+                    >
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-3 col-xl-2">
+                    <label for="filter-start-date" class="form-label small fw-medium">Start date</label>
+                    <input
+                        type="date"
+                        id="filter-start-date"
+                        name="start_date"
+                        value="{{ filters.start_date }}"
+                        class="form-control form-control-sm"
+                    >
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-3 col-xl-2">
+                    <label for="filter-end-date" class="form-label small fw-medium">End date</label>
+                    <input
+                        type="date"
+                        id="filter-end-date"
+                        name="end_date"
+                        value="{{ filters.end_date }}"
+                        class="form-control form-control-sm"
+                    >
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-4 col-xl-2">
+                    <label for="filter-type" class="form-label small fw-medium">Type</label>
+                    <select id="filter-type" name="type" class="form-select form-select-sm">
+                        <option value="">All types</option>
+                        <option value="expense" {% if filters.type == 'expense' %}selected{% endif %}>Expense</option>
+                        <option value="income" {% if filters.type == 'income' %}selected{% endif %}>Income</option>
+                        <option value="transfer" {% if filters.type == 'transfer' %}selected{% endif %}>Transfers</option>
+                    </select>
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-4 col-xl-3">
+                    <label for="filter-scope" class="form-label small fw-medium">Personal / Shared scope</label>
+                    <select id="filter-scope" name="scope" class="form-select form-select-sm">
+                        <option value="">All scopes</option>
+                        <option value="personal" {% if filters.scope == 'personal' %}selected{% endif %}>Personal</option>
+                        <option value="shared" {% if filters.scope == 'shared' %}selected{% endif %}>Shared</option>
+                    </select>
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-4 col-xl-4">
+                    <label for="filter-category" class="form-label small fw-medium">Category</label>
+                    <select id="filter-category" name="category" class="form-select form-select-sm">
+                        <option value="">All categories</option>
+                        <option value="uncategorized" {% if filters.category == 'uncategorized' %}selected{% endif %}>Uncategorized</option>
+                        {% for cat in all_categories %}
+                        <option value="{{ cat.id }}" {% if filters.category == cat.id|stringformat:"s" %}selected{% endif %}>
+                            {{ cat.name }} ({{ cat.get_scope_display }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-4 col-xl-4">
+                    <label for="filter-wallet" class="form-label small fw-medium">Wallet</label>
+                    <select id="filter-wallet" name="wallet" class="form-select form-select-sm">
+                        <option value="">All wallets</option>
+                        {% for w in all_accessible_wallets %}
+                        <option value="{{ w.id }}" {% if filters.wallet == w.id|stringformat:"s" %}selected{% endif %}>
+                            {{ w.name }} ({{ w.currency.code }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-4 col-xl-4">
+                    <label for="filter-currency" class="form-label small fw-medium">Original currency</label>
+                    <select id="filter-currency" name="currency" class="form-select form-select-sm">
+                        <option value="">All currencies</option>
+                        {% for c in currencies %}
+                        <option value="{{ c.code }}" {% if filters.currency == c.code %}selected{% endif %}>
+                            {{ c.code }} — {{ c.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-4 col-xl-4">
+                    <label for="filter-display-currency" class="form-label small fw-medium">Display currency</label>
+                    <select id="filter-display-currency" name="display_currency" class="form-select form-select-sm">
+                        {% for c in currencies %}
+                        <option value="{{ c.code }}" {% if display_currency and display_currency.code == c.code %}selected{% elif not display_currency and filters.display_currency == c.code %}selected{% endif %}>
+                            {{ c.code }} — {{ c.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center justify-content-end gap-2 mt-3 pt-2 border-top">
+                <a href="{% url 'budgets:transactions' %}" class="btn btn-outline-secondary btn-sm" id="btn-reset-filters">
+                    Clear filters
+                </a>
+                <button type="submit" class="btn btn-primary btn-sm" id="btn-apply-filters">
+                    Apply filters
+                </button>
+            </div>
+        </form>
+        </div>
+    </section>
+
+    <!-- Collapsed Manage categories section -->
+    <div class="collapse mb-4 {% if category_form.errors %}show{% endif %}" id="manageCategoriesCollapse">
+        <section class="stationery-panel p-3 p-md-4" aria-labelledby="categories-manage-heading">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <h2 id="categories-manage-heading" class="h6 fw-semibold mb-0">Manage categories</h2>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#manageCategoriesCollapse"
+                    aria-label="Close categories section"
+                ></button>
+            </div>
             <p class="small text-secondary mb-3">
                 Create or archive personal and shared categories for organizing transactions and monthly budgets.
             </p>
+
+            {% if category_form.errors %}
+            <div class="alert alert-danger py-2 px-3 small mb-3" role="alert">
+                {% for field in category_form %}
+                    {% for error in field.errors %}
+                        <div><strong>{{ field.label }}:</strong> {{ error }}</div>
+                    {% endfor %}
+                {% endfor %}
+                {% for error in category_form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             <form method="post" action="{% url 'budgets:transactions' %}" class="row g-2 align-items-end mb-3" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="action" value="create_category">
                 <div class="col-12 col-sm-5">
-                    <label class="form-label small fw-medium">Name</label>
+                    <label for="{{ category_form.name.id_for_label }}" class="form-label small fw-medium">Name</label>
                     {{ category_form.name }}
+                    {% for error in category_form.name.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
                 </div>
                 <div class="col-6 col-sm-4">
-                    <label class="form-label small fw-medium">Type</label>
+                    <label for="{{ category_form.kind.id_for_label }}" class="form-label small fw-medium">Type</label>
                     {{ category_form.kind }}
+                    {% for error in category_form.kind.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
                 </div>
                 <div class="col-6 col-sm-3">
-                    <label class="form-label small fw-medium">Scope</label>
+                    <label for="{{ category_form.scope.id_for_label }}" class="form-label small fw-medium">Scope</label>
                     {{ category_form.scope }}
+                    {% for error in category_form.scope.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
                 </div>
                 <div class="col-12 d-flex justify-content-end mt-2">
                     <button type="submit" class="btn btn-outline-primary btn-sm">Add category</button>
@@ -259,7 +330,7 @@
             </form>
 
             {% if all_categories %}
-            <div class="table-responsive" style="max-height: 170px;">
+            <div class="table-responsive" style="max-height: 200px;">
                 <table class="table table-sm align-middle mb-0">
                     <thead class="table-light">
                         <tr>
@@ -297,368 +368,522 @@
             {% endif %}
         </section>
     </div>
-</div>
 
-<section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="transactions-filters-heading">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-        <h2 id="transactions-filters-heading" class="h6 fw-semibold mb-0">Filter transactions</h2>
-        <span class="small text-secondary">{{ total_count }} matching record{{ total_count|pluralize }}</span>
-    </div>
-
-    <form id="transaction-filter-form" method="get" action="{% url 'budgets:transactions' %}">
-        <div class="row g-3">
-            <div class="col-12 col-md-6 col-xl-3">
-                <label for="filter-search-notes" class="form-label small fw-medium">Search</label>
-                <input
-                    type="search"
-                    id="filter-search-notes"
-                    name="q"
-                    value="{{ filters.q }}"
-                    class="form-control form-control-sm"
-                    placeholder="Description, notes, category, wallet"
-                >
-            </div>
-
-            <div class="col-12 col-sm-6 col-md-3 col-xl-2">
-                <label for="filter-start-date" class="form-label small fw-medium">Start date</label>
-                <input
-                    type="date"
-                    id="filter-start-date"
-                    name="start_date"
-                    value="{{ filters.start_date }}"
-                    class="form-control form-control-sm"
-                >
-            </div>
-
-            <div class="col-12 col-sm-6 col-md-3 col-xl-2">
-                <label for="filter-end-date" class="form-label small fw-medium">End date</label>
-                <input
-                    type="date"
-                    id="filter-end-date"
-                    name="end_date"
-                    value="{{ filters.end_date }}"
-                    class="form-control form-control-sm"
-                >
-            </div>
-
-            <div class="col-12 col-sm-6 col-md-4 col-xl-2">
-                <label for="filter-type" class="form-label small fw-medium">Type</label>
-                <select id="filter-type" name="type" class="form-select form-select-sm">
-                    <option value="">All types</option>
-                    <option value="expense" {% if filters.type == 'expense' %}selected{% endif %}>Expense</option>
-                    <option value="income" {% if filters.type == 'income' %}selected{% endif %}>Income</option>
-                    <option value="transfer" {% if filters.type == 'transfer' %}selected{% endif %}>Transfers</option>
-                </select>
-            </div>
-
-            <div class="col-12 col-sm-6 col-md-4 col-xl-3">
-                <label for="filter-scope" class="form-label small fw-medium">Personal / Shared scope</label>
-                <select id="filter-scope" name="scope" class="form-select form-select-sm">
-                    <option value="">All scopes</option>
-                    <option value="personal" {% if filters.scope == 'personal' %}selected{% endif %}>Personal</option>
-                    <option value="shared" {% if filters.scope == 'shared' %}selected{% endif %}>Shared</option>
-                </select>
-            </div>
-
-            <div class="col-12 col-sm-6 col-md-4 col-xl-4">
-                <label for="filter-category" class="form-label small fw-medium">Category</label>
-                <select id="filter-category" name="category" class="form-select form-select-sm">
-                    <option value="">All categories</option>
-                    <option value="uncategorized" {% if filters.category == 'uncategorized' %}selected{% endif %}>Uncategorized</option>
-                    {% for cat in all_categories %}
-                    <option value="{{ cat.id }}" {% if filters.category == cat.id|stringformat:"s" %}selected{% endif %}>
-                        {{ cat.name }} ({{ cat.get_scope_display }})
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="col-12 col-sm-6 col-md-4 col-xl-4">
-                <label for="filter-wallet" class="form-label small fw-medium">Wallet</label>
-                <select id="filter-wallet" name="wallet" class="form-select form-select-sm">
-                    <option value="">All wallets</option>
-                    {% for w in all_accessible_wallets %}
-                    <option value="{{ w.id }}" {% if filters.wallet == w.id|stringformat:"s" %}selected{% endif %}>
-                        {{ w.name }} ({{ w.currency.code }})
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="col-12 col-sm-6 col-md-4 col-xl-4">
-                <label for="filter-currency" class="form-label small fw-medium">Original currency</label>
-                <select id="filter-currency" name="currency" class="form-select form-select-sm">
-                    <option value="">All currencies</option>
-                    {% for c in currencies %}
-                    <option value="{{ c.code }}" {% if filters.currency == c.code %}selected{% endif %}>
-                        {{ c.code }} — {{ c.name }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="col-12 col-sm-6 col-md-4 col-xl-4">
-                <label for="filter-display-currency" class="form-label small fw-medium">Display currency</label>
-                <select id="filter-display-currency" name="display_currency" class="form-select form-select-sm">
-                    {% for c in currencies %}
-                    <option value="{{ c.code }}" {% if display_currency and display_currency.code == c.code %}selected{% elif not display_currency and filters.display_currency == c.code %}selected{% endif %}>
-                        {{ c.code }} — {{ c.name }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
+    <!-- Transaction history list immediately below filters -->
+    <section class="stationery-panel p-3 p-md-4 mb-4" aria-labelledby="transactions-list-heading">
+        <div class="alert alert-warning py-1 px-3 small d-none sharing-offline-alert mb-3" role="alert">
+            <i class="bi bi-wifi-off"></i> You are currently offline. Personal transaction sharing grants, notes updates, and revocations require an internet connection and server confirmation.
+        </div>
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h2 id="transactions-list-heading" class="h6 fw-semibold mb-0">Transaction history</h2>
         </div>
 
-        <div class="d-flex flex-wrap align-items-center justify-content-end gap-2 mt-3 pt-2 border-top">
-            <a href="{% url 'budgets:transactions' %}" class="btn btn-outline-secondary btn-sm">
-                Clear filters
-            </a>
-            <button type="submit" class="btn btn-primary btn-sm">
-                Apply filters
-            </button>
-        </div>
-    </form>
-</section>
-
-<section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="transactions-list-heading">
-    <div class="alert alert-warning py-1 px-3 small d-none sharing-offline-alert mb-3" role="alert">
-        <i class="bi bi-wifi-off"></i> You are currently offline. Personal transaction sharing grants, notes updates, and revocations require an internet connection and server confirmation.
-    </div>
-    <div class="d-flex align-items-center justify-content-between mb-3">
-        <h2 id="transactions-list-heading" class="h6 fw-semibold mb-0">Transaction history</h2>
-    </div>
-
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0 transactions-table">
-            <thead class="table-light">
-                <tr>
-                    <th scope="col">Date</th>
-                    <th scope="col">Description</th>
-                    <th scope="col">Category</th>
-                    <th scope="col">Wallet</th>
-                    <th scope="col">Scope</th>
-                    <th scope="col">Original amount</th>
-                    <th scope="col">Converted ({% if display_currency %}{{ display_currency.code }}{% else %}—{% endif %})</th>
-                    <th scope="col">Paid by</th>
-                    <th scope="col" class="text-end">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for tx in transactions_list %}
-                <tr>
-                    <td class="small">{{ tx.transaction_date|date:"Y-m-d" }}</td>
-                    <td>
-                        <div class="fw-medium">{{ tx.description|default:tx.get_transaction_type_display }}</div>
-                        {% if tx.notes %}
-                        <div class="small text-secondary">{{ tx.notes }}</div>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if tx.category %}
-                            {{ tx.category.name }}
-                        {% elif tx.transfer_id %}
-                            <span class="badge text-bg-secondary">Transfer</span>
-                        {% else %}
-                            <span class="text-secondary">Uncategorized</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ tx.wallet.name }}</td>
-                    <td>
-                        <span class="badge text-bg-light border">{{ tx.get_scope_display }}</span>
-                        {% if tx.active_personal_shares %}
-                            {% for share in tx.active_personal_shares %}
-                            <div class="mt-1 small">
-                                {% if share.is_active_grant %}
-                                <span class="badge text-bg-info text-dark" title="Shared with {{ share.recipient.username }} in {{ share.shared_space.name }}">
-                                    Shared with {{ share.recipient.username }}
-                                </span>
-                                <div class="text-muted" style="font-size: 0.75rem;">
-                                    in {{ share.shared_space.name }}
-                                    {% if share.include_notes %}
-                                        <span class="badge text-bg-light border text-success">Notes shared</span>
-                                    {% else %}
-                                        <span class="badge text-bg-light border text-muted">Notes hidden</span>
-                                    {% endif %}
-                                </div>
-                                {% else %}
-                                <span class="badge text-bg-secondary text-light" title="Membership in this shared space is no longer active">
-                                    Obsolete share ({{ share.recipient.username }})
-                                </span>
-                                <div class="text-muted" style="font-size: 0.75rem;">
-                                    in {{ share.shared_space.name }} · Inactive membership
-                                </div>
-                                {% endif %}
-                            </div>
-                            {% endfor %}
-                        {% endif %}
-                    </td>
-                    <td class="fw-semibold {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}text-success{% else %}text-danger{% endif %}">
-                        {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}+{% else %}-{% endif %}{{ tx.formatted_amount }} {{ tx.currency.code }}
-                    </td>
-                    <td>
-                        {% if tx.formatted_display_amount and tx.display_currency %}
-                            <div class="fw-medium {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}text-success{% else %}text-danger{% endif %}">
-                                {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}+{% else %}-{% endif %}{{ tx.formatted_display_amount }} {{ tx.display_currency.code }}
-                                {% if tx.display_is_stale %}
-                                <span class="badge text-bg-warning ms-1" title="{{ tx.display_status_label }}">Stale rate</span>
-                                {% endif %}
-                            </div>
-                            <div class="small text-secondary" title="Rate source: {{ tx.display_rate_source|default:'—' }}{% if tx.display_rate_timestamp %} on {{ tx.display_rate_timestamp|date:'Y-m-d' }}{% endif %}">
-                                Valuation: {{ tx.display_status_label }}
-                                {% if tx.display_rate_timestamp %}
-                                    ({{ tx.display_rate_timestamp|date:"Y-m-d" }})
-                                {% endif %}
-                            </div>
-                            {% if tx.formatted_converted_amount and tx.base_currency %}
-                            <div class="small text-muted">
-                                Booked: {{ tx.formatted_converted_amount }} {{ tx.base_currency.code }}
-                            </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 transactions-table">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col" class="text-nowrap">Date</th>
+                        <th scope="col">Description</th>
+                        <th scope="col" class="text-nowrap">Category</th>
+                        <th scope="col" class="text-nowrap">Wallet</th>
+                        <th scope="col" class="text-nowrap">Scope</th>
+                        <th scope="col" class="text-nowrap">Original amount</th>
+                        <th scope="col" class="text-nowrap">Converted ({% if display_currency %}{{ display_currency.code }}{% else %}—{% endif %})</th>
+                        <th scope="col" class="text-nowrap">Paid by</th>
+                        <th scope="col" class="text-end text-nowrap">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in transactions_list %}
+                    <tr>
+                        <td class="small text-nowrap">{{ tx.transaction_date|date:"Y-m-d" }}</td>
+                        <td>
+                            <div class="fw-medium">{{ tx.description|default:tx.get_transaction_type_display }}</div>
+                            {% if tx.notes %}
+                            <div class="small text-secondary">{{ tx.notes }}</div>
                             {% endif %}
-                        {% else %}
-                            <div>
-                                <span class="badge text-bg-secondary">Conversion unavailable</span>
-                            </div>
-                            <div class="small text-secondary">
-                                {{ tx.display_status_label|default:"Rate not found" }}
-                            </div>
-                            {% if tx.formatted_converted_amount and tx.base_currency %}
-                            <div class="small text-muted">
-                                Booked: {{ tx.formatted_converted_amount }} {{ tx.base_currency.code }}
-                            </div>
+                        </td>
+                        <td>
+                            {% if tx.category %}
+                                {{ tx.category.name }}
+                            {% elif tx.transfer_id %}
+                                <span class="badge text-bg-secondary">Transfer</span>
+                            {% else %}
+                                <span class="text-secondary">Uncategorized</span>
                             {% endif %}
-                        {% endif %}
-                    </td>
-                    <td class="small">{{ tx.paid_by.username|default:tx.owner.username }}</td>
-                    <td class="text-end">
-                        {% if not tx.transfer_id and not tx.is_fee and tx.owner_id == request.user.id %}
-                        <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
-                            <button
-                                type="button"
-                                class="btn btn-outline-secondary btn-sm py-0 px-2 btn-edit-tx"
-                                data-bs-toggle="modal"
-                                data-bs-target="#transactionModal"
-                                data-tx-id="{{ tx.id }}"
-                                data-tx-revision="{{ tx.revision }}"
-                                data-tx-type="{{ tx.transaction_type }}"
-                                data-tx-amount="{{ tx.plain_amount }}"
-                                data-tx-wallet="{{ tx.wallet_id }}"
-                                data-tx-category="{{ tx.category_id|default:'' }}"
-                                data-tx-date="{{ tx.transaction_date|date:'Y-m-d' }}"
-                                data-tx-scope="{{ tx.scope }}"
-                                data-tx-paid-by="{{ tx.paid_by_id|default:'' }}"
-                                data-tx-description="{{ tx.description }}"
-                                data-tx-notes="{{ tx.notes }}"
-                            >
-                                Edit
-                            </button>
-                            {% if tx.scope == 'personal' %}
-                                {% if tx.active_personal_shares %}
-                                    {% for share in tx.active_personal_shares %}
+                        </td>
+                        <td class="text-nowrap">{{ tx.wallet.name }}</td>
+                        <td>
+                            <span class="badge text-bg-light border text-nowrap">{{ tx.get_scope_display }}</span>
+                            {% if tx.active_personal_shares %}
+                                {% for share in tx.active_personal_shares %}
+                                <div class="mt-1 small">
                                     {% if share.is_active_grant %}
-                                    <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline sharing-action-form" data-online-only="true">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="action" value="update_personal_transaction_share">
-                                        <input type="hidden" name="share_id" value="{{ share.id }}">
-                                        <input type="hidden" name="include_notes" value="{% if share.include_notes %}false{% else %}true{% endif %}">
-                                        <button type="submit" class="btn btn-outline-secondary btn-sm py-0 px-2 sharing-action-btn" data-online-only="true" title="{% if share.include_notes %}Hide notes from partner{% else %}Share notes with partner{% endif %}">
-                                            {% if share.include_notes %}Hide notes{% else %}Share notes{% endif %}
-                                        </button>
-                                    </form>
+                                    <span class="badge text-bg-info text-dark" title="Shared with {{ share.recipient.username }} in {{ share.shared_space.name }}">
+                                        Shared with {{ share.recipient.username }}
+                                    </span>
+                                    <div class="text-muted" style="font-size: 0.75rem;">
+                                        in {{ share.shared_space.name }}
+                                        {% if share.include_notes %}
+                                            <span class="badge text-bg-light border text-success">Notes shared</span>
+                                        {% else %}
+                                            <span class="badge text-bg-light border text-muted">Notes hidden</span>
+                                        {% endif %}
+                                    </div>
+                                    {% else %}
+                                    <span class="badge text-bg-secondary text-light" title="Membership in this shared space is no longer active">
+                                        Obsolete share ({{ share.recipient.username }})
+                                    </span>
+                                    <div class="text-muted" style="font-size: 0.75rem;">
+                                        in {{ share.shared_space.name }} · Inactive membership
+                                    </div>
                                     {% endif %}
-                                    <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline sharing-action-form" data-online-only="true">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="action" value="revoke_personal_transaction_share">
-                                        <input type="hidden" name="share_id" value="{{ share.id }}">
-                                        <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-2 sharing-action-btn" data-online-only="true" title="Stop sharing this transaction with partner">
-                                            Stop sharing
-                                        </button>
-                                    </form>
-                                    {% endfor %}
-                                {% else %}
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline-info btn-sm py-0 px-2 sharing-action-btn"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#shareTxModal-{{ tx.id }}"
-                                        data-online-only="true"
-                                        title="Share personal transaction"
-                                    >
-                                        Share
-                                    </button>
+                                </div>
+                                {% endfor %}
+                            {% endif %}
+                        </td>
+                        <td class="fw-semibold text-nowrap {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}text-success{% else %}text-danger{% endif %}">
+                            {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}+{% else %}-{% endif %}{{ tx.formatted_amount }} {{ tx.currency.code }}
+                        </td>
+                        <td class="text-nowrap">
+                            {% if tx.formatted_display_amount and tx.display_currency %}
+                                <div class="fw-medium {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}text-success{% else %}text-danger{% endif %}">
+                                    {% if tx.transaction_type == 'income' or tx.transaction_type == 'transfer_in' %}+{% else %}-{% endif %}{{ tx.formatted_display_amount }} {{ tx.display_currency.code }}
+                                    {% if tx.display_is_stale %}
+                                    <span class="badge text-bg-warning ms-1" title="{{ tx.display_status_label }}">Stale rate</span>
+                                    {% endif %}
+                                </div>
+                                <div class="small text-secondary" title="Rate source: {{ tx.display_rate_source|default:'—' }}{% if tx.display_rate_timestamp %} on {{ tx.display_rate_timestamp|date:'Y-m-d' }}{% endif %}">
+                                    Valuation: {{ tx.display_status_label }}
+                                    {% if tx.display_rate_timestamp %}
+                                        ({{ tx.display_rate_timestamp|date:"Y-m-d" }})
+                                    {% endif %}
+                                </div>
+                                {% if tx.formatted_converted_amount and tx.base_currency %}
+                                <div class="small text-muted">
+                                    Booked: {{ tx.formatted_converted_amount }} {{ tx.base_currency.code }}
+                                </div>
+                                {% endif %}
+                            {% else %}
+                                <div>
+                                    <span class="badge text-bg-secondary">Conversion unavailable</span>
+                                </div>
+                                <div class="small text-secondary">
+                                    {{ tx.display_status_label|default:"Rate not found" }}
+                                </div>
+                                {% if tx.formatted_converted_amount and tx.base_currency %}
+                                <div class="small text-muted">
+                                    Booked: {{ tx.formatted_converted_amount }} {{ tx.base_currency.code }}
+                                </div>
                                 {% endif %}
                             {% endif %}
-                            <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="delete_transaction">
-                                <input type="hidden" name="transaction_id" value="{{ tx.id }}">
-                                <input type="hidden" name="expected_revision" value="{{ tx.revision }}">
-                                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">
-                                    Delete
+                        </td>
+                        <td class="small text-nowrap">{{ tx.paid_by.username|default:tx.owner.username }}</td>
+                        <td class="text-end text-nowrap">
+                            {% if not tx.transfer_id and not tx.is_fee and tx.owner_id == request.user.id %}
+                            <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-secondary btn-sm py-0 px-2 btn-edit-tx"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#transactionModal"
+                                    data-tx-id="{{ tx.id }}"
+                                    data-tx-revision="{{ tx.revision }}"
+                                    data-tx-type="{{ tx.transaction_type }}"
+                                    data-tx-amount="{{ tx.plain_amount }}"
+                                    data-tx-wallet="{{ tx.wallet_id }}"
+                                    data-tx-category="{{ tx.category_id|default:'' }}"
+                                    data-tx-date="{{ tx.transaction_date|date:'Y-m-d' }}"
+                                    data-tx-scope="{{ tx.scope }}"
+                                    data-tx-paid-by="{{ tx.paid_by_id|default:'' }}"
+                                    data-tx-description="{{ tx.description }}"
+                                    data-tx-notes="{{ tx.notes }}"
+                                >
+                                    Edit
                                 </button>
-                            </form>
-                        </div>
-                        {% elif tx.transfer_id and tx.owner_id == request.user.id %}
-                        <div class="d-inline-flex gap-1">
-                            <a
-                                href="#edit-transfer-{{ tx.transfer_id }}"
-                                class="btn btn-outline-secondary btn-sm py-0 px-2"
-                                data-bs-toggle="collapse"
-                                data-bs-target="#edit-transfer-{{ tx.transfer_id }}"
-                                aria-expanded="false"
-                                aria-controls="edit-transfer-{{ tx.transfer_id }}"
-                            >
-                                Edit transfer
-                            </a>
-                            <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="delete_transfer">
-                                <input type="hidden" name="transfer_id" value="{{ tx.transfer_id }}">
-                                <input type="hidden" name="expected_revision" value="{{ tx.transfer.revision }}">
-                                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">
-                                    Delete transfer
-                                </button>
-                            </form>
-                        </div>
-                        {% else %}
-                        <span class="small text-secondary">—</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="9" class="text-center text-secondary py-5">
-                        No transactions to display.
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                                {% if tx.scope == 'personal' %}
+                                    {% if tx.active_personal_shares %}
+                                        {% for share in tx.active_personal_shares %}
+                                        {% if share.is_active_grant %}
+                                        <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline sharing-action-form" data-online-only="true">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="update_personal_transaction_share">
+                                            <input type="hidden" name="share_id" value="{{ share.id }}">
+                                            <input type="hidden" name="include_notes" value="{% if share.include_notes %}false{% else %}true{% endif %}">
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm py-0 px-2 sharing-action-btn" data-online-only="true" title="{% if share.include_notes %}Hide notes from partner{% else %}Share notes with partner{% endif %}">
+                                                {% if share.include_notes %}Hide notes{% else %}Share notes{% endif %}
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline sharing-action-form" data-online-only="true">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="revoke_personal_transaction_share">
+                                            <input type="hidden" name="share_id" value="{{ share.id }}">
+                                            <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-2 sharing-action-btn" data-online-only="true" title="Stop sharing this transaction with partner">
+                                                Stop sharing
+                                            </button>
+                                        </form>
+                                        {% endfor %}
+                                    {% else %}
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline-info btn-sm py-0 px-2 sharing-action-btn"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#shareTxModal-{{ tx.id }}"
+                                            data-online-only="true"
+                                            title="Share personal transaction"
+                                        >
+                                            Share
+                                        </button>
+                                    {% endif %}
+                                {% endif %}
+                                <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="delete_transaction">
+                                    <input type="hidden" name="transaction_id" value="{{ tx.id }}">
+                                    <input type="hidden" name="expected_revision" value="{{ tx.revision }}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">
+                                        Delete
+                                    </button>
+                                </form>
+                            </div>
+                            {% elif tx.transfer_id and tx.owner_id == request.user.id %}
+                            <div class="d-inline-flex gap-1">
+                                <a
+                                    href="#edit-transfer-{{ tx.transfer_id }}"
+                                    class="btn btn-outline-secondary btn-sm py-0 px-2"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#edit-transfer-{{ tx.transfer_id }}"
+                                    aria-expanded="false"
+                                    aria-controls="edit-transfer-{{ tx.transfer_id }}"
+                                >
+                                    Edit transfer
+                                </a>
+                                <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="delete_transfer">
+                                    <input type="hidden" name="transfer_id" value="{{ tx.transfer_id }}">
+                                    <input type="hidden" name="expected_revision" value="{{ tx.transfer.revision }}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">
+                                        Delete transfer
+                                    </button>
+                                </form>
+                            </div>
+                            {% else %}
+                            <span class="small text-secondary">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center text-secondary py-5">
+                            No transactions to display.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
 
-    {% if page_obj.paginator.num_pages > 1 %}
-    <nav aria-label="Transactions pagination" class="mt-3 d-flex justify-content-between align-items-center">
-        <span class="small text-secondary">
-            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
-        </span>
-        <ul class="pagination pagination-sm mb-0">
-            {% if page_obj.has_previous %}
-            <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.previous_page_number }}&amp;q={{ filters.q }}&amp;scope={{ filters.scope }}&amp;type={{ filters.type }}&amp;wallet={{ filters.wallet }}&amp;category={{ filters.category }}&amp;currency={{ filters.currency }}&amp;start_date={{ filters.start_date }}&amp;end_date={{ filters.end_date }}&amp;display_currency={{ filters.display_currency }}">Previous</a>
-            </li>
-            {% endif %}
-            {% if page_obj.has_next %}
-            <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.next_page_number }}&amp;q={{ filters.q }}&amp;scope={{ filters.scope }}&amp;type={{ filters.type }}&amp;wallet={{ filters.wallet }}&amp;category={{ filters.category }}&amp;currency={{ filters.currency }}&amp;start_date={{ filters.start_date }}&amp;end_date={{ filters.end_date }}&amp;display_currency={{ filters.display_currency }}">Next</a>
-            </li>
-            {% endif %}
-        </ul>
-    </nav>
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav aria-label="Transactions pagination" class="mt-3 d-flex justify-content-between align-items-center">
+            <span class="small text-secondary">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}&amp;q={{ filters.q }}&amp;scope={{ filters.scope }}&amp;type={{ filters.type }}&amp;wallet={{ filters.wallet }}&amp;category={{ filters.category }}&amp;currency={{ filters.currency }}&amp;start_date={{ filters.start_date }}&amp;end_date={{ filters.end_date }}&amp;display_currency={{ filters.display_currency }}">Previous</a>
+                </li>
+                {% endif %}
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}&amp;q={{ filters.q }}&amp;scope={{ filters.scope }}&amp;type={{ filters.type }}&amp;wallet={{ filters.wallet }}&amp;category={{ filters.category }}&amp;currency={{ filters.currency }}&amp;start_date={{ filters.start_date }}&amp;end_date={{ filters.end_date }}&amp;display_currency={{ filters.display_currency }}">Next</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </section>
+
+    <!-- Transfer history and edit controls accessible below primary list -->
+    {% if recent_transfers %}
+    <section class="stationery-panel p-3 p-md-4 mb-4" aria-labelledby="recent-transfers-heading">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h2 id="recent-transfers-heading" class="h6 fw-semibold mb-0">Recent transfers</h2>
+            <span class="small text-secondary">{{ recent_transfers|length }} transfer{{ recent_transfers|length|pluralize }}</span>
+        </div>
+        <div class="vstack gap-2">
+            {% for tr in recent_transfers %}
+            <div class="border rounded p-2 bg-white">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div class="small">
+                        <span class="fw-semibold">{{ tr.transfer_date|date:"Y-m-d" }}</span>:
+                        {{ tr.source_wallet.name }} ({{ tr.formatted_amount_sent }} {{ tr.source_currency.code }})
+                        &rarr;
+                        {{ tr.destination_wallet.name }} ({{ tr.formatted_amount_received }} {{ tr.destination_currency.code }})
+                        {% if tr.fee_amount %}
+                        <span class="text-secondary">· Fee: {{ tr.formatted_fee_amount }} {{ tr.source_currency.code }}</span>
+                        {% endif %}
+                        {% if tr.notes %}
+                        <span class="text-secondary">· {{ tr.notes }}</span>
+                        {% endif %}
+                    </div>
+                    {% if tr.created_by_id == request.user.id %}
+                    <div class="d-inline-flex gap-1">
+                        <button
+                            class="btn btn-outline-secondary btn-sm py-0 px-2"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#edit-transfer-{{ tr.id }}"
+                            aria-expanded="false"
+                            aria-controls="edit-transfer-{{ tr.id }}"
+                        >
+                            Edit transfer
+                        </button>
+                        <form method="post" action="{% url 'budgets:transactions' %}" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete_transfer">
+                            <input type="hidden" name="transfer_id" value="{{ tr.id }}">
+                            <input type="hidden" name="expected_revision" value="{{ tr.revision }}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">
+                                Delete
+                            </button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if tr.created_by_id == request.user.id %}
+                <div class="collapse mt-2 pt-2 border-top" id="edit-transfer-{{ tr.id }}">
+                    <form method="post" action="{% url 'budgets:transactions' %}" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="update_transfer">
+                        <input type="hidden" name="transfer_id" value="{{ tr.id }}">
+                        <input type="hidden" name="expected_revision" value="{{ tr.revision }}">
+                        <div class="row g-2">
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label small fw-medium mb-1">From wallet</label>
+                                <select name="source_wallet" class="form-select form-select-sm" required>
+                                    {% for w in all_accessible_wallets %}
+                                    <option value="{{ w.id }}" {% if w.id == tr.source_wallet_id %}selected{% endif %}>
+                                        {{ w.name }} ({{ w.currency.code }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label small fw-medium mb-1">To wallet</label>
+                                <select name="destination_wallet" class="form-select form-select-sm" required>
+                                    {% for w in all_accessible_wallets %}
+                                    <option value="{{ w.id }}" {% if w.id == tr.destination_wallet_id %}selected{% endif %}>
+                                        {{ w.name }} ({{ w.currency.code }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label small fw-medium mb-1">Amount sent</label>
+                                <input
+                                    type="text"
+                                    name="amount_sent"
+                                    value="{{ tr.plain_amount_sent }}"
+                                    inputmode="decimal"
+                                    class="form-control form-control-sm"
+                                    required
+                                >
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label small fw-medium mb-1">Amount received</label>
+                                <input
+                                    type="text"
+                                    name="amount_received"
+                                    value="{{ tr.plain_amount_received }}"
+                                    inputmode="decimal"
+                                    class="form-control form-control-sm"
+                                >
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label small fw-medium mb-1">Explicit rate</label>
+                                <input
+                                    type="text"
+                                    name="manual_rate"
+                                    value="{{ tr.exchange_rate|default:'' }}"
+                                    inputmode="decimal"
+                                    class="form-control form-control-sm"
+                                >
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label small fw-medium mb-1">Fee (optional)</label>
+                                <input
+                                    type="text"
+                                    name="fee_amount"
+                                    value="{{ tr.plain_fee_amount|default:'' }}"
+                                    inputmode="decimal"
+                                    class="form-control form-control-sm"
+                                >
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label small fw-medium mb-1">Date</label>
+                                <input
+                                    type="date"
+                                    name="transfer_date"
+                                    value="{{ tr.transfer_date|date:'Y-m-d' }}"
+                                    class="form-control form-control-sm"
+                                    required
+                                >
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label small fw-medium mb-1">Notes</label>
+                                <input
+                                    type="text"
+                                    name="notes"
+                                    value="{{ tr.notes }}"
+                                    class="form-control form-control-sm"
+                                >
+                            </div>
+                            <div class="col-12 d-flex justify-content-end mt-2">
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    Save transfer changes
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
     {% endif %}
-</section>
+</div>
 {% endblock %}
 
 {% block modals %}
 {% include "budgets/includes/transaction_form.html" %}
+
+<!-- Create wallet transfer modal -->
+<div
+    class="modal fade"
+    id="transferModal"
+    tabindex="-1"
+    aria-labelledby="transferModalLabel"
+    aria-hidden="true"
+    {% if transfer_form.errors %}data-auto-open="true"{% endif %}
+>
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title h5 fw-semibold mb-0" id="transferModalLabel">
+                        Record wallet transfer
+                    </h2>
+                    <p class="small text-secondary mb-0 mt-1">
+                        Move funds between two distinct personal wallets or two shared wallets in the same shared space. Transfer legs adjust wallet balances without counting as income or expense. Optional fees are recorded as a linked expense.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Close transfer dialog"
+                ></button>
+            </div>
+
+            <form
+                id="transfer-form"
+                method="post"
+                action="{% url 'budgets:transactions' %}"
+                novalidate
+            >
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_transfer">
+
+                <div class="modal-body">
+                    {% if transfer_form.errors %}
+                    <div class="alert alert-danger py-2 px-3 small mb-3" role="alert">
+                        {% for field in transfer_form %}
+                            {% for error in field.errors %}
+                                <div><strong>{{ field.label }}:</strong> {{ error }}</div>
+                            {% endfor %}
+                        {% endfor %}
+                        {% for error in transfer_form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div class="row g-2">
+                        <div class="col-12 col-sm-6">
+                            <label for="{{ transfer_form.source_wallet.id_for_label }}" class="form-label small fw-medium">From wallet</label>
+                            {{ transfer_form.source_wallet }}
+                            {% for error in transfer_form.source_wallet.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <label for="{{ transfer_form.destination_wallet.id_for_label }}" class="form-label small fw-medium">To wallet</label>
+                            {{ transfer_form.destination_wallet }}
+                            {% for error in transfer_form.destination_wallet.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <label for="{{ transfer_form.amount_sent.id_for_label }}" class="form-label small fw-medium">Amount sent</label>
+                            {{ transfer_form.amount_sent }}
+                            {% for error in transfer_form.amount_sent.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <label for="{{ transfer_form.amount_received.id_for_label }}" class="form-label small fw-medium">Amount received (if cross-currency)</label>
+                            {{ transfer_form.amount_received }}
+                            {% for error in transfer_form.amount_received.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <label for="{{ transfer_form.manual_rate.id_for_label }}" class="form-label small fw-medium">Explicit rate (optional)</label>
+                            {{ transfer_form.manual_rate }}
+                            {% for error in transfer_form.manual_rate.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <label for="{{ transfer_form.fee_amount.id_for_label }}" class="form-label small fw-medium">Fee (optional)</label>
+                            {{ transfer_form.fee_amount }}
+                            {% for error in transfer_form.fee_amount.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <label for="{{ transfer_form.transfer_date.id_for_label }}" class="form-label small fw-medium">Date</label>
+                            {{ transfer_form.transfer_date }}
+                            {% for error in transfer_form.transfer_date.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <label for="{{ transfer_form.notes.id_for_label }}" class="form-label small fw-medium">Notes</label>
+                            {{ transfer_form.notes }}
+                            {% for error in transfer_form.notes.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" id="btn-submit-transfer">
+                        Record transfer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {% for tx in transactions_list %}
     {% if tx.scope == 'personal' and tx.owner_id == request.user.id and not tx.transfer_id and not tx.is_fee and not tx.active_personal_shares %}
     <div class="modal fade" id="shareTxModal-{{ tx.id }}" tabindex="-1" aria-labelledby="shareTxModalLabel-{{ tx.id }}" aria-hidden="true">
@@ -727,5 +952,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/pages/transaction.js' %}"></script>
+<script src="{% static 'js/pages/transaction.js' %}?v=v11"></script>
 {% endblock %}

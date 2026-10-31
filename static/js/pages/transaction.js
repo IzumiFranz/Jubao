@@ -66,16 +66,41 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!rawValue) {
             return false;
         }
+        var val = String(rawValue).trim();
+        if (!val) {
+            return false;
+        }
+        if (val.indexOf(",") !== -1) {
+            if (!/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(val)) {
+                return false;
+            }
+            val = val.replace(/,/g, "");
+        }
         var regex = places === 0
             ? /^\d{1,15}(\.0+)?$/
             : new RegExp("^\\d{1,15}(\\.\\d{1," + places + "}0*)?$");
-        if (!regex.test(rawValue)) {
+        if (!regex.test(val)) {
             return false;
         }
-        var parts = rawValue.split(".");
+        var parts = val.split(".");
         var intPart = parts[0].replace(/^0+/, "") || "0";
         var fracPart = (parts[1] || "").replace(/0+$/, "");
         return intPart !== "0" || fracPart.length > 0;
+    }
+
+    function formatAmountInputOnBlur() {
+        if (!amountInput) return;
+        var raw = amountInput.value.trim();
+        if (!raw) return;
+        var info = getSelectedWalletPrecision();
+        if (!isValidCurrencyAmount(raw, info.places)) return;
+        var uncomma = raw.replace(/,/g, "");
+        var parts = uncomma.split(".");
+        var intPart = parts[0];
+        var fracPart = parts.length > 1 ? parts[1] : null;
+        var cleanInt = intPart.replace(/^0+/, "") || "0";
+        var groupedInt = cleanInt.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        amountInput.value = fracPart !== null ? groupedInt + "." + fracPart : groupedInt;
     }
 
     function validateDecimalAmount() {
@@ -111,7 +136,12 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     if (amountInput) {
-        amountInput.addEventListener("blur", validateDecimalAmount);
+        amountInput.addEventListener("blur", function () {
+            var valid = validateDecimalAmount();
+            if (valid) {
+                formatAmountInputOnBlur();
+            }
+        });
         amountInput.addEventListener("input", function () {
             if (amountInput.classList.contains("is-invalid")) {
                 validateDecimalAmount();
@@ -174,6 +204,27 @@ document.addEventListener("DOMContentLoaded", function () {
             window.BudgetOfflineSync.enqueueTransactionForm(transactionForm);
         }
     });
+
+    // Transfer modal auto-reopen and keyboard focus management
+    var transferModalEl = document.getElementById("transferModal");
+    if (transferModalEl) {
+        function focusSensibleModalElement() {
+            var target = transferModalEl.querySelector(".is-invalid, input:not([type=hidden]):not([readonly]), select, button:not(.btn-close), .alert-danger") || transferModalEl;
+            if (target && typeof target.focus === "function") {
+                target.focus();
+            }
+        }
+        if (transferModalEl.getAttribute("data-auto-open") === "true") {
+            var bs = typeof bootstrap !== "undefined" ? bootstrap : window.bootstrap;
+            if (bs && bs.Modal) {
+                var transferModal = bs.Modal.getOrCreateInstance(transferModalEl);
+                transferModal.show();
+            }
+            setTimeout(focusSensibleModalElement, 150);
+            setTimeout(focusSensibleModalElement, 350);
+        }
+        transferModalEl.addEventListener("shown.bs.modal", focusSensibleModalElement);
+    }
 
     updatePrecisionHint();
 });

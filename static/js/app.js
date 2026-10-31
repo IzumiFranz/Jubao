@@ -286,4 +286,217 @@ document.addEventListener("DOMContentLoaded", function () {
         initToastNotifications();
         return toastEl;
     };
+
+    // 5. Monetary input grouping helpers
+    function getSelectDecimalPlaces(selectEl, fallback) {
+        if (!selectEl) return typeof fallback === "number" ? fallback : 2;
+        var opt =
+            selectEl.selectedOptions && selectEl.selectedOptions.length
+                ? selectEl.selectedOptions[0]
+                : null;
+        if (opt && opt.hasAttribute("data-decimal-places")) {
+            var p = parseInt(opt.getAttribute("data-decimal-places"), 10);
+            if (!isNaN(p)) return p;
+        }
+        return typeof fallback === "number" ? fallback : 2;
+    }
+
+    function setupMonetaryFieldGrouping(inputEl, getPlacesFn, options) {
+        if (!inputEl) return;
+        var allowNegative = !!(options && options.allowNegative);
+        var allowZero = !!(options && options.allowZero);
+
+        inputEl.addEventListener("blur", function () {
+            var val = inputEl.value.trim();
+            if (!val) {
+                return;
+            }
+
+            var isNeg = false;
+            if (val.charAt(0) === "-") {
+                if (!allowNegative) return;
+                isNeg = true;
+                val = val.substring(1).trim();
+            } else if (val.charAt(0) === "+") {
+                val = val.substring(1).trim();
+            }
+
+            if (!val) return;
+
+            var hasComma = val.indexOf(",") !== -1;
+            if (hasComma) {
+                if (!/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(val)) {
+                    return;
+                }
+            } else {
+                if (!/^\d+(?:\.\d+)?$/.test(val)) {
+                    return;
+                }
+            }
+
+            var uncomma = val.replace(/,/g, "");
+            var parts = uncomma.split(".");
+            var intPart = parts[0];
+            var fracPart = parts.length > 1 ? parts[1] : null;
+            var places = typeof getPlacesFn === "function" ? getPlacesFn() : 2;
+
+            if (places === 0) {
+                if (fracPart !== null && !/^0*$/.test(fracPart)) {
+                    return;
+                }
+            } else {
+                if (fracPart !== null && fracPart.length > places) {
+                    return;
+                }
+            }
+
+            var intAllZeros = /^0*$/.test(intPart);
+            var fracAllZeros = fracPart === null || /^0*$/.test(fracPart);
+            if (intAllZeros && fracAllZeros && !allowZero) {
+                return;
+            }
+
+            var cleanInt = intPart.replace(/^0+/, "") || "0";
+            var groupedInt = cleanInt.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            var result = fracPart !== null ? groupedInt + "." + fracPart : groupedInt;
+            if (isNeg && !(intAllZeros && fracAllZeros)) {
+                result = "-" + result;
+            }
+            inputEl.value = result;
+        });
+    }
+
+    // Savings goal Target amount grouping
+    var targetAmountInput = document.getElementById("id_target_amount");
+    if (targetAmountInput) {
+        var currencySelect = document.getElementById("id_currency");
+
+        function getTargetCurrencyDecimals() {
+            return getSelectDecimalPlaces(currencySelect, 2);
+        }
+
+        function updateTargetPlaceholder() {
+            var places = getTargetCurrencyDecimals();
+            if (places === 0) {
+                targetAmountInput.placeholder = "0";
+            } else if (places === 3) {
+                targetAmountInput.placeholder = "0.000";
+            } else {
+                targetAmountInput.placeholder = "0.00";
+            }
+        }
+
+        if (currencySelect) {
+            currencySelect.addEventListener("change", updateTargetPlaceholder);
+            updateTargetPlaceholder();
+        }
+
+        setupMonetaryFieldGrouping(targetAmountInput, getTargetCurrencyDecimals);
+    }
+
+    // Edit savings goal inputs
+    document.querySelectorAll('input[name="target_amount"]').forEach(function (input) {
+        if (input.id === "id_target_amount") return;
+        var row = input.closest("tr, form");
+        var sel = row ? row.querySelector('select[name="currency"]') : null;
+        setupMonetaryFieldGrouping(input, function () {
+            return getSelectDecimalPlaces(sel, 2);
+        });
+    });
+
+    // Wallet opening balance
+    var openingBalInput = document.getElementById("id_opening_balance");
+    if (openingBalInput) {
+        var walletCurrSel = document.getElementById("id_currency");
+        setupMonetaryFieldGrouping(
+            openingBalInput,
+            function () {
+                return getSelectDecimalPlaces(walletCurrSel, 2);
+            },
+            { allowNegative: true, allowZero: true }
+        );
+    }
+
+    // Category budget limit amount
+    var limitAmountInput = document.getElementById("id_limit_amount");
+    if (limitAmountInput) {
+        var budgetCurrSel = document.getElementById("id_currency");
+        setupMonetaryFieldGrouping(limitAmountInput, function () {
+            return getSelectDecimalPlaces(budgetCurrSel, 2);
+        });
+    }
+
+    // Savings contribution amount
+    var contributionAmountInput = document.getElementById("id_amount");
+    if (contributionAmountInput) {
+        var goalSelect = document.getElementById("id_goal");
+        setupMonetaryFieldGrouping(contributionAmountInput, function () {
+            return getSelectDecimalPlaces(goalSelect, 2);
+        });
+    }
+
+    // Transfer inputs
+    var amountSentInput = document.getElementById("id_amount_sent");
+    var amountRecvInput = document.getElementById("id_amount_received");
+    var feeAmountInput = document.getElementById("id_fee_amount");
+    var srcWalletSel = document.getElementById("id_source_wallet");
+    var dstWalletSel = document.getElementById("id_destination_wallet");
+
+    if (amountSentInput) {
+        setupMonetaryFieldGrouping(amountSentInput, function () {
+            return getSelectDecimalPlaces(srcWalletSel, 2);
+        });
+    }
+    if (amountRecvInput) {
+        setupMonetaryFieldGrouping(amountRecvInput, function () {
+            return getSelectDecimalPlaces(dstWalletSel, 2);
+        });
+    }
+    if (feeAmountInput) {
+        setupMonetaryFieldGrouping(
+            feeAmountInput,
+            function () {
+                return getSelectDecimalPlaces(srcWalletSel, 2);
+            },
+            { allowZero: true }
+        );
+    }
+
+    // Edit transfer accordion forms
+    document.querySelectorAll("form").forEach(function (formEl) {
+        var editSent = formEl.querySelector('input[name="amount_sent"]');
+        var editRecv = formEl.querySelector('input[name="amount_received"]');
+        var editFee = formEl.querySelector('input[name="fee_amount"]');
+        if (editSent && editSent.id !== "id_amount_sent") {
+            var srcSel = formEl.querySelector('select[name="source_wallet"]');
+            setupMonetaryFieldGrouping(editSent, function () {
+                return getSelectDecimalPlaces(srcSel, 2);
+            });
+        }
+        if (editRecv && editRecv.id !== "id_amount_received") {
+            var dstSel = formEl.querySelector('select[name="destination_wallet"]');
+            setupMonetaryFieldGrouping(editRecv, function () {
+                return getSelectDecimalPlaces(dstSel, 2);
+            });
+        }
+        if (editFee && editFee.id !== "id_fee_amount") {
+            var srcSelFee = formEl.querySelector('select[name="source_wallet"]');
+            setupMonetaryFieldGrouping(
+                editFee,
+                function () {
+                    return getSelectDecimalPlaces(srcSelFee, 2);
+                },
+                { allowZero: true }
+            );
+        }
+    });
+
+    // Currency converter amount
+    var convAmountInput = document.getElementById("converter-amount");
+    if (convAmountInput) {
+        var convFromSel = document.getElementById("converter-from");
+        setupMonetaryFieldGrouping(convAmountInput, function () {
+            return getSelectDecimalPlaces(convFromSel, 2);
+        });
+    }
 });

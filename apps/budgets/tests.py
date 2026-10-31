@@ -1196,7 +1196,7 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
         # Service worker uses bumped cache v8 and deletes only budget-tracker-shell-* caches
         sw_resp = self.client.get("/service-worker.js")
         sw_js = sw_resp.content.decode("utf-8")
-        self.assertIn('const CACHE_NAME = "budget-tracker-shell-v8"', sw_js)
+        self.assertIn('const CACHE_NAME = "budget-tracker-shell-v11"', sw_js)
         self.assertIn('const CACHE_PREFIX = "budget-tracker-shell-"', sw_js)
         self.assertIn("k.indexOf(CACHE_PREFIX) === 0 && k !== CACHE_NAME", sw_js)
 
@@ -6270,31 +6270,38 @@ class JapaneseStationeryDashboardTests(TestCase):
         pos_s1_06 = html_future.find('value="2026-06"')
         self.assertTrue(pos_future < pos_s1_06)
 
-    def test_consistent_v8_cache_version_references(self):
+    def test_consistent_v11_cache_version_references(self):
         sw_resp = self.client.get("/service-worker.js")
         sw_js = sw_resp.content.decode("utf-8")
-        self.assertIn('const CACHE_NAME = "budget-tracker-shell-v8"', sw_js)
-        self.assertIn('"/static/css/dashboard.css?v=v8"', sw_js)
-        self.assertIn('"/static/css/app.css?v=v8"', sw_js)
-        self.assertIn('"/static/js/app.js?v=v8"', sw_js)
-        self.assertIn('"/static/js/offline.js?v=v8"', sw_js)
+        self.assertIn('const CACHE_NAME = "budget-tracker-shell-v11"', sw_js)
+        self.assertIn('"/static/css/dashboard.css?v=v11"', sw_js)
+        self.assertIn('"/static/css/app.css?v=v11"', sw_js)
+        self.assertIn('"/static/js/app.js?v=v11"', sw_js)
+        self.assertIn('"/static/js/offline.js?v=v11"', sw_js)
+        self.assertIn('"/static/js/pages/transaction.js?v=v11"', sw_js)
 
         self.client.force_login(self.user)
         dash_resp = self.client.get(self.dashboard_url)
         dash_html = dash_resp.content.decode("utf-8")
-        self.assertIn('css/dashboard.css?v=v8', dash_html)
-        self.assertIn('css/app.css?v=v8', dash_html)
-        self.assertIn('js/app.js?v=v8', dash_html)
-        self.assertIn('js/offline.js?v=v8', dash_html)
+        self.assertIn('css/dashboard.css?v=v11', dash_html)
+        self.assertIn('css/app.css?v=v11', dash_html)
+        self.assertIn('js/app.js?v=v11', dash_html)
+        self.assertIn('js/offline.js?v=v11', dash_html)
+        self.assertIn('js/pages/transaction.js?v=v11', dash_html)
+
+        tx_resp = self.client.get(reverse("budgets:transactions"))
+        tx_html = tx_resp.content.decode("utf-8")
+        self.assertIn('css/dashboard.css?v=v11', tx_html)
+        self.assertIn('js/pages/transaction.js?v=v11', tx_html)
 
         off_resp = self.client.get(reverse("budgets:offline"))
         off_html = off_resp.content.decode("utf-8")
-        self.assertIn('css/app.css?v=v8', off_html)
-        self.assertIn('js/offline.js?v=v8', off_html)
+        self.assertIn('css/app.css?v=v11', off_html)
+        self.assertIn('js/offline.js?v=v11', off_html)
 
         login_resp = self.client.get(reverse("accounts:login"))
         login_html = login_resp.content.decode("utf-8")
-        self.assertIn('css/app.css?v=v8', login_html)
+        self.assertIn('css/app.css?v=v11', login_html)
 
     def test_dashboard_budgets_independent_of_display_currency_and_scoped(self):
         from .services import (
@@ -8472,6 +8479,1306 @@ class DashboardRecentTransactionsConversionAndMonthSelectorTests(TestCase):
         # Source leg in EUR converted: -1,650.00 USD, Orig: -1,500.00 EUR
         self.assertIn("-1,650.00 USD", html)
         self.assertIn("Orig: -1,500.00 EUR", html)
+
+
+class ExtendedMonetaryGroupingTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="test_grouping_user",
+            password="StrongPassword123!",
+        )
+        self.usd = Currency.objects.get(code="USD")
+        self.jpy = Currency.objects.get(code="JPY")
+        self.kwd = Currency.objects.get(code="KWD")
+        self.wallet = Wallet.objects.create(
+            owner=self.user,
+            name="Checking",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        self.wallet_jpy = Wallet.objects.create(
+            owner=self.user,
+            name="JPY Cash",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=self.jpy,
+            opening_balance=Decimal("50000"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        self.wallet_dest = Wallet.objects.create(
+            owner=self.user,
+            name="Savings",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("2000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        from .models import Category, CategoryBudget, SavingsGoal, SavingsContribution, Transaction, Transfer
+        self.category = Category.objects.create(
+            name="Dining",
+            kind=Category.Kind.EXPENSE,
+            owner=self.user,
+            scope=Category.Scope.PERSONAL,
+        )
+        self.goal = SavingsGoal.objects.create(
+            name="Vacation Fund",
+            target_amount=Decimal("5000.00"),
+            currency=self.usd,
+            owner=self.user,
+            scope=SavingsGoal.Scope.PERSONAL,
+        )
+
+    def test_wallet_form_opening_balance_grouping(self):
+        from .forms import WalletForm
+        # Valid positive grouped
+        form_pos = WalletForm(
+            data={
+                "name": "New Checking",
+                "wallet_type": Wallet.WalletType.BANK_ACCOUNT,
+                "currency": self.usd.pk,
+                "opening_balance": "1,500.00",
+                "opening_balance_date": "2026-01-01",
+                "ownership_scope": Wallet.OwnershipScope.PERSONAL,
+            },
+            user=self.user,
+        )
+        self.assertTrue(form_pos.is_valid(), form_pos.errors)
+        self.assertEqual(form_pos.cleaned_data["opening_balance"], Decimal("1500.00"))
+
+        # Valid integer grouped
+        form_int = WalletForm(
+            data={
+                "name": "New Checking 2",
+                "wallet_type": Wallet.WalletType.BANK_ACCOUNT,
+                "currency": self.usd.pk,
+                "opening_balance": "1,500",
+                "opening_balance_date": "2026-01-01",
+                "ownership_scope": Wallet.OwnershipScope.PERSONAL,
+            },
+            user=self.user,
+        )
+        self.assertTrue(form_int.is_valid(), form_int.errors)
+        self.assertEqual(form_int.cleaned_data["opening_balance"], Decimal("1500"))
+
+        # Valid negative grouped
+        form_neg = WalletForm(
+            data={
+                "name": "Credit Card",
+                "wallet_type": Wallet.WalletType.OTHER,
+                "currency": self.usd.pk,
+                "opening_balance": "-2,450.75",
+                "opening_balance_date": "2026-01-01",
+                "ownership_scope": Wallet.OwnershipScope.PERSONAL,
+            },
+            user=self.user,
+        )
+        self.assertTrue(form_neg.is_valid(), form_neg.errors)
+        self.assertEqual(form_neg.cleaned_data["opening_balance"], Decimal("-2450.75"))
+
+        # Valid zero and negative zero
+        form_zero = WalletForm(
+            data={
+                "name": "Zero Wallet",
+                "wallet_type": Wallet.WalletType.OTHER,
+                "currency": self.usd.pk,
+                "opening_balance": "0.00",
+                "opening_balance_date": "2026-01-01",
+                "ownership_scope": Wallet.OwnershipScope.PERSONAL,
+            },
+            user=self.user,
+        )
+        self.assertTrue(form_zero.is_valid(), form_zero.errors)
+        self.assertEqual(form_zero.cleaned_data["opening_balance"], Decimal("0.00"))
+
+        # Malformed grouping rejected
+        for bad in ["10,00.00", "1,,000", "1000,00", ",100", "1,00"]:
+            f_bad = WalletForm(
+                data={
+                    "name": "Bad Wallet",
+                    "wallet_type": Wallet.WalletType.BANK_ACCOUNT,
+                    "currency": self.usd.pk,
+                    "opening_balance": bad,
+                    "opening_balance_date": "2026-01-01",
+                    "ownership_scope": Wallet.OwnershipScope.PERSONAL,
+                },
+                user=self.user,
+            )
+            self.assertFalse(f_bad.is_valid(), f"Expected {bad} to be rejected")
+            self.assertIn("opening_balance", f_bad.errors)
+
+        # Currency precision: JPY rejected for decimals
+        f_jpy_bad = WalletForm(
+            data={
+                "name": "JPY Wallet",
+                "wallet_type": Wallet.WalletType.CASH,
+                "currency": self.jpy.pk,
+                "opening_balance": "1,500.50",
+                "opening_balance_date": "2026-01-01",
+                "ownership_scope": Wallet.OwnershipScope.PERSONAL,
+            },
+            user=self.user,
+        )
+        self.assertFalse(f_jpy_bad.is_valid())
+        self.assertIn("opening_balance", f_jpy_bad.errors)
+        self.assertIn("JPY does not allow decimal places", str(f_jpy_bad.errors["opening_balance"]))
+
+        # JPY accepted with whole number grouping
+        f_jpy_good = WalletForm(
+            data={
+                "name": "JPY Wallet 2",
+                "wallet_type": Wallet.WalletType.CASH,
+                "currency": self.jpy.pk,
+                "opening_balance": "150,000",
+                "opening_balance_date": "2026-01-01",
+                "ownership_scope": Wallet.OwnershipScope.PERSONAL,
+            },
+            user=self.user,
+        )
+        self.assertTrue(f_jpy_good.is_valid(), f_jpy_good.errors)
+        self.assertEqual(f_jpy_good.cleaned_data["opening_balance"], Decimal("150000"))
+
+        # HTTP POST create_wallet with grouped opening balance
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            reverse("budgets:wallets"),
+            data={
+                "action": "create_wallet",
+                "name": "Grouped Wallet",
+                "wallet_type": Wallet.WalletType.BANK_ACCOUNT,
+                "currency": self.usd.pk,
+                "opening_balance": "1,750.50",
+                "opening_balance_date": "2026-01-01",
+                "ownership_scope": Wallet.OwnershipScope.PERSONAL,
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        created_w = Wallet.objects.get(name="Grouped Wallet", owner=self.user)
+        self.assertEqual(created_w.opening_balance, Decimal("1750.500"))
+
+        # HTTP POST update_wallet with grouped opening balance
+        resp_up = self.client.post(
+            reverse("budgets:wallets"),
+            data={
+                "action": "update_wallet",
+                "wallet_id": created_w.pk,
+                "name": "Grouped Wallet Updated",
+                "wallet_type": Wallet.WalletType.BANK_ACCOUNT,
+                "currency": self.usd.pk,
+                "opening_balance": "3,200.50",
+                "opening_balance_date": "2026-01-01",
+            },
+        )
+        self.assertEqual(resp_up.status_code, 302)
+        created_w.refresh_from_db()
+        self.assertEqual(created_w.opening_balance, Decimal("3200.500"))
+        self.assertEqual(created_w.name, "Grouped Wallet Updated")
+
+    def test_transaction_entry_form_amount_grouping(self):
+        from .forms import TransactionEntryForm
+        from .models import Transaction
+        # Valid grouped amounts
+        for val, expected in [("1,100", Decimal("1100")), ("1,100.00", Decimal("1100.00"))]:
+            f = TransactionEntryForm(
+                data={
+                    "transaction_type": Transaction.Type.EXPENSE,
+                    "amount": val,
+                    "wallet": self.wallet.pk,
+                    "category": self.category.pk,
+                    "transaction_date": "2026-10-25",
+                    "scope": Transaction.Scope.PERSONAL,
+                },
+                user=self.user,
+            )
+            self.assertTrue(f.is_valid(), f.errors)
+            self.assertEqual(f.cleaned_data["amount"], expected)
+
+        # Malformed grouping rejected
+        for bad in ["10,00", "1,,000", "10,00.00", ",100"]:
+            f_bad = TransactionEntryForm(
+                data={
+                    "transaction_type": Transaction.Type.EXPENSE,
+                    "amount": bad,
+                    "wallet": self.wallet.pk,
+                    "category": self.category.pk,
+                    "transaction_date": "2026-10-25",
+                    "scope": Transaction.Scope.PERSONAL,
+                },
+                user=self.user,
+            )
+            self.assertFalse(f_bad.is_valid())
+            self.assertIn("amount", f_bad.errors)
+
+        # Non-positive amounts rejected
+        for zero_or_neg in ["0.00", "-1,100.00", "-50"]:
+            f_np = TransactionEntryForm(
+                data={
+                    "transaction_type": Transaction.Type.EXPENSE,
+                    "amount": zero_or_neg,
+                    "wallet": self.wallet.pk,
+                    "category": self.category.pk,
+                    "transaction_date": "2026-10-25",
+                    "scope": Transaction.Scope.PERSONAL,
+                },
+                user=self.user,
+            )
+            self.assertFalse(f_np.is_valid())
+            self.assertIn("amount", f_np.errors)
+
+        # JPY currency precision
+        f_jpy_bad = TransactionEntryForm(
+            data={
+                "transaction_type": Transaction.Type.EXPENSE,
+                "amount": "1,100.50",
+                "wallet": self.wallet_jpy.pk,
+                "category": self.category.pk,
+                "transaction_date": "2026-10-25",
+                "scope": Transaction.Scope.PERSONAL,
+            },
+            user=self.user,
+        )
+        self.assertFalse(f_jpy_bad.is_valid())
+        self.assertIn("amount", f_jpy_bad.errors)
+
+        f_jpy_good = TransactionEntryForm(
+            data={
+                "transaction_type": Transaction.Type.EXPENSE,
+                "amount": "1,100",
+                "wallet": self.wallet_jpy.pk,
+                "category": self.category.pk,
+                "transaction_date": "2026-10-25",
+                "scope": Transaction.Scope.PERSONAL,
+            },
+            user=self.user,
+        )
+        self.assertTrue(f_jpy_good.is_valid(), f_jpy_good.errors)
+
+        # HTTP POST create_transaction with grouped amount
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            reverse("budgets:transactions"),
+            data={
+                "action": "create_transaction",
+                "transaction_type": Transaction.Type.EXPENSE,
+                "amount": "1,100.00",
+                "wallet": self.wallet.pk,
+                "category": self.category.pk,
+                "transaction_date": "2026-10-25",
+                "scope": Transaction.Scope.PERSONAL,
+                "description": "Grouped Grocery Run",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        tx = Transaction.objects.get(description="Grouped Grocery Run", owner=self.user)
+        self.assertEqual(tx.amount, Decimal("1100.000"))
+
+        # HTTP POST update_transaction with grouped amount
+        resp_up = self.client.post(
+            reverse("budgets:transactions"),
+            data={
+                "action": "update_transaction",
+                "transaction_id": tx.pk,
+                "expected_revision": tx.revision,
+                "transaction_type": Transaction.Type.EXPENSE,
+                "amount": "2,200.00",
+                "wallet": self.wallet.pk,
+                "category": self.category.pk,
+                "transaction_date": "2026-10-25",
+                "scope": Transaction.Scope.PERSONAL,
+                "description": "Grouped Grocery Run Updated",
+            },
+        )
+        self.assertEqual(resp_up.status_code, 302)
+        tx.refresh_from_db()
+        self.assertEqual(tx.amount, Decimal("2200.000"))
+        self.assertEqual(tx.description, "Grouped Grocery Run Updated")
+
+    def test_transfer_entry_form_amount_grouping(self):
+        from .forms import TransferEntryForm
+        from .models import Transfer
+        # Valid grouped amounts
+        f_trans = TransferEntryForm(
+            data={
+                "source_wallet": self.wallet.pk,
+                "destination_wallet": self.wallet_dest.pk,
+                "amount_sent": "1,200.00",
+                "amount_received": "1,200.00",
+                "fee_amount": "25.00",
+                "transfer_date": "2026-10-26",
+            },
+            user=self.user,
+        )
+        self.assertTrue(f_trans.is_valid(), f_trans.errors)
+        self.assertEqual(f_trans.cleaned_data["amount_sent"], Decimal("1200.00"))
+        self.assertEqual(f_trans.cleaned_data["amount_received"], Decimal("1200.00"))
+        self.assertEqual(f_trans.cleaned_data["fee_amount"], Decimal("25.00"))
+
+        # Zero fee is valid
+        f_zero_fee = TransferEntryForm(
+            data={
+                "source_wallet": self.wallet.pk,
+                "destination_wallet": self.wallet_dest.pk,
+                "amount_sent": "1,200.00",
+                "fee_amount": "0.00",
+                "transfer_date": "2026-10-26",
+            },
+            user=self.user,
+        )
+        self.assertTrue(f_zero_fee.is_valid(), f_zero_fee.errors)
+        self.assertEqual(f_zero_fee.cleaned_data["fee_amount"], Decimal("0.00"))
+
+        # Negative fee rejected
+        f_neg_fee = TransferEntryForm(
+            data={
+                "source_wallet": self.wallet.pk,
+                "destination_wallet": self.wallet_dest.pk,
+                "amount_sent": "1,200.00",
+                "fee_amount": "-25.00",
+                "transfer_date": "2026-10-26",
+            },
+            user=self.user,
+        )
+        self.assertFalse(f_neg_fee.is_valid())
+        self.assertIn("fee_amount", f_neg_fee.errors)
+
+        # Malformed grouping rejected
+        f_bad = TransferEntryForm(
+            data={
+                "source_wallet": self.wallet.pk,
+                "destination_wallet": self.wallet_dest.pk,
+                "amount_sent": "12,00.00",
+                "transfer_date": "2026-10-26",
+            },
+            user=self.user,
+        )
+        self.assertFalse(f_bad.is_valid())
+        self.assertIn("amount_sent", f_bad.errors)
+
+        # HTTP POST create_transfer with grouped amounts
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            reverse("budgets:transactions"),
+            data={
+                "action": "create_transfer",
+                "source_wallet": self.wallet.pk,
+                "destination_wallet": self.wallet_dest.pk,
+                "amount_sent": "1,200.00",
+                "amount_received": "1,200.00",
+                "fee_amount": "25.00",
+                "transfer_date": "2026-10-26",
+                "notes": "Grouped inter-wallet transfer",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        tr = Transfer.objects.get(notes="Grouped inter-wallet transfer")
+        self.assertEqual(tr.amount_sent, Decimal("1200.000"))
+        self.assertEqual(tr.amount_received, Decimal("1200.000"))
+        self.assertEqual(tr.fee_amount, Decimal("25.000"))
+
+        # HTTP POST update_transfer with grouped amounts
+        resp_up = self.client.post(
+            reverse("budgets:transactions"),
+            data={
+                "action": "update_transfer",
+                "transfer_id": tr.pk,
+                "expected_revision": tr.revision,
+                "source_wallet": self.wallet.pk,
+                "destination_wallet": self.wallet_dest.pk,
+                "amount_sent": "1,350.00",
+                "amount_received": "1,350.00",
+                "fee_amount": "30.00",
+                "transfer_date": "2026-10-26",
+                "notes": "Grouped transfer updated",
+            },
+        )
+        self.assertEqual(resp_up.status_code, 302)
+        tr.refresh_from_db()
+        self.assertEqual(tr.amount_sent, Decimal("1350.000"))
+        self.assertEqual(tr.amount_received, Decimal("1350.000"))
+        self.assertEqual(tr.fee_amount, Decimal("30.000"))
+
+    def test_category_budget_form_limit_amount_grouping(self):
+        from .forms import CategoryBudgetForm
+        from .models import CategoryBudget
+        # Valid grouped limit
+        f_b = CategoryBudgetForm(
+            data={
+                "category": self.category.pk,
+                "period": "2026-10",
+                "currency": self.usd.pk,
+                "limit_amount": "2,500.00",
+                "scope": CategoryBudget.Scope.PERSONAL,
+            },
+            user=self.user,
+        )
+        self.assertTrue(f_b.is_valid(), f_b.errors)
+        self.assertEqual(f_b.cleaned_data["limit_amount"], Decimal("2500.00"))
+
+        # Malformed grouping rejected
+        f_b_bad = CategoryBudgetForm(
+            data={
+                "category": self.category.pk,
+                "period": "2026-10",
+                "currency": self.usd.pk,
+                "limit_amount": "25,00.00",
+                "scope": CategoryBudget.Scope.PERSONAL,
+            },
+            user=self.user,
+        )
+        self.assertFalse(f_b_bad.is_valid())
+        self.assertIn("limit_amount", f_b_bad.errors)
+
+        # Zero or negative rejected
+        f_b_zero = CategoryBudgetForm(
+            data={
+                "category": self.category.pk,
+                "period": "2026-10",
+                "currency": self.usd.pk,
+                "limit_amount": "0.00",
+                "scope": CategoryBudget.Scope.PERSONAL,
+            },
+            user=self.user,
+        )
+        self.assertFalse(f_b_zero.is_valid())
+        self.assertIn("limit_amount", f_b_zero.errors)
+
+        # HTTP POST save_budget with grouped limit
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            reverse("budgets:budgets"),
+            data={
+                "action": "save_budget",
+                "category": self.category.pk,
+                "period": "2026-10",
+                "currency": self.usd.pk,
+                "limit_amount": "2,500.00",
+                "scope": CategoryBudget.Scope.PERSONAL,
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        budget = CategoryBudget.objects.get(category=self.category, period="2026-10")
+        self.assertEqual(budget.limit_amount, Decimal("2500.000"))
+
+    def test_savings_goal_and_contribution_amount_grouping(self):
+        from .forms import SavingsGoalForm, SavingsContributionForm
+        from .models import SavingsContribution, SavingsGoal
+        # Goal target amount grouped
+        f_goal = SavingsGoalForm(
+            data={
+                "name": "New Goal",
+                "currency": self.usd.pk,
+                "target_amount": "100,000.00",
+                "scope": SavingsGoal.Scope.PERSONAL,
+            }
+        )
+        self.assertTrue(f_goal.is_valid(), f_goal.errors)
+        self.assertEqual(f_goal.cleaned_data["target_amount"], Decimal("100000.00"))
+
+        # Goal target amount malformed
+        f_goal_bad = SavingsGoalForm(
+            data={
+                "name": "Bad Goal",
+                "currency": self.usd.pk,
+                "target_amount": "10,00.00",
+                "scope": SavingsGoal.Scope.PERSONAL,
+            }
+        )
+        self.assertFalse(f_goal_bad.is_valid())
+        self.assertIn("target_amount", f_goal_bad.errors)
+
+        # HTTP POST create_goal with grouped target amount
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            reverse("budgets:savings_goals"),
+            data={
+                "action": "create_goal",
+                "name": "House Downpayment",
+                "currency": self.usd.pk,
+                "target_amount": "100,000.00",
+                "scope": SavingsGoal.Scope.PERSONAL,
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        goal = SavingsGoal.objects.get(name="House Downpayment", owner=self.user)
+        self.assertEqual(goal.target_amount, Decimal("100000.000"))
+
+        # HTTP POST update_goal with grouped target amount
+        resp_up = self.client.post(
+            reverse("budgets:savings_goals"),
+            data={
+                "action": "update_goal",
+                "goal_id": goal.pk,
+                "expected_revision": goal.revision,
+                "name": "House Downpayment Updated",
+                "currency": self.usd.pk,
+                "target_amount": "150,000.00",
+                "scope": SavingsGoal.Scope.PERSONAL,
+            },
+        )
+        self.assertEqual(resp_up.status_code, 302)
+        goal.refresh_from_db()
+        self.assertEqual(goal.target_amount, Decimal("150000.000"))
+
+        # Savings contribution form grouped amount
+        f_c = SavingsContributionForm(
+            data={
+                "goal": self.goal.pk,
+                "entry_type": SavingsContribution.EntryType.CONTRIBUTION,
+                "amount": "1,100.00",
+                "contribution_date": "2026-10-26",
+            },
+            user=self.user,
+        )
+        self.assertTrue(f_c.is_valid(), f_c.errors)
+        self.assertEqual(f_c.cleaned_data["amount"], Decimal("1100.00"))
+
+        # Contribution malformed grouping rejected
+        f_c_bad = SavingsContributionForm(
+            data={
+                "goal": self.goal.pk,
+                "entry_type": SavingsContribution.EntryType.CONTRIBUTION,
+                "amount": "11,00.00",
+                "contribution_date": "2026-10-26",
+            },
+            user=self.user,
+        )
+        self.assertFalse(f_c_bad.is_valid())
+        self.assertIn("amount", f_c_bad.errors)
+
+        # Contribution non-positive rejected
+        f_c_neg = SavingsContributionForm(
+            data={
+                "goal": self.goal.pk,
+                "entry_type": SavingsContribution.EntryType.CONTRIBUTION,
+                "amount": "-1,100.00",
+                "contribution_date": "2026-10-26",
+            },
+            user=self.user,
+        )
+        self.assertFalse(f_c_neg.is_valid())
+        self.assertIn("amount", f_c_neg.errors)
+
+        # HTTP POST record_contribution with grouped amount
+        resp_c = self.client.post(
+            reverse("budgets:savings_goals"),
+            data={
+                "action": "record_contribution",
+                "goal": self.goal.pk,
+                "entry_type": SavingsContribution.EntryType.CONTRIBUTION,
+                "amount": "1,100.00",
+                "contribution_date": "2026-10-26",
+                "notes": "Grouped contribution note",
+            },
+        )
+        self.assertEqual(resp_c.status_code, 302)
+        c = SavingsContribution.objects.get(goal=self.goal, notes="Grouped contribution note")
+        self.assertEqual(c.amount, Decimal("1100.000"))
+
+        # HTTP POST record_contribution with reversal and grouped amount
+        resp_rev = self.client.post(
+            reverse("budgets:savings_goals"),
+            data={
+                "action": "record_contribution",
+                "goal": self.goal.pk,
+                "entry_type": SavingsContribution.EntryType.REVERSAL,
+                "amount": "500.00",
+                "contribution_date": "2026-10-27",
+                "notes": "Grouped reversal note",
+            },
+        )
+        self.assertEqual(resp_rev.status_code, 302)
+        rev = SavingsContribution.objects.get(goal=self.goal, notes="Grouped reversal note")
+        self.assertEqual(rev.amount, Decimal("500.000"))
+        self.goal.refresh_from_db()
+        self.assertEqual(self.goal.saved_amount, Decimal("600.000"))
+
+    def test_currency_converter_form_amount_grouping(self):
+        from .forms import CurrencyConverterForm
+        f_conv = CurrencyConverterForm(
+            data={
+                "amount": "1,500.00",
+                "from_currency": self.usd.pk,
+                "to_currency": self.jpy.pk,
+                "scope": "personal",
+            }
+        )
+        self.assertTrue(f_conv.is_valid(), f_conv.errors)
+        self.assertEqual(f_conv.cleaned_data["amount"], Decimal("1500.00"))
+
+        # Malformed grouping rejected
+        f_conv_bad = CurrencyConverterForm(
+            data={
+                "amount": "15,00.00",
+                "from_currency": self.usd.pk,
+                "to_currency": self.jpy.pk,
+                "scope": "personal",
+            }
+        )
+        self.assertFalse(f_conv_bad.is_valid())
+        self.assertIn("amount", f_conv_bad.errors)
+
+    def test_sync_mutation_payload_is_ungrouped(self):
+        from .models import Transaction
+        import json
+        self.client.force_login(self.user)
+        # Verify sync mutation API processes ungrouped amount
+        resp = self.client.post(
+            reverse("budgets:sync_mutations_api"),
+            data=json.dumps({
+                "expected_user_id": self.user.pk,
+                "mutations": [
+                    {
+                        "mutation_id": "00000000-0000-0000-0000-000000000099",
+                        "operation": "create_transaction",
+                        "entity_id": "00000000-0000-0000-0000-000000000088",
+                        "base_revision": None,
+                        "payload": {
+                            "transaction_type": "expense",
+                            "amount": "1100.00",
+                            "wallet_id": str(self.wallet.pk),
+                            "category_id": str(self.category.pk),
+                            "transaction_date": "2026-10-27",
+                            "scope": "personal",
+                            "description": "Offline sync clean amount",
+                        },
+                    }
+                ],
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        sync_tx = Transaction.objects.get(description="Offline sync clean amount")
+        self.assertEqual(sync_tx.amount, Decimal("1100.000"))
+
+
+class TransactionsPageReorganizationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="reorg_user",
+            password="StrongPassword123!",
+        )
+        self.usd = Currency.objects.get(code="USD")
+        self.eur, _ = Currency.objects.get_or_create(
+            code="EUR",
+            defaults={"name": "Euro", "decimal_places": 2, "is_active": True},
+        )
+        from apps.accounts.models import UserPreference
+        UserPreference.objects.create(
+            user=self.user,
+            personal_base_currency=self.usd,
+            display_currency=self.usd,
+        )
+        self.wallet1 = Wallet.objects.create(
+            owner=self.user,
+            name="Main Checking",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("5000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        self.wallet2 = Wallet.objects.create(
+            owner=self.user,
+            name="Savings Jar",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=self.usd,
+            opening_balance=Decimal("2000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        from .models import Category, Transaction, Transfer
+        from .services import create_category, create_transaction_entry, create_transfer_entry
+
+        self.category = create_category(user=self.user, name="Groceries", kind="expense", scope="personal")
+        self.tx1 = create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("125.50"),
+            wallet=self.wallet1,
+            transaction_date=date(2026, 10, 20),
+            category=self.category,
+            description="Supermarket haul",
+            notes="Weekly grocery run",
+            scope="personal",
+        )
+        self.transfer1 = create_transfer_entry(
+            user=self.user,
+            source_wallet=self.wallet1,
+            destination_wallet=self.wallet2,
+            amount_sent=Decimal("300.00"),
+            transfer_date=date(2026, 10, 21),
+            notes="Emergency savings allocation",
+        )
+        self.client.force_login(self.user)
+        self.transactions_url = reverse("budgets:transactions")
+
+    def _find_browser_binary(self):
+        import os
+        candidates = [
+            os.environ.get("CHROME_BIN"),
+            os.environ.get("EDGE_BIN"),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        ]
+        for c in candidates:
+            if c and os.path.exists(c):
+                return c
+        return None
+
+    def test_topbar_add_transaction_retained_and_content_duplicate_removed(self):
+        resp = self.client.get(self.transactions_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Topbar retains the Add transaction button
+        self.assertIn('btn-topbar-action', html)
+        self.assertIn('data-bs-target="#transactionModal"', html)
+        self.assertIn('Add transaction', html)
+
+        # Content area duplicate button is removed
+        self.assertNotIn('id="btn-open-new-transaction"', html)
+
+    def test_compact_toolbar_and_filter_placement_above_transaction_list(self):
+        resp = self.client.get(self.transactions_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Toolbar heading / form is placed BEFORE the transaction history list
+        pos_toolbar = html.find('id="transactions-toolbar-heading"')
+        pos_filter_form = html.find('id="transaction-filter-form"')
+        pos_list = html.find('id="transactions-list-heading"')
+        pos_recent_transfers = html.find('id="recent-transfers-heading"')
+
+        self.assertNotEqual(pos_toolbar, -1)
+        self.assertNotEqual(pos_filter_form, -1)
+        self.assertNotEqual(pos_list, -1)
+        self.assertNotEqual(pos_recent_transfers, -1)
+
+        self.assertTrue(pos_toolbar < pos_list, "Toolbar heading should be placed above transaction list")
+        self.assertTrue(pos_filter_form < pos_list, "Filter form should be placed above transaction list")
+        self.assertTrue(pos_list < pos_recent_transfers, "Transaction list should be placed above recent transfers")
+
+        # Toolbar controls are present
+        self.assertIn('id="btn-export-csv"', html)
+        self.assertIn('id="btn-export-json"', html)
+        self.assertIn('id="btn-record-transfer"', html)
+        self.assertIn('id="btn-manage-categories"', html)
+        self.assertIn('id="btn-apply-filters"', html)
+        self.assertIn('id="btn-reset-filters"', html)
+
+        # Filter fields preserved
+        self.assertIn('id="filter-search-notes"', html)
+        self.assertIn('id="filter-start-date"', html)
+        self.assertIn('id="filter-end-date"', html)
+        self.assertIn('id="filter-type"', html)
+        self.assertIn('id="filter-scope"', html)
+        self.assertIn('id="filter-category"', html)
+        self.assertIn('id="filter-wallet"', html)
+        self.assertIn('id="filter-currency"', html)
+        self.assertIn('id="filter-display-currency"', html)
+
+        # Filter form action and export URLs
+        self.assertIn('format=csv', html)
+        self.assertIn('format=json', html)
+
+        # Financial values have text-nowrap and table has table-responsive
+        self.assertIn('table-responsive', html)
+        self.assertIn('text-nowrap', html)
+
+    def test_transfer_modal_rendering_and_action(self):
+        resp = self.client.get(self.transactions_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Transfer modal exists in modals block
+        self.assertIn('id="transferModal"', html)
+        self.assertIn('aria-labelledby="transferModalLabel"', html)
+        self.assertIn('id="transferModalLabel"', html)
+        self.assertIn('id="transfer-form"', html)
+        self.assertIn('name="action" value="create_transfer"', html)
+        self.assertIn('id="id_source_wallet"', html)
+        self.assertIn('id="id_destination_wallet"', html)
+        self.assertIn('id="id_amount_sent"', html)
+        self.assertIn('id="id_amount_received"', html)
+        self.assertIn('id="id_manual_rate"', html)
+        self.assertIn('id="id_fee_amount"', html)
+        self.assertIn('id="id_transfer_date"', html)
+        self.assertIn('id="id_notes"', html)
+        self.assertIn('id="btn-submit-transfer"', html)
+
+    def test_transfer_validation_errors_reopens_modal(self):
+        # Post invalid transfer data (missing amount_sent and destination_wallet)
+        post_data = {
+            "action": "create_transfer",
+            "source_wallet": str(self.wallet1.pk),
+            "destination_wallet": "",
+            "amount_sent": "",
+            "transfer_date": "2026-10-22",
+            "notes": "Invalid transfer test memo",
+        }
+        resp = self.client.post(self.transactions_url, post_data)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Modal is marked to auto-open with data-auto-open="true"
+        self.assertIn('data-auto-open="true"', html)
+
+        # Submitted notes and date preserved
+        self.assertIn("Invalid transfer test memo", html)
+        self.assertIn("2026-10-22", html)
+
+        # Validation errors displayed inside the modal
+        self.assertIn('This field is required.', html)
+
+    def test_category_collapse_and_error_expansion(self):
+        # GET: Category section is collapsed by default (no show class in manageCategoriesCollapse)
+        resp_get = self.client.get(self.transactions_url)
+        self.assertEqual(resp_get.status_code, 200)
+        html_get = resp_get.content.decode("utf-8")
+        self.assertIn('id="manageCategoriesCollapse"', html_get)
+        # Verify it has class="collapse mb-4 " without "show"
+        collapse_decl = html_get.split('id="manageCategoriesCollapse"')[0].split('<div')[-1]
+        self.assertNotIn('show', collapse_decl)
+        self.assertIn('aria-expanded="false"', html_get)
+
+        # POST invalid category: empty name
+        post_data = {
+            "action": "create_category",
+            "name": "",
+            "kind": "expense",
+            "scope": "personal",
+        }
+        resp_post = self.client.post(self.transactions_url, post_data)
+        self.assertEqual(resp_post.status_code, 200)
+        html_post = resp_post.content.decode("utf-8")
+
+        # When category submission fails, manageCategoriesCollapse has class "show"
+        collapse_post_decl = html_post.split('id="manageCategoriesCollapse"')[0].split('<div')[-1]
+        self.assertIn('show', collapse_post_decl)
+        self.assertIn('aria-expanded="true"', html_post)
+        self.assertIn('This field is required.', html_post)
+
+    def test_transaction_table_info_actions_and_transfer_history_below(self):
+        resp = self.client.get(self.transactions_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Primary transaction list contains transaction info
+        self.assertIn("Supermarket haul", html)
+        self.assertIn("Weekly grocery run", html)
+        self.assertIn("Groceries", html)
+        self.assertIn("Main Checking", html)
+        self.assertIn("btn-edit-tx", html)
+        self.assertIn('data-tx-id="' + str(self.tx1.id) + '"', html)
+        self.assertIn('action" value="delete_transaction"', html)
+
+        # Recent transfers list contains transfer info and edit controls below primary list
+        self.assertIn("Recent transfers", html)
+        self.assertIn("Emergency savings allocation", html)
+        self.assertIn(f'id="edit-transfer-{self.transfer1.id}"', html)
+        self.assertIn('action" value="update_transfer"', html)
+        self.assertIn('action" value="delete_transfer"', html)
+
+    def test_default_collapsed_state_when_no_active_filters(self):
+        resp = self.client.get(self.transactions_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Filters button exists with aria-expanded="false" and chevron
+        self.assertIn('id="btn-toggle-filters"', html)
+        self.assertIn('aria-expanded="false"', html)
+        self.assertIn('filter-chevron', html)
+
+        # Filter collapse section is collapsed by default (no "show" class in its declaration)
+        collapse_decl = html.split('id="transaction-filter-collapse"')[0].split('<div')[-1]
+        self.assertNotIn('show', collapse_decl)
+
+        # No active filters indicator displayed
+        self.assertNotIn('id="active-filters-indicator"', html)
+
+        # Noscript fallback ensures form is permanently visible without JS
+        self.assertIn('<noscript>', html)
+        self.assertIn('#transaction-filter-collapse', html)
+        self.assertIn('display: block !important', html)
+
+    def test_pagination_and_default_currency_alone_do_not_expand_filters(self):
+        # 1. Pagination only: ?page=1
+        resp_page = self.client.get(self.transactions_url + "?page=1")
+        self.assertEqual(resp_page.status_code, 200)
+        html_page = resp_page.content.decode("utf-8")
+        collapse_page = html_page.split('id="transaction-filter-collapse"')[0].split('<div')[-1]
+        self.assertNotIn('show', collapse_page)
+        self.assertNotIn('id="active-filters-indicator"', html_page)
+
+        # 2. Default display currency only: ?display_currency=USD
+        resp_curr = self.client.get(self.transactions_url + "?display_currency=USD")
+        self.assertEqual(resp_curr.status_code, 200)
+        html_curr = resp_curr.content.decode("utf-8")
+        collapse_curr = html_curr.split('id="transaction-filter-collapse"')[0].split('<div')[-1]
+        self.assertNotIn('show', collapse_curr)
+        self.assertNotIn('id="active-filters-indicator"', html_curr)
+
+        # 3. Both pagination and default currency: ?page=1&display_currency=USD
+        resp_both = self.client.get(self.transactions_url + "?page=1&display_currency=USD")
+        self.assertEqual(resp_both.status_code, 200)
+        html_both = resp_both.content.decode("utf-8")
+        collapse_both = html_both.split('id="transaction-filter-collapse"')[0].split('<div')[-1]
+        self.assertNotIn('show', collapse_both)
+        self.assertNotIn('id="active-filters-indicator"', html_both)
+
+    def test_non_default_display_currency_expands_filters(self):
+        # Non-default display currency (EUR) should count as an active filter
+        resp = self.client.get(self.transactions_url + "?display_currency=EUR")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Collapse is expanded with show class
+        collapse_decl = html.split('id="transaction-filter-collapse"')[0].split('<div')[-1]
+        self.assertIn('show', collapse_decl)
+
+        # Toggle button has aria-expanded="true"
+        self.assertIn('aria-expanded="true"', html)
+
+        # Active filters indicator is displayed
+        self.assertIn('id="active-filters-indicator"', html)
+
+        # Retains the EUR value selected in dropdown
+        self.assertIn('value="EUR"', html)
+
+    def test_active_filter_expansion_and_retained_values(self):
+        # Multiple active filters
+        url = self.transactions_url + "?q=Supermarket&start_date=2026-10-01&end_date=2026-10-31&type=expense"
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Expanded with show class
+        collapse_decl = html.split('id="transaction-filter-collapse"')[0].split('<div')[-1]
+        self.assertIn('show', collapse_decl)
+        self.assertIn('id="active-filters-indicator"', html)
+
+        # Values retained
+        self.assertIn('value="Supermarket"', html)
+        self.assertIn('value="2026-10-01"', html)
+        self.assertIn('value="2026-10-31"', html)
+
+    def test_browser_desktop_and_mobile_layout_and_modal_interaction(self):
+        import pathlib
+        from django.conf import settings
+
+        browser_bin = self._find_browser_binary()
+        if not browser_bin:
+            self.skipTest("No browser binary found for headless verification.")
+
+        static_dir = pathlib.Path(settings.BASE_DIR) / "static"
+        bs_js = (static_dir / "vendor" / "bootstrap" / "bootstrap.bundle.min.js").read_text(encoding="utf-8")
+        bs_css = (static_dir / "vendor" / "bootstrap" / "bootstrap.min.css").read_text(encoding="utf-8")
+        app_css = (static_dir / "css" / "app.css").read_text(encoding="utf-8")
+        dash_css = (static_dir / "css" / "dashboard.css").read_text(encoding="utf-8")
+        tx_js = (static_dir / "js" / "pages" / "transaction.js").read_text(encoding="utf-8")
+
+        # -------------------------------------------------------------
+        # 1. Desktop Viewport Test (1280 x 800)
+        # -------------------------------------------------------------
+        resp_desktop = self.client.get(self.transactions_url)
+        page_desktop_html = resp_desktop.content.decode("utf-8")
+
+        desktop_harness = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>{bs_css}</style>
+    <style>{app_css}</style>
+    <style>{dash_css}</style>
+    <style>
+    .transactions-table .text-nowrap {{ white-space: nowrap; }}
+    </style>
+</head>
+<body class="app-body">
+    {page_desktop_html}
+    <script>{bs_js}</script>
+    <script>{tx_js}</script>
+    <script>
+    window.addEventListener('DOMContentLoaded', async function () {{
+        await new Promise(r => setTimeout(r, 200));
+
+        var results = {{}};
+        results.viewportWidth = window.innerWidth;
+        results.viewportHeight = window.innerHeight;
+
+        var filterBtn = document.getElementById('btn-toggle-filters');
+        var filterCollapse = document.getElementById('transaction-filter-collapse');
+        var recordBtn = document.getElementById('btn-record-transfer');
+        var transferModal = document.getElementById('transferModal');
+
+        // Initial filter state (collapsed)
+        results.filterCollapseInitialHidden = filterCollapse ? !filterCollapse.classList.contains('show') : false;
+        results.filterBtnInitialAria = filterBtn ? filterBtn.getAttribute('aria-expanded') : '';
+
+        // Toggle filter panel open
+        if (filterBtn && filterCollapse) {{
+            filterBtn.click();
+            await new Promise(r => setTimeout(r, 500));
+            results.filterCollapseShownAfterClick = filterCollapse.classList.contains('show');
+            results.filterBtnAriaAfterClick = filterBtn.getAttribute('aria-expanded');
+
+            // Toggle filter panel closed
+            filterBtn.click();
+            await new Promise(r => setTimeout(r, 500));
+            results.filterCollapseHiddenAfterSecondClick = !filterCollapse.classList.contains('show');
+        }}
+
+        // Transfer modal open and close
+        if (recordBtn && transferModal) {{
+            recordBtn.click();
+            await new Promise(r => setTimeout(r, 500));
+            results.modalShown = transferModal.classList.contains('show') || getComputedStyle(transferModal).display !== 'none';
+            results.modalHasSensibleFocus = transferModal.contains(document.activeElement);
+
+            var closeBtn = transferModal.querySelector('.btn-close');
+            if (closeBtn) {{
+                closeBtn.click();
+                await new Promise(r => setTimeout(r, 500));
+                results.modalClosed = !transferModal.classList.contains('show');
+            }}
+        }}
+
+        fetch('/__test_done__', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(results)
+        }}).catch(function () {{}});
+    }});
+    </script>
+</body>
+</html>"""
+
+        rep_desktop = self._run_browser_harness(browser_bin, 1280, 800, desktop_harness)
+        self.assertIsNotNone(rep_desktop, "Desktop browser verification timed out")
+        # Verify actual viewport dimensions
+        self.assertGreaterEqual(rep_desktop.get("viewportWidth", 0), 1024, "Desktop viewport width should be >= 1024")
+        self.assertGreaterEqual(rep_desktop.get("viewportHeight", 0), 600, "Desktop viewport height should be >= 600")
+        # Verify filter toggle
+        self.assertTrue(rep_desktop.get("filterCollapseInitialHidden"), "Filter collapse should be initially hidden")
+        self.assertEqual(rep_desktop.get("filterBtnInitialAria"), "false", "Filter button aria-expanded initially false")
+        self.assertTrue(rep_desktop.get("filterCollapseShownAfterClick"), "Filter collapse should expand on click")
+        self.assertEqual(rep_desktop.get("filterBtnAriaAfterClick"), "true", "Filter button aria-expanded true when open")
+        self.assertTrue(rep_desktop.get("filterCollapseHiddenAfterSecondClick"), "Filter collapse should close on second click")
+        # Verify modal open/close
+        self.assertTrue(rep_desktop.get("modalShown"), "Transfer modal should open on Record transfer click")
+        self.assertTrue(rep_desktop.get("modalHasSensibleFocus"), "Sensible focus should be directed to the modal")
+        self.assertTrue(rep_desktop.get("modalClosed"), "Transfer modal should close on close button click")
+
+        # -------------------------------------------------------------
+        # 2. Invalid Transfer Auto-Reopen & Focus Test
+        # -------------------------------------------------------------
+        post_bad_transfer = {
+            "action": "create_transfer",
+            "source_wallet": str(self.wallet1.pk),
+            "destination_wallet": "",
+            "amount_sent": "",
+            "transfer_date": "2026-10-22",
+        }
+        resp_bad = self.client.post(self.transactions_url, post_bad_transfer)
+        page_bad_html = resp_bad.content.decode("utf-8")
+
+        bad_transfer_harness = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>{bs_css}</style>
+    <style>{app_css}</style>
+    <style>{dash_css}</style>
+</head>
+<body class="app-body">
+    {page_bad_html}
+    <script>{bs_js}</script>
+    <script>{tx_js}</script>
+    <script>
+    window.addEventListener('DOMContentLoaded', async function () {{
+        await new Promise(r => setTimeout(r, 600));
+        var results = {{}};
+        results.viewportWidth = window.innerWidth;
+
+        var transferModal = document.getElementById('transferModal');
+        results.autoReopenedModalShown = transferModal && (transferModal.classList.contains('show') || getComputedStyle(transferModal).display !== 'none');
+
+        var errorAlert = transferModal ? transferModal.querySelector('.alert-danger') : null;
+        results.hasVisibleErrors = !!(errorAlert && errorAlert.textContent.trim().length > 0);
+
+        var activeEl = document.activeElement;
+        results.sensibleFocusInModal = transferModal && (transferModal.contains(activeEl) || activeEl === transferModal);
+
+        fetch('/__test_done__', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(results)
+        }}).catch(function () {{}});
+    }});
+    </script>
+</body>
+</html>"""
+
+        rep_auto = self._run_browser_harness(browser_bin, 1280, 800, bad_transfer_harness)
+        self.assertIsNotNone(rep_auto, "Auto-reopen browser verification timed out")
+        self.assertTrue(rep_auto.get("autoReopenedModalShown"), "Modal should automatically reopen when validation fails")
+        self.assertTrue(rep_auto.get("hasVisibleErrors"), "Modal should display visible validation errors")
+        self.assertTrue(rep_auto.get("sensibleFocusInModal"), "Sensible focus should be directed within reopened modal")
+
+        # -------------------------------------------------------------
+        # 3. Mobile Viewport Test (375 x 667)
+        # -------------------------------------------------------------
+        mobile_harness = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>{bs_css}</style>
+    <style>{app_css}</style>
+    <style>{dash_css}</style>
+    <style>
+    .transactions-table .text-nowrap {{ white-space: nowrap; }}
+    </style>
+</head>
+<body class="app-body">
+    {page_desktop_html}
+    <script>{bs_js}</script>
+    <script>{tx_js}</script>
+    <script>
+    window.addEventListener('DOMContentLoaded', async function () {{
+        await new Promise(r => setTimeout(r, 200));
+
+        var results = {{}};
+        results.viewportWidth = window.innerWidth;
+        results.viewportHeight = window.innerHeight;
+
+        var filterBtn = document.getElementById('btn-toggle-filters');
+        var exportCsv = document.getElementById('btn-export-csv');
+        var exportJson = document.getElementById('btn-export-json');
+        var recordBtn = document.getElementById('btn-record-transfer');
+        var manageCatBtn = document.getElementById('btn-manage-categories');
+        var transferModal = document.getElementById('transferModal');
+        var txTable = document.querySelector('.transactions-table');
+        var tableResponsive = document.querySelector('.table-responsive');
+
+        // Verify toolbar wrapping & all buttons reachable
+        results.allToolbarButtonsReachable = !!(filterBtn && exportCsv && exportJson && recordBtn && manageCatBtn);
+        results.noHorizontalWindowOverflow = document.documentElement.scrollWidth <= (window.innerWidth + 5);
+
+        // Transaction table horizontal scrolling & non-wrapped monetary cells
+        results.tableResponsiveExists = !!tableResponsive;
+        var nonWrapCells = txTable ? txTable.querySelectorAll('.text-nowrap') : [];
+        results.hasNonWrapCells = nonWrapCells.length > 0;
+
+        // Modal fit on mobile
+        if (recordBtn && transferModal) {{
+            recordBtn.click();
+            await new Promise(r => setTimeout(r, 500));
+            var modalDialog = transferModal.querySelector('.modal-dialog');
+            var dialogRect = modalDialog ? modalDialog.getBoundingClientRect() : null;
+            results.mobileModalFitsViewport = dialogRect ? (dialogRect.right <= window.innerWidth + 5) : false;
+        }}
+
+        fetch('/__test_done__', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(results)
+        }}).catch(function () {{}});
+    }});
+    </script>
+</body>
+</html>"""
+
+        rep_mobile = self._run_browser_harness(browser_bin, 375, 667, mobile_harness)
+        self.assertIsNotNone(rep_mobile, "Mobile browser verification timed out")
+        # Verify actual mobile viewport dimensions (Bootstrap xs mobile breakpoint is < 576px)
+        self.assertLessEqual(rep_mobile.get("viewportWidth", 999), 575, "Mobile viewport width should be <= 575 (Bootstrap mobile breakpoint)")
+        self.assertGreaterEqual(rep_mobile.get("viewportHeight", 0), 500, "Mobile viewport height should be >= 500")
+        # Verify wrapping & no window overflow
+        self.assertTrue(rep_mobile.get("allToolbarButtonsReachable"), "All toolbar buttons should be reachable on mobile")
+        self.assertTrue(rep_mobile.get("noHorizontalWindowOverflow"), "Layout should wrap cleanly without overflowing mobile viewport")
+        # Verify table scrolling and non-wrap amounts
+        self.assertTrue(rep_mobile.get("tableResponsiveExists"), "Table responsive wrapper should exist")
+        self.assertTrue(rep_mobile.get("hasNonWrapCells"), "Financial amounts should have text-nowrap to avoid clipping")
+        self.assertTrue(rep_mobile.get("mobileModalFitsViewport"), "Transfer modal should fit within mobile viewport")
+
+    def _run_browser_harness(self, browser_bin, width, height, html_content):
+        import http.server
+        import json
+        import shutil
+        import socket
+        import subprocess
+        import tempfile
+        import threading
+
+        results_holder = {}
+        done_event = threading.Event()
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+            def do_GET(self):
+                data = html_content.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length).decode("utf-8")
+                results_holder["report"] = json.loads(raw)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "11")
+                self.end_headers()
+                self.wfile.write(b'{"ok":true}')
+                done_event.set()
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+
+        httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+
+        user_data_dir = tempfile.mkdtemp(prefix=f"trans_browser_{width}_{height}_")
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                [
+                    browser_bin,
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    f"--window-size={width},{height}",
+                    f"--user-data-dir={user_data_dir}",
+                    f"http://127.0.0.1:{port}/",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            finished = done_event.wait(timeout=25)
+            if not finished:
+                return None
+            return results_holder.get("report")
+        finally:
+            if proc:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+            httpd.shutdown()
+            httpd.server_close()
+            shutil.rmtree(user_data_dir, ignore_errors=True)
+
+
 
 
 

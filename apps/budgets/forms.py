@@ -1,4 +1,5 @@
 from decimal import Decimal, InvalidOperation
+import re
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -42,6 +43,52 @@ class NonRoundingDecimalField(forms.Field):
         return dec
 
 
+class GroupedDecimalField(NonRoundingDecimalField):
+    """
+    A NonRoundingDecimalField that validates and normalizes thousands grouping.
+    Accepts standard thousands grouping with commas (e.g. 100,000.00) and un-grouped input (e.g. 100000.00).
+    Rejects malformed grouping such as 10,00.00 or 1,,000 before Decimal conversion.
+    Preserves exact Decimal arithmetic without converting monetary values through float.
+    """
+
+    def to_python(self, value):
+        if value in self.empty_values:
+            return None
+        if isinstance(value, float):
+            raise ValidationError(self.error_messages["invalid"], code="invalid")
+        if isinstance(value, str):
+            value = value.strip()
+            if "," in value:
+                if not re.match(r"^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$", value):
+                    raise ValidationError(self.error_messages["invalid"], code="invalid")
+                value = value.replace(",", "")
+        return super().to_python(value)
+
+
+class CurrencySelect(forms.Select):
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
+        if value and hasattr(value, "instance"):
+            option["attrs"]["data-decimal-places"] = value.instance.decimal_places
+        return option
+
+
+class WalletSelect(forms.Select):
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
+        if value and hasattr(value, "instance") and getattr(value.instance, "currency", None):
+            option["attrs"]["data-decimal-places"] = value.instance.currency.decimal_places
+        return option
+
+
+class SavingsGoalSelect(forms.Select):
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
+        if value and hasattr(value, "instance") and getattr(value.instance, "currency", None):
+            option["attrs"]["data-decimal-places"] = value.instance.currency.decimal_places
+        return option
+
+
 def _check_integer_digits(amount: Decimal, max_digits: int = Wallet.MAX_INTEGER_DIGITS):
     sign, digits, exponent = amount.as_tuple()
     if not isinstance(exponent, int):
@@ -57,7 +104,7 @@ def _check_integer_digits(amount: Decimal, max_digits: int = Wallet.MAX_INTEGER_
 
 
 class WalletForm(forms.ModelForm):
-    opening_balance = NonRoundingDecimalField(
+    opening_balance = GroupedDecimalField(
         label="Opening balance",
         widget=forms.TextInput(
             attrs={
@@ -111,6 +158,7 @@ class WalletForm(forms.ModelForm):
         active_currencies = Currency.objects.filter(is_active=True).order_by("code")
         self.has_active_currencies = active_currencies.exists()
         self.fields["currency"].queryset = active_currencies
+        self.fields["currency"].widget = CurrencySelect()
         self.fields["currency"].empty_label = (
             "Select currency" if self.has_active_currencies else "No currencies available"
         )
@@ -332,7 +380,7 @@ class TransactionEntryForm(forms.Form):
         label="Type",
         widget=forms.Select(attrs={"class": "form-select form-select-sm", "id": "tx-type"}),
     )
-    amount = NonRoundingDecimalField(
+    amount = GroupedDecimalField(
         label="Amount",
         widget=forms.TextInput(
             attrs={
@@ -348,7 +396,7 @@ class TransactionEntryForm(forms.Form):
         queryset=Wallet.objects.none(),
         empty_label="Select wallet",
         label="Wallet",
-        widget=forms.Select(attrs={"class": "form-select form-select-sm", "id": "tx-wallet"}),
+        widget=WalletSelect(attrs={"class": "form-select form-select-sm", "id": "tx-wallet"}),
     )
     category = forms.ModelChoiceField(
         queryset=Category.objects.none(),
@@ -475,15 +523,15 @@ class TransferEntryForm(forms.Form):
         queryset=Wallet.objects.none(),
         empty_label="Select source wallet",
         label="From wallet",
-        widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
+        widget=WalletSelect(attrs={"class": "form-select form-select-sm"}),
     )
     destination_wallet = forms.ModelChoiceField(
         queryset=Wallet.objects.none(),
         empty_label="Select destination wallet",
         label="To wallet",
-        widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
+        widget=WalletSelect(attrs={"class": "form-select form-select-sm"}),
     )
-    amount_sent = NonRoundingDecimalField(
+    amount_sent = GroupedDecimalField(
         label="Amount sent",
         widget=forms.TextInput(
             attrs={
@@ -493,7 +541,7 @@ class TransferEntryForm(forms.Form):
             }
         ),
     )
-    amount_received = NonRoundingDecimalField(
+    amount_received = GroupedDecimalField(
         required=False,
         label="Amount received (cross-currency)",
         widget=forms.TextInput(
@@ -515,7 +563,7 @@ class TransferEntryForm(forms.Form):
             }
         ),
     )
-    fee_amount = NonRoundingDecimalField(
+    fee_amount = GroupedDecimalField(
         required=False,
         label="Transfer fee (optional, in source currency)",
         widget=forms.TextInput(
@@ -551,6 +599,70 @@ class TransferEntryForm(forms.Form):
             self.fields["source_wallet"].queryset = qs
             self.fields["destination_wallet"].queryset = qs
 
+    def clean_amount_sent(self):
+        amt = self.cleaned_data.get("amount_sent")
+        if amt is not None:
+            _check_integer_digits(amt)
+            if amt <= Decimal("0"):
+                raise ValidationError("Amount must be greater than zero.")
+        return amt
+
+    def clean_amount_received(self):
+        amt = self.cleaned_data.get("amount_received")
+        if amt is not None:
+            _check_integer_digits(amt)
+            if amt <= Decimal("0"):
+                raise ValidationError("Amount must be greater than zero.")
+        return amt
+
+    def clean_fee_amount(self):
+        amt = self.cleaned_data.get("fee_amount")
+        if amt is not None:
+            _check_integer_digits(amt)
+            if amt < Decimal("0"):
+                raise ValidationError("Fee cannot be negative.")
+        return amt
+
+    def clean(self):
+        cleaned = super().clean()
+        source_wallet = cleaned.get("source_wallet")
+        dest_wallet = cleaned.get("destination_wallet")
+        amount_sent = cleaned.get("amount_sent")
+        amount_received = cleaned.get("amount_received")
+        fee_amount = cleaned.get("fee_amount")
+
+        if source_wallet and amount_sent is not None:
+            try:
+                validate_currency_amount(
+                    amount_sent, source_wallet.currency, field_name="amount_sent", require_positive=True
+                )
+            except ValidationError as exc:
+                for field, msgs in exc.message_dict.items():
+                    for m in msgs:
+                        self.add_error(field, m)
+
+        if dest_wallet and amount_received is not None:
+            try:
+                validate_currency_amount(
+                    amount_received, dest_wallet.currency, field_name="amount_received", require_positive=True
+                )
+            except ValidationError as exc:
+                for field, msgs in exc.message_dict.items():
+                    for m in msgs:
+                        self.add_error(field, m)
+
+        if source_wallet and fee_amount is not None:
+            try:
+                validate_currency_amount(
+                    fee_amount, source_wallet.currency, field_name="fee_amount", require_positive=False
+                )
+            except ValidationError as exc:
+                for field, msgs in exc.message_dict.items():
+                    for m in msgs:
+                        self.add_error(field, m)
+
+        return cleaned
+
 
 class CategoryBudgetForm(forms.Form):
     category = forms.ModelChoiceField(
@@ -574,9 +686,9 @@ class CategoryBudgetForm(forms.Form):
         queryset=Currency.objects.none(),
         empty_label="Select currency",
         label="Currency",
-        widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
+        widget=CurrencySelect(attrs={"class": "form-select form-select-sm"}),
     )
-    limit_amount = NonRoundingDecimalField(
+    limit_amount = GroupedDecimalField(
         label="Monthly limit",
         widget=forms.TextInput(
             attrs={
@@ -606,6 +718,29 @@ class CategoryBudgetForm(forms.Form):
                 user, kind=Category.Kind.EXPENSE, include_archived=False
             )
 
+    def clean_limit_amount(self):
+        amt = self.cleaned_data.get("limit_amount")
+        if amt is not None:
+            _check_integer_digits(amt)
+            if amt <= Decimal("0"):
+                raise ValidationError("Limit amount must be greater than zero.")
+        return amt
+
+    def clean(self):
+        cleaned = super().clean()
+        currency = cleaned.get("currency")
+        limit_amount = cleaned.get("limit_amount")
+        if currency and limit_amount is not None:
+            try:
+                validate_currency_amount(
+                    limit_amount, currency, field_name="limit_amount", require_positive=True
+                )
+            except ValidationError as exc:
+                for field, msgs in exc.message_dict.items():
+                    for m in msgs:
+                        self.add_error(field, m)
+        return cleaned
+
 
 class SavingsGoalForm(forms.Form):
     name = forms.CharField(
@@ -622,9 +757,9 @@ class SavingsGoalForm(forms.Form):
         queryset=Currency.objects.none(),
         empty_label="Select currency",
         label="Currency",
-        widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
+        widget=CurrencySelect(attrs={"class": "form-select form-select-sm"}),
     )
-    target_amount = NonRoundingDecimalField(
+    target_amount = GroupedDecimalField(
         label="Target amount",
         widget=forms.TextInput(
             attrs={
@@ -651,12 +786,27 @@ class SavingsGoalForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.fields["currency"].queryset = Currency.objects.filter(is_active=True).order_by("code")
 
+    def clean(self):
+        cleaned = super().clean()
+        currency = cleaned.get("currency")
+        target_amount = cleaned.get("target_amount")
+        if currency and target_amount is not None:
+            try:
+                validate_currency_amount(
+                    target_amount, currency, field_name="target_amount", require_positive=True
+                )
+            except ValidationError as exc:
+                for field, messages_list in exc.message_dict.items():
+                    for m in messages_list:
+                        self.add_error(field, m)
+        return cleaned
+
 
 class SavingsContributionForm(forms.Form):
     goal = forms.ModelChoiceField(
         queryset=SavingsGoal.objects.none(),
         label="Savings goal",
-        widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
+        widget=SavingsGoalSelect(attrs={"class": "form-select form-select-sm"}),
     )
     entry_type = forms.ChoiceField(
         choices=SavingsContribution.EntryType.choices,
@@ -664,7 +814,7 @@ class SavingsContributionForm(forms.Form):
         label="Entry type",
         widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
     )
-    amount = NonRoundingDecimalField(
+    amount = GroupedDecimalField(
         label="Amount",
         widget=forms.TextInput(
             attrs={
@@ -704,6 +854,29 @@ class SavingsContributionForm(forms.Form):
                 | Q(scope=SavingsGoal.Scope.SHARED, shared_space_id__in=space_ids),
                 is_archived=False,
             ).select_related("currency")
+
+    def clean_amount(self):
+        amt = self.cleaned_data.get("amount")
+        if amt is not None:
+            _check_integer_digits(amt)
+            if amt <= Decimal("0"):
+                raise ValidationError("Amount must be greater than zero.")
+        return amt
+
+    def clean(self):
+        cleaned = super().clean()
+        goal = cleaned.get("goal")
+        amount = cleaned.get("amount")
+        if goal and amount is not None:
+            try:
+                validate_currency_amount(
+                    amount, goal.currency, field_name="amount", require_positive=True
+                )
+            except ValidationError as exc:
+                for field, msgs in exc.message_dict.items():
+                    for m in msgs:
+                        self.add_error(field, m)
+        return cleaned
 
 
 class ManualExchangeRateForm(forms.Form):
@@ -754,7 +927,7 @@ class ManualExchangeRateForm(forms.Form):
 
 
 class CurrencyConverterForm(forms.Form):
-    amount = NonRoundingDecimalField(
+    amount = GroupedDecimalField(
         label="Amount",
         widget=forms.TextInput(
             attrs={
@@ -769,7 +942,7 @@ class CurrencyConverterForm(forms.Form):
         queryset=Currency.objects.none(),
         empty_label="Select currency",
         label="From currency",
-        widget=forms.Select(
+        widget=CurrencySelect(
             attrs={"id": "converter-from", "class": "form-select form-select-sm"}
         ),
     )
@@ -777,7 +950,7 @@ class CurrencyConverterForm(forms.Form):
         queryset=Currency.objects.none(),
         empty_label="Select currency",
         label="To currency",
-        widget=forms.Select(
+        widget=CurrencySelect(
             attrs={"id": "converter-to", "class": "form-select form-select-sm"}
         ),
     )
@@ -799,3 +972,26 @@ class CurrencyConverterForm(forms.Form):
         qs = Currency.objects.filter(is_active=True).order_by("code")
         self.fields["from_currency"].queryset = qs
         self.fields["to_currency"].queryset = qs
+
+    def clean_amount(self):
+        amt = self.cleaned_data.get("amount")
+        if amt is not None:
+            _check_integer_digits(amt)
+            if amt <= Decimal("0"):
+                raise ValidationError("Amount must be greater than zero.")
+        return amt
+
+    def clean(self):
+        cleaned = super().clean()
+        from_curr = cleaned.get("from_currency")
+        amount = cleaned.get("amount")
+        if from_curr and amount is not None:
+            try:
+                validate_currency_amount(
+                    amount, from_curr, field_name="amount", require_positive=True
+                )
+            except ValidationError as exc:
+                for field, msgs in exc.message_dict.items():
+                    for m in msgs:
+                        self.add_error(field, m)
+        return cleaned

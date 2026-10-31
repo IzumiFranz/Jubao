@@ -3,6 +3,7 @@ from datetime import datetime, time as dt_time
 from decimal import Decimal
 import json
 from pathlib import Path
+import re
 from types import SimpleNamespace
 import uuid
 
@@ -389,6 +390,29 @@ def transactions(request):
 
     filtered = get_filtered_transactions(request.user, request.GET)
 
+    default_display_currency = (
+        ws.get("effective_display_currency")
+        or ws.get("display_currency")
+        or ws.get("effective_base_currency")
+        or ws.get("personal_base_currency")
+        or Currency.objects.filter(code="USD", is_active=True).first()
+        or Currency.objects.filter(is_active=True).first()
+    )
+    default_display_code = default_display_currency.code if default_display_currency else ""
+
+    active_filter_keys = []
+    for key in ("q", "start_date", "end_date", "type", "scope", "category", "wallet", "currency"):
+        val = (request.GET.get(key) or "").strip()
+        if val:
+            active_filter_keys.append(key)
+
+    get_display_curr = (request.GET.get("display_currency") or "").strip().upper()
+    if get_display_curr and get_display_curr != default_display_code:
+        active_filter_keys.append("display_currency")
+
+    has_active_filters = len(active_filter_keys) > 0
+    active_filters_count = len(active_filter_keys)
+
     display_currency = ws.get("display_currency")
     if not display_currency:
         display_currency_code = (request.GET.get("display_currency") or "").strip().upper()
@@ -439,6 +463,9 @@ def transactions(request):
             "display_currency": display_currency,
             "total_count": filtered["total_count"],
             "filters": filtered["filters"],
+            "has_active_filters": has_active_filters,
+            "active_filters_count": active_filters_count,
+            "default_display_currency": default_display_currency,
             "accessible_wallets": accessible_wallets,
             "all_accessible_wallets": all_accessible_wallets,
             "accessible_categories": accessible_categories,
@@ -1071,7 +1098,15 @@ def wallets(request):
                     currency = Currency.objects.filter(pk=request.POST.get("currency")).first()
                 opening_balance = None
                 if request.POST.get("opening_balance") not in (None, ""):
-                    opening_balance = Decimal(str(request.POST.get("opening_balance")))
+                    opening_balance_raw = str(request.POST.get("opening_balance")).strip()
+                    if "," in opening_balance_raw:
+                        if not re.match(r"^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$", opening_balance_raw):
+                            raise ValidationError("Enter a valid decimal amount.")
+                        opening_balance_raw = opening_balance_raw.replace(",", "")
+                    try:
+                        opening_balance = Decimal(opening_balance_raw)
+                    except (InvalidOperation, ValueError):
+                        raise ValidationError("Enter a valid decimal amount.")
                 opening_balance_date = None
                 if request.POST.get("opening_balance_date"):
                     opening_balance_date = datetime.strptime(

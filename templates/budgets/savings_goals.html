@@ -33,8 +33,15 @@
                         {{ goal_form.scope }}
                     </div>
                     <div class="col-12 col-sm-6">
-                        <label class="form-label small fw-medium">Target amount</label>
+                        <label class="form-label small fw-medium" for="{{ goal_form.target_amount.id_for_label }}">Target amount</label>
                         {{ goal_form.target_amount }}
+                        {% if goal_form.target_amount.errors %}
+                        <div class="invalid-feedback d-block" id="goal-target-amount-errors">
+                            {% for error in goal_form.target_amount.errors %}
+                            <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
                     </div>
                     <div class="col-12 col-sm-6">
                         <label class="form-label small fw-medium">Target date (optional)</label>

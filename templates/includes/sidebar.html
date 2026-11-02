@@ -1,3 +1,4 @@
+{% load static %}
 {% with current_view=request.resolver_match.view_name %}
 <aside
     class="app-sidebar offcanvas-lg offcanvas-start"
@@ -6,7 +7,11 @@
     aria-labelledby="appSidebarLabel"
 >
     <div class="offcanvas-header d-lg-none">
-        <span class="offcanvas-title text-white fw-bold fs-5" id="appSidebarLabel">Budget Tracker</span>
+        <div class="offcanvas-title d-flex align-items-center" id="appSidebarLabel">
+            <a href="{% url 'budgets:dashboard' %}" class="sidebar-brand-link text-decoration-none d-flex align-items-center" title="Jubao">
+                <img src="{% static 'images/logo/jubao_text_light.png' %}" alt="Jubao" width="1192" height="505" class="sidebar-logo-text" loading="eager">
+            </a>
+        </div>
         <button
             type="button"
             class="btn-close btn-close-white"
@@ -16,14 +21,10 @@
         ></button>
     </div>
 
-    <div class="app-sidebar-brand d-none d-lg-flex align-items-center px-3 pt-3 pb-2">
-        <a href="{% url 'budgets:dashboard' %}" class="sidebar-brand-link text-decoration-none text-white fw-bold fs-5 d-flex align-items-center gap-2">
-            <svg class="sidebar-brand-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
-                <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
-                <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
-            </svg>
-            <span>Budget Tracker</span>
+    <div class="app-sidebar-brand d-none d-lg-flex align-items-center">
+        <a href="{% url 'budgets:dashboard' %}" class="sidebar-brand-link text-decoration-none text-white d-flex align-items-center" title="Jubao">
+            <img src="{% static 'images/logo/jubao_text_light.png' %}" alt="Jubao" width="1192" height="505" class="sidebar-logo-text" loading="eager">
+            <img src="{% static 'images/logo/jubao_logo_light.png' %}" alt="Jubao" width="374" height="367" class="sidebar-logo-icon" loading="eager">
         </a>
     </div>
 
@@ -34,6 +35,7 @@
                     <a
                         href="{% url 'budgets:dashboard' %}"
                         class="nav-link sidebar-nav-link {% if current_view == 'budgets:dashboard' %}active{% endif %}"
+                        title="Dashboard"
                         {% if current_view == 'budgets:dashboard' %}aria-current="page"{% endif %}
                     >
                         <svg class="sidebar-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -48,6 +50,7 @@
                     <a
                         href="{% url 'budgets:transactions' %}"
                         class="nav-link sidebar-nav-link {% if current_view == 'budgets:transactions' %}active{% endif %}"
+                        title="Transactions"
                         {% if current_view == 'budgets:transactions' %}aria-current="page"{% endif %}
                     >
                         <svg class="sidebar-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -64,6 +67,7 @@
                     <a
                         href="{% url 'budgets:budgets' %}"
                         class="nav-link sidebar-nav-link {% if current_view == 'budgets:budgets' %}active{% endif %}"
+                        title="Budgets"
                         {% if current_view == 'budgets:budgets' %}aria-current="page"{% endif %}
                     >
                         <svg class="sidebar-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -79,6 +83,7 @@
                     <a
                         href="{% url 'budgets:shared_space' %}"
                         class="nav-link sidebar-nav-link {% if current_view == 'budgets:shared_space' %}active{% endif %}"
+                        title="Shared Space"
                         {% if current_view == 'budgets:shared_space' %}aria-current="page"{% endif %}
                     >
                         <svg class="sidebar-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -92,6 +97,7 @@
                     <a
                         href="{% url 'budgets:shared_activity' %}"
                         class="nav-link sidebar-nav-link {% if current_view == 'budgets:shared_activity' %}active{% endif %}"
+                        title="Shared Activity"
                         {% if current_view == 'budgets:shared_activity' %}aria-current="page"{% endif %}
                     >
                         <svg class="sidebar-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -110,6 +116,7 @@
                     <a
                         href="{% url 'budgets:wallets' %}"
                         class="nav-link sidebar-nav-link {% if current_view == 'budgets:wallets' %}active{% endif %}"
+                        title="Wallets"
                         {% if current_view == 'budgets:wallets' %}aria-current="page"{% endif %}
                     >
                         <svg class="sidebar-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -125,6 +132,7 @@
                     <a
                         href="{% url 'budgets:savings_goals' %}"
                         class="nav-link sidebar-nav-link {% if current_view == 'budgets:savings_goals' %}active{% endif %}"
+                        title="Savings Goals"
                         {% if current_view == 'budgets:savings_goals' %}aria-current="page"{% endif %}
                     >
                         <svg class="sidebar-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -139,6 +147,7 @@
                     <a
                         href="{% url 'budgets:reports' %}"
                         class="nav-link sidebar-nav-link {% if current_view == 'budgets:reports' %}active{% endif %}"
+                        title="Reports"
                         {% if current_view == 'budgets:reports' %}aria-current="page"{% endif %}
                     >
                         <svg class="sidebar-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -156,6 +165,7 @@
                     <a
                         href="{% url 'budgets:currencies' %}"
                         class="nav-link sidebar-nav-link {% if current_view == 'budgets:currencies' %}active{% endif %}"
+                        title="Currencies"
                         {% if current_view == 'budgets:currencies' %}aria-current="page"{% endif %}
                     >
                         <svg class="sidebar-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -178,6 +188,7 @@
                     <a
                         href="{% url 'accounts:settings' %}"
                         class="nav-link sidebar-nav-link {% if current_view == 'accounts:settings' %}active{% endif %}"
+                        title="Settings"
                         {% if current_view == 'accounts:settings' %}aria-current="page"{% endif %}
                     >
                         <svg class="sidebar-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -198,7 +209,7 @@
                 <li class="nav-item">
                     <form method="post" action="{% url 'accounts:logout' %}" class="w-100 m-0 p-0" id="sidebar-logout-form">
                         {% csrf_token %}
-                        <button type="submit" class="nav-link sidebar-nav-link sidebar-logout-btn">
+                        <button type="submit" class="nav-link sidebar-nav-link sidebar-logout-btn" title="Log out">
                             <svg class="sidebar-nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
                                 <path d="M10 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5"/>
                                 <line x1="9" y1="12" x2="21" y2="12"/>

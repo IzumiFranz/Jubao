@@ -1,3 +1,4 @@
+{% load static %}
 <header class="app-topbar sticky-top">
     <div class="container-fluid px-3 px-md-4 py-2">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 gap-md-3">
@@ -16,6 +17,9 @@
                         <line x1="4" y1="18" x2="20" y2="18"></line>
                     </svg>
                 </button>
+                <a href="{% url 'budgets:dashboard' %}" class="topbar-logo-link d-inline-flex align-items-center d-lg-none" title="Jubao">
+                    <img src="{% static 'images/logo/jubao_logo.png' %}" alt="Jubao" width="374" height="367" class="topbar-logo-icon" loading="eager">
+                </a>
                 <h1 class="topbar-page-title h5 mb-0 fw-bold">{{ page_title|default:"Dashboard" }}</h1>
             </div>
 
@@ -24,7 +28,16 @@
                 <form id="workspace-view-form" method="post" action="{% url 'accounts:switch_scope' %}" class="topbar-control-group d-flex align-items-center gap-1">
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <label for="workspace-view-select" class="topbar-select-label small mb-0">Workspace</label>
+                    <label for="workspace-view-select" class="topbar-select-label small mb-0 d-inline-flex align-items-center gap-1">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                            <circle cx="12" cy="12" r="9"></circle>
+                            <path d="M3.6 9h16.8"></path>
+                            <path d="M3.6 15h16.8"></path>
+                            <path d="M11.5 3a17 17 0 0 0 0 18"></path>
+                            <path d="M12.5 3a17 17 0 0 1 0 18"></path>
+                        </svg>
+                        <span>Workspace</span>
+                    </label>
                     <select
                         id="workspace-view-select"
                         name="view_choice"
@@ -54,7 +67,14 @@
                 <form id="display-currency-form" method="post" action="{% url 'accounts:set_display_currency' %}" class="topbar-control-group d-flex align-items-center gap-1">
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <label for="display-currency-select" class="topbar-select-label small mb-0">Display currency</label>
+                    <label for="display-currency-select" class="topbar-select-label small mb-0 d-inline-flex align-items-center gap-1">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                            <circle cx="12" cy="12" r="9"></circle>
+                            <path d="M14.8 9A2 2 0 0 0 13 8h-2a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-2a2 2 0 0 1-1.8-1"></path>
+                            <path d="M12 6v2m0 8v2"></path>
+                        </svg>
+                        <span>Display currency</span>
+                    </label>
                     <select
                         id="display-currency-select"
                         name="currency_code"
@@ -128,6 +148,17 @@
                             <div class="fw-bold text-dark text-truncate">{{ request.user.username }}</div>
                         </li>
                         <li><hr class="dropdown-divider my-1"></li>
+                        {% if not user_shared_spaces %}
+                        <li>
+                            <a class="dropdown-item d-flex align-items-center gap-2" href="{% url 'budgets:shared_space' %}">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                    <circle cx="8.5" cy="12" r="6"/>
+                                    <circle cx="15.5" cy="12" r="6"/>
+                                </svg>
+                                <span>Join shared space</span>
+                            </a>
+                        </li>
+                        {% endif %}
                         <li>
                             <a class="dropdown-item d-flex align-items-center gap-2" href="{% url 'accounts:settings' %}">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">

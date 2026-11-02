@@ -68,6 +68,14 @@ def user_preferences_context(request):
     ws = get_active_workspace_context(request.user)
     request._cached_user_preference = ws["preference"]
     active_currencies = list(Currency.objects.filter(is_active=True).order_by("code"))
+    effective_display_currency = ws["effective_display_currency"]
+    if not ws.get("display_currency"):
+        get_disp_code = (request.GET.get("display_currency") or "").strip().upper()
+        if get_disp_code:
+            override_curr = next((c for c in active_currencies if c.code == get_disp_code), None)
+            if override_curr:
+                effective_display_currency = override_curr
+
     return {
         "user_base_currency": ws["personal_base_currency"],
         "user_preference": ws["preference"],
@@ -76,7 +84,7 @@ def user_preferences_context(request):
         "user_shared_spaces": ws["shared_spaces"],
         "effective_base_currency": ws["effective_base_currency"],
         "display_currency": ws["display_currency"],
-        "effective_display_currency": ws["effective_display_currency"],
+        "effective_display_currency": effective_display_currency,
         "active_currencies": active_currencies,
     }
 
@@ -247,10 +255,7 @@ def _safe_currency_redirect(request, next_url, new_currency_code=None):
     parsed = urlparse(next_url)
     query_params = parse_qs(parsed.query, keep_blank_values=True)
     if "display_currency" in query_params:
-        if new_currency_code:
-            query_params["display_currency"] = [new_currency_code]
-        else:
-            del query_params["display_currency"]
+        del query_params["display_currency"]
         new_query = urlencode(query_params, doseq=True)
         reconciled_url = urlunparse((
             parsed.scheme,
@@ -371,7 +376,10 @@ def export_account_data(request):
     from apps.budgets.services import sanitize_spreadsheet_cell
 
     fmt = (request.GET.get("format") or "json").strip().lower()
-    tx_rows = build_transactions_export_rows(request.user, request.GET)
+    tx_params = request.GET.copy()
+    if "month" not in tx_params:
+        tx_params["month"] = "all"
+    tx_rows = build_transactions_export_rows(request.user, tx_params)
 
     if fmt == "csv":
         response = HttpResponse(content_type="text/csv; charset=utf-8")

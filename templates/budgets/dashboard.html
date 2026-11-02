@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Dashboard | Budget Tracker{% endblock %}
+{% block title %}Dashboard | Jubao{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=v11">
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=v12">
 {% endblock %}
 
 {% block content %}
@@ -333,7 +333,7 @@
             <section class="stationery-panel h-100 d-flex flex-column" aria-labelledby="panel-transactions-title">
                 <div class="panel-header d-flex align-items-center justify-content-between mb-3">
                     <h2 id="panel-transactions-title" class="panel-title">Recent transactions</h2>
-                    <a href="{% url 'budgets:transactions' %}" class="panel-action-link">View all &gt;</a>
+                    <a href="{% url 'budgets:transactions' %}?month=all" class="panel-action-link">View all &gt;</a>
                 </div>
                 {% if recent_transactions %}
                 <div class="table-responsive flex-grow-1">
@@ -498,5 +498,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/pages/transaction.js' %}?v=v11"></script>
+<script src="{% static 'js/pages/transaction.js' %}?v=v12"></script>
 {% endblock %}

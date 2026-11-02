@@ -55,14 +55,14 @@ textarea:focus-visible,
 .app-sidebar .offcanvas-header {
     border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
     background: transparent;
-    padding: 1rem 1.25rem;
+    padding: 16px 20px;
     flex-shrink: 0;
 }
 
 .app-sidebar-brand {
-    min-height: 3.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
+    padding: 16px 20px;
 }
 
 .app-sidebar .sidebar-brand-link {
@@ -130,9 +130,91 @@ textarea:focus-visible,
         position: sticky;
         top: 0;
         height: 100vh;
+        height: 100dvh;
         display: flex;
         flex-direction: column;
         overflow: visible;
+        transition: width 0.18s ease, min-width 0.18s ease;
+    }
+}
+
+/* Collapsed icon-only sidebar (~72px, with tooltips) at 992px - 1199.98px for fine pointer (mouse);
+   on coarse pointer (touch), show labels below icons so touch users do not rely on hover tooltips. */
+@media (min-width: 992px) and (max-width: 1199.98px) {
+    .app-sidebar {
+        width: 72px;
+        min-width: 72px;
+    }
+
+    .app-sidebar-brand {
+        justify-content: center;
+        padding: 16px 0 !important;
+    }
+
+    .app-sidebar .sidebar-logo-text {
+        display: none !important;
+    }
+
+    .app-sidebar .sidebar-logo-icon {
+        display: block !important;
+        width: 44px;
+        height: auto;
+        margin-inline: auto;
+    }
+
+    .app-sidebar .sidebar-brand-link span,
+    .app-sidebar .sidebar-nav-link span {
+        display: none;
+    }
+
+    .app-sidebar .sidebar-nav-link {
+        justify-content: center;
+        padding: 0.65rem 0;
+        margin: 0.15rem 0.6rem;
+        gap: 0;
+    }
+
+    .app-sidebar .sidebar-nav-link.active {
+        margin-right: 0 !important;
+        margin-left: 0.5rem !important;
+        padding-right: 0.5rem;
+    }
+
+    .app-sidebar .sidebar-logout-btn {
+        width: calc(100% - 1.2rem);
+        text-align: center;
+    }
+}
+
+@media (min-width: 992px) and (max-width: 1199.98px) and (pointer: coarse) {
+    .app-sidebar {
+        width: 96px;
+        min-width: 96px;
+    }
+
+    .app-sidebar .sidebar-logo-icon {
+        width: 52px;
+        height: auto;
+    }
+
+    .app-sidebar .sidebar-nav-link {
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 0.45rem 0.25rem;
+        margin: 0.15rem 0.35rem;
+        gap: 0.2rem;
+        text-align: center;
+    }
+
+    .app-sidebar .sidebar-nav-link span {
+        display: block;
+        font-size: 0.75rem;
+        line-height: 1.15;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 }
 
@@ -225,6 +307,11 @@ textarea:focus-visible,
     font-family: inherit;
 }
 
+.app-shell {
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
 .app-main-column {
     min-width: 0;
 }
@@ -239,9 +326,15 @@ textarea:focus-visible,
     box-shadow: 0 1px 3px rgba(19, 34, 56, 0.04), 0 1px 2px rgba(19, 34, 56, 0.02);
 }
 
+.app-topbar > .container-fluid {
+    max-width: 1600px;
+    margin-inline: auto;
+    padding-inline: clamp(0.75rem, 2.2vw, 2rem) !important;
+}
+
 .topbar-page-title {
     color: #132238;
-    font-size: 1.15rem;
+    font-size: clamp(1.05rem, 1.4vw, 1.25rem);
     font-weight: 700;
     letter-spacing: -0.01em;
     line-height: 1.25;
@@ -458,8 +551,72 @@ textarea:focus-visible,
 }
 
 .app-content {
-    max-width: 1400px;
+    max-width: 1600px;
     width: 100%;
+    margin-inline: auto;
+    padding-inline: clamp(0.75rem, 2.2vw, 2rem);
+}
+
+.app-content .row {
+    margin-left: 0;
+    margin-right: 0;
+}
+
+.app-content .row > .col-12 {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+@media (min-width: 576px) {
+    .app-content .row > [class*="col-sm-"]:not(.col-sm-12) {
+        padding-left: calc(var(--bs-gutter-x, 1rem) * 0.5);
+        padding-right: calc(var(--bs-gutter-x, 1rem) * 0.5);
+    }
+    .app-content .row > [class*="col-sm-"]:first-child {
+        padding-left: 0;
+    }
+    .app-content .row > [class*="col-sm-"]:last-child {
+        padding-right: 0;
+    }
+}
+
+@media (min-width: 768px) {
+    .app-content .row > [class*="col-md-"]:not(.col-md-12) {
+        padding-left: calc(var(--bs-gutter-x, 1rem) * 0.5);
+        padding-right: calc(var(--bs-gutter-x, 1rem) * 0.5);
+    }
+    .app-content .row > [class*="col-md-"]:first-child {
+        padding-left: 0;
+    }
+    .app-content .row > [class*="col-md-"]:last-child {
+        padding-right: 0;
+    }
+}
+
+@media (min-width: 992px) {
+    .app-content .row > [class*="col-lg-"]:not(.col-lg-12) {
+        padding-left: calc(var(--bs-gutter-x, 1rem) * 0.5);
+        padding-right: calc(var(--bs-gutter-x, 1rem) * 0.5);
+    }
+    .app-content .row > [class*="col-lg-"]:first-child {
+        padding-left: 0;
+    }
+    .app-content .row > [class*="col-lg-"]:last-child {
+        padding-right: 0;
+    }
+}
+
+@media (min-width: 1200px) {
+    .app-content .row > [class*="col-xl-"]:not(.col-xl-12) {
+        padding-left: calc(var(--bs-gutter-x, 1rem) * 0.5);
+        padding-right: calc(var(--bs-gutter-x, 1rem) * 0.5);
+    }
+    .app-content .row > [class*="col-xl-"]:first-child {
+        padding-left: 0;
+    }
+    .app-content .row > [class*="col-xl-"]:last-child {
+        padding-right: 0;
+    }
 }
 
 .summary-card,
@@ -467,6 +624,11 @@ textarea:focus-visible,
     background-color: var(--app-surface);
     border: 1px solid var(--app-border);
     border-radius: 0.5rem;
+}
+
+.dashboard-panel,
+.stationery-panel {
+    padding: clamp(0.85rem, 2vw, 1.5rem) !important;
 }
 
 .summary-value {
@@ -563,7 +725,64 @@ textarea:focus-visible,
     outline-offset: 1px;
 }
 
+/* Between 992px and 1199.98px: let Workspace and Display currency selects shrink cleanly */
+@media (min-width: 992px) and (max-width: 1199.98px) {
+    .app-topbar .topbar-right {
+        flex-wrap: nowrap !important;
+        min-width: 0;
+    }
+
+    .app-topbar .topbar-control-group {
+        min-width: 0;
+        flex: 0 1 auto;
+    }
+
+    .app-topbar .topbar-select {
+        min-width: 0;
+        max-width: 150px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
 @media (max-width: 991.98px) {
+    .app-topbar .container-fluid > .d-flex {
+        justify-content: flex-start !important;
+    }
+
+    .app-topbar .topbar-right {
+        display: contents !important;
+    }
+
+    .app-topbar .topbar-left {
+        order: 1;
+        margin-right: auto;
+    }
+
+    .app-topbar #offline-queue-badge {
+        order: 2;
+    }
+
+    .app-topbar .topbar-account-dropdown {
+        order: 2;
+        margin-left: auto;
+    }
+
+    .app-topbar .container-fluid > .d-flex::after {
+        content: "";
+        flex-basis: 100%;
+        width: 100%;
+        height: 0;
+        order: 3;
+    }
+
+    .app-topbar #workspace-view-form,
+    .app-topbar #display-currency-form,
+    .app-topbar .btn-topbar-action {
+        order: 4;
+    }
+
     .app-toast-container {
         top: 6.25rem;
         right: 0.75rem;
@@ -571,11 +790,92 @@ textarea:focus-visible,
     }
 }
 
-@media (max-width: 576px) {
+@media (min-width: 700px) and (max-width: 991.98px) {
+    .app-topbar .btn-topbar-action {
+        margin-left: auto;
+    }
+}
+
+/* Below 576px: Workspace and Display currency on one row; Add transaction becomes floating action button */
+@media (max-width: 575.98px) {
+    .app-topbar #workspace-view-form,
+    .app-topbar #display-currency-form {
+        flex: 1 1 calc(50% - 0.35rem);
+        min-width: 0;
+    }
+
+    .app-topbar .topbar-select-label span,
+    .app-topbar .topbar-link {
+        display: none;
+    }
+
+    .app-topbar .topbar-select {
+        width: 100% !important;
+        min-width: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .app-topbar .btn-topbar-action {
+        position: fixed;
+        right: calc(1rem + env(safe-area-inset-right, 0px));
+        bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+        z-index: 1035;
+        border-radius: 999px;
+        min-height: 44px;
+        padding: 0.55rem 1rem;
+        box-shadow: 0 4px 14px rgba(19, 34, 56, 0.25), 0 2px 6px rgba(19, 34, 56, 0.14);
+    }
+
+    /* Hide floating "Add transaction" button while any modal is open */
+    body.modal-open .app-topbar .btn-topbar-action {
+        visibility: hidden !important;
+    }
+
+    .app-content {
+        padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px)) !important;
+    }
+
     .app-toast-container {
         top: 6.75rem;
         right: 0.75rem;
         max-width: calc(100vw - 1.5rem);
+    }
+}
+
+/* Coarse pointer (touch devices) minimum 40px height on primary interactive controls;
+   dense table controls and small buttons use an expanded 40px vertical touch hit area without growing row height. */
+@media (pointer: coarse) {
+    .btn:not(.btn-sm):not(table .btn),
+    .form-control:not(.form-control-sm):not(table .form-control),
+    .form-select:not(.form-select-sm):not(table .form-select),
+    .btn-topbar-menu,
+    .btn-topbar-account,
+    .btn-topbar-action,
+    .topbar-select {
+        min-height: 40px;
+    }
+
+    .btn.btn-sm,
+    table .btn,
+    .tx-icon-btn {
+        position: relative;
+    }
+
+    .btn.btn-sm::after,
+    table .btn::after,
+    .tx-icon-btn::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        min-width: 40px;
+        min-height: 40px;
+        width: 100%;
+        height: 100%;
     }
 }
 
@@ -592,6 +892,429 @@ textarea:focus-visible,
     }
     .app-toast {
         animation: none !important;
+        transition: none !important;
+    }
+}
+
+/* =========================================================================
+   JUBAO BRANDING LOGOS & ICONS
+   ========================================================================= */
+.sidebar-logo-text {
+    width: 185px;
+    height: auto;
+    max-width: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.sidebar-logo-icon {
+    width: 44px;
+    height: auto;
+    object-fit: contain;
+    display: none;
+}
+
+.topbar-logo-link {
+    text-decoration: none;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.topbar-logo-icon {
+    height: 40px;
+    width: auto;
+    object-fit: contain;
+    display: inline-block;
+}
+
+@media (min-width: 992px) {
+    .topbar-logo-link,
+    .topbar-logo-icon {
+        display: none !important;
+    }
+}
+
+.auth-brand-logo {
+    width: 220px;
+    height: auto;
+    max-width: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+@media (max-width: 399.98px) {
+    .auth-brand-logo {
+        max-width: 70%;
+    }
+}
+
+.offline-brand-logo {
+    width: 200px;
+    height: auto;
+    max-width: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+/* ==========================================================================
+   Jubao Authentication Layout (Mockup Art & Overlay)
+   ========================================================================== */
+
+:root {
+    --auth-page-bg:
+        /* Gentle golden light directly behind & above the card */
+        radial-gradient(circle 520px at 50% 32%, rgba(254, 244, 218, 0.85) 0%, rgba(250, 237, 212, 0.45) 55%, transparent 100%),
+        /* Very restrained blush shadow towards bottom corners & edges */
+        radial-gradient(circle 900px at 100% 100%, rgba(216, 186, 183, 0.42) 0%, transparent 60%),
+        radial-gradient(circle 800px at 0% 100%, rgba(225, 201, 192, 0.35) 0%, transparent 55%),
+        /* Extremely faint, oversized watermark motif (repeating coin geometry at 3.5% opacity) */
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Ccircle cx='80' cy='80' r='52' fill='none' stroke='%23C29B38' stroke-width='1.5' stroke-opacity='0.038'/%3E%3Crect x='67' y='67' width='26' height='26' rx='3' transform='rotate(45 80 80)' fill='none' stroke='%23C29B38' stroke-width='1.5' stroke-opacity='0.038'/%3E%3C/svg%3E"),
+        /* Soft ivory paper-like base gradient */
+        linear-gradient(145deg, #FDF9F0 0%, #F8F0E1 45%, #EFE1D3 80%, #E7D2C7 100%);
+    --auth-navy: #172B4D;
+    --auth-gold: #C29B38;
+    --auth-gold-focus: #E0A526;
+    --auth-red: #BD362A;
+    --auth-red-hover: #D23E30;
+    --auth-error: #FFB4AB;
+}
+
+body.auth-page-body {
+    background: var(--auth-page-bg) !important;
+    background-color: #F8F0E1 !important;
+    background-attachment: fixed;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.auth-page-container {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 24px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+
+/* Card Wrapper desktop */
+.auth-card-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: min(870px, calc((100dvh - 48px) * 870 / 775));
+    aspect-ratio: 870 / 775;
+    margin: 0 auto;
+    overflow: visible;
+}
+
+.auth-card-art {
+    width: 100%;
+    height: auto;
+    display: block;
+    filter: drop-shadow(0 28px 45px rgba(23, 44, 82, 0.28)) drop-shadow(0 10px 18px rgba(0, 0, 0, 0.08));
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Overlay the form column on the right navy panel precisely matching the reference mockup */
+.auth-form-overlay {
+    position: absolute;
+    left: 61.5%;
+    right: 10.5%;
+    top: 8.39%; /* 65/775 aligns with card top y=0 */
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    z-index: 2;
+}
+
+.auth-form-column {
+    width: 100%;
+    max-width: 245px;
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+}
+
+.auth-logo-link {
+    display: inline-block;
+    margin-bottom: 18px;
+    text-decoration: none;
+}
+
+.auth-logo-img {
+    width: 140px;
+    height: auto;
+    display: block;
+    object-fit: contain;
+}
+
+.auth-heading {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin: 0 0 4px 0;
+    line-height: 1.2;
+}
+
+.auth-subtitle {
+    color: #B59B57;
+    font-size: 12.5px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    margin: 0 0 18px 0;
+    line-height: 1.35;
+}
+
+/* Form groups and underline inputs matching mockup */
+.auth-form-group {
+    margin-bottom: 14px;
+    position: relative;
+}
+
+.auth-field-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #ffffff;
+    margin-bottom: 2px;
+}
+
+.auth-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+    min-height: 38px;
+    transition: border-bottom-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-form-input {
+    width: 100%;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    color: #ffffff !important;
+    font-size: 14px;
+    min-height: 38px;
+    padding: 6px 36px 6px 0 !important;
+    box-shadow: none !important;
+    font-weight: 400;
+}
+
+.auth-form-input::placeholder {
+    color: rgba(255, 255, 255, 0.52) !important;
+    opacity: 1;
+    font-size: 13px;
+    font-weight: 400;
+}
+
+.auth-form-input:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* 2px gold bottom border on focus */
+.auth-input-wrapper:focus-within {
+    border-bottom: 2px solid var(--auth-gold-focus);
+    box-shadow: 0 1px 0 0 var(--auth-gold-focus);
+}
+
+.auth-input-wrapper.is-invalid {
+    border-bottom-color: var(--auth-error);
+}
+
+/* Show/hide password button */
+.btn-toggle-password {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.8;
+    transition: opacity 0.15s ease;
+}
+
+.btn-toggle-password:hover {
+    opacity: 1;
+}
+
+.btn-toggle-password:focus-visible {
+    outline: 2px solid var(--auth-gold-focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Error messages below field */
+.auth-field-error {
+    color: var(--auth-error);
+    font-size: 13px;
+    font-weight: 500;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.3;
+}
+
+.auth-alert {
+    background: rgba(255, 180, 171, 0.15);
+    border: 1px solid var(--auth-error);
+    color: #FFE5E2;
+    font-size: 13px;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Submit button matching reference: rounded, soft red glow, bold text */
+.btn-auth-submit {
+    width: 100%;
+    min-height: 44px;
+    background-color: var(--auth-red);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(189, 54, 42, 0.45);
+    cursor: pointer;
+    margin-top: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.btn-auth-submit:hover {
+    background-color: var(--auth-red-hover);
+    color: #ffffff;
+    box-shadow: 0 10px 28px rgba(189, 54, 42, 0.55);
+}
+
+.btn-auth-submit:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(224, 165, 38, 0.5), 0 0 0 1px var(--auth-gold-focus);
+    background-color: var(--auth-red-hover);
+}
+
+/* Switcher link below button */
+.auth-switch-link-wrapper {
+    margin-top: 14px;
+    text-align: center;
+}
+
+.auth-switch-link {
+    color: #D1B368;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.auth-switch-link:hover,
+.auth-switch-link:focus-visible {
+    color: #F1D185;
+    text-decoration: underline;
+    outline: none;
+}
+
+/* ==========================================================================
+   Mobile (< 768px)
+   ========================================================================== */
+@media (max-width: 767.98px) {
+    .auth-page-container {
+        padding: 16px 12px;
+        justify-content: flex-start;
+    }
+
+
+    .auth-card-wrapper {
+        aspect-ratio: auto;
+        display: flex;
+        flex-direction: column;
+        border-radius: 20px;
+        overflow: hidden;
+        max-width: 380px;
+        box-shadow: 0 18px 36px rgba(23, 44, 82, 0.28);
+    }
+
+    .auth-card-art {
+        width: 100%;
+        height: 220px;
+        object-fit: cover;
+        object-position: 22% 88%;
+        border-radius: 20px 20px 0 0;
+        filter: none;
+    }
+
+    .auth-form-overlay {
+        position: static;
+        background: var(--auth-navy);
+        padding: 24px 20px;
+        border-radius: 0 0 20px 20px;
+        display: block;
+    }
+
+    .auth-form-column {
+        max-width: 100%;
+        margin: 0 auto;
+    }
+
+    .auth-logo-link {
+        margin-bottom: 18px;
+    }
+
+    .auth-logo-img {
+        width: 135px;
+    }
+
+    .auth-heading {
+        font-size: 18px;
+    }
+
+    .auth-subtitle {
+        font-size: 13px;
+        margin-bottom: 18px;
+    }
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+    .btn-auth-submit,
+    .btn-toggle-password,
+    .auth-input-wrapper,
+    .auth-switch-link {
         transition: none !important;
     }
 }

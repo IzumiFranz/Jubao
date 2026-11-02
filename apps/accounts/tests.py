@@ -745,9 +745,9 @@ class TopBarScopeAndViewControlsTests(TestCase):
             self.set_display_currency_url,
             {"currency_code": "EUR", "next": "/transactions/?page=2&type=expense&display_currency=USD"},
         )
-        # Redirect URL must reconcile display_currency to EUR and keep other filters
+        # Redirect URL drops display_currency parameter and keeps other filters
         self.assertEqual(resp_switch.status_code, 302)
-        self.assertIn("display_currency=EUR", resp_switch.url)
+        self.assertNotIn("display_currency=", resp_switch.url)
         self.assertIn("page=2", resp_switch.url)
         self.assertIn("type=expense", resp_switch.url)
 
@@ -799,3 +799,90 @@ class TopBarScopeAndViewControlsTests(TestCase):
         self.assertContains(resp_unconf, "No display currency selected")
         self.assertContains(resp_unconf, "Please select a <strong>Display currency</strong>")
 
+class AuthenticationPageLayoutAndAccessibilityTests(TestCase):
+    def setUp(self):
+        self.login_url = reverse("accounts:login")
+        self.register_url = reverse("accounts:register")
+
+    def test_login_page_renders_mockup_art_and_overlay(self):
+        resp = self.client.get(self.login_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Mockup art and overlay layout
+        self.assertIn("auth-page-container", html)
+        self.assertIn("auth-card-wrapper", html)
+        self.assertIn('src="/static/images/auth/jubao_auth_art.svg"', html)
+        self.assertIn('alt=""', html)
+        self.assertIn("auth-form-overlay", html)
+        self.assertIn("auth-form-column", html)
+        self.assertIn("LOG IN", html)
+        self.assertIn("welcome back, gather your treasure", html)
+
+        # Login to register switch link
+        self.assertIn(f'href="{self.register_url}"', html)
+        self.assertIn("New here? Sign up", html)
+
+        # Labels tied to inputs
+        self.assertIn('<label for="id_username" class="auth-field-label">', html)
+        self.assertIn('<label for="id_password" class="auth-field-label">', html)
+        self.assertIn('id="id_username"', html)
+        self.assertIn('id="id_password"', html)
+
+        # Autocomplete attributes and autofocus
+        self.assertIn('autocomplete="username"', html)
+        self.assertIn('autocomplete="current-password"', html)
+        self.assertIn("autofocus", html)
+
+        # Password toggle button
+        self.assertIn('class="btn-toggle-password"', html)
+        self.assertIn('data-target="id_password"', html)
+        self.assertIn('aria-label="Show password"', html)
+        self.assertIn('aria-pressed="false"', html)
+
+        # Title and favicons
+        self.assertIn("<title>Log in | Jubao</title>", html)
+        self.assertIn('href="/static/images/favicon.ico"', html)
+        self.assertIn('href="/static/images/favicon.svg"', html)
+
+    def test_register_page_renders_mockup_art_and_structure(self):
+        resp = self.client.get(self.register_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # No isolated back link above card
+        self.assertNotIn("auth-back-link", html)
+
+        # Art and heading
+        self.assertIn('src="/static/images/auth/jubao_auth_art.svg"', html)
+        self.assertIn("SIGN UP", html)
+        self.assertIn("to track your budget &amp; gather treasure", html)
+
+        # Register to login switch link
+        self.assertIn("Already have an account? Log in", html)
+
+        # Labels tied to inputs
+        self.assertIn('<label for="id_username" class="auth-field-label">', html)
+        self.assertIn('<label for="id_password1" class="auth-field-label">', html)
+        self.assertIn('<label for="id_password2" class="auth-field-label">', html)
+
+        # Autocomplete attributes
+        self.assertIn('autocomplete="username"', html)
+        self.assertIn('autocomplete="new-password"', html)
+
+        # Password toggle on password1 and password2
+        self.assertIn('data-target="id_password1"', html)
+        self.assertIn('data-target="id_password2"', html)
+
+        # Title
+        self.assertIn("<title>Sign up | Jubao</title>", html)
+
+    def test_invalid_login_shows_error_message_with_role_alert(self):
+        resp = self.client.post(
+            self.login_url,
+            {"username": "nonexistent_user", "password": "WrongPassword123!"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+        self.assertIn('role="alert"', html)
+        self.assertIn("Invalid username or password. Please try again.", html)

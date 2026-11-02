@@ -1,5 +1,5 @@
 import csv
-from datetime import datetime, time as dt_time
+from datetime import date, datetime, time as dt_time
 from decimal import Decimal
 import json
 from pathlib import Path
@@ -11,6 +11,7 @@ from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db.models import Count, Q, Sum
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template import loader as template_loader
@@ -406,10 +407,6 @@ def transactions(request):
         if val:
             active_filter_keys.append(key)
 
-    get_display_curr = (request.GET.get("display_currency") or "").strip().upper()
-    if get_display_curr and get_display_curr != default_display_code:
-        active_filter_keys.append("display_currency")
-
     has_active_filters = len(active_filter_keys) > 0
     active_filters_count = len(active_filter_keys)
 
@@ -424,10 +421,97 @@ def transactions(request):
     if display_currency:
         filtered["filters"]["display_currency"] = display_currency.code
 
+    rates_cache = {}
     enrich_transactions_with_display_currency(
         filtered["page_obj"].object_list,
         display_currency,
         user=request.user,
+        rates_cache=rates_cache,
+    )
+
+    # Compute summary totals server-side using DB aggregation grouped by currency and transaction type
+    total_income_dec = Decimal("0")
+    total_expense_dec = Decimal("0")
+    unconverted_count = 0
+
+    if display_currency:
+        summary_qs = filtered["queryset"].filter(
+            transaction_type__in=[Transaction.Type.INCOME, Transaction.Type.EXPENSE]
+        )
+        grouped_totals = (
+            summary_qs.values("currency_id", "scope", "shared_space_id", "transaction_type")
+            .annotate(total_amount=Sum("amount"), tx_count=Count("id"))
+        )
+
+        currency_ids = {g["currency_id"] for g in grouped_totals}
+        currencies_by_id = {c.id: c for c in Currency.objects.filter(id__in=currency_ids)}
+        space_ids = {g["shared_space_id"] for g in grouped_totals if g["shared_space_id"]}
+        spaces_by_id = {s.id: s for s in SharedSpace.objects.filter(id__in=space_ids)} if space_ids else {}
+
+        user_id = getattr(request.user, "pk", None) or getattr(request.user, "id", None)
+
+        for g in grouped_totals:
+            curr_id = g["currency_id"]
+            source_curr = currencies_by_id.get(curr_id)
+            if not source_curr:
+                unconverted_count += g["tx_count"]
+                continue
+
+            tx_type = g["transaction_type"]
+            group_amount = g["total_amount"] or Decimal("0")
+            tx_count = g["tx_count"]
+
+            if curr_id == display_currency.id:
+                converted_amt = group_amount
+            else:
+                g_scope = g["scope"] or "personal"
+                g_space = spaces_by_id.get(g["shared_space_id"]) if g_scope == "shared" else None
+                g_space_id = g_space.id if g_space else None
+                cache_key = (
+                    user_id,
+                    curr_id,
+                    display_currency.id,
+                    g_scope,
+                    g_space_id,
+                )
+                if cache_key not in rates_cache:
+                    rates_cache[cache_key] = get_latest_rate(
+                        source_curr,
+                        display_currency,
+                        user=request.user,
+                        scope=g_scope,
+                        shared_space=g_space,
+                    )
+                lookup = rates_cache[cache_key]
+                if lookup.rate is not None:
+                    converted_amt = convert_decimal_amount(group_amount, lookup.rate, display_currency)
+                else:
+                    converted_amt = None
+
+            if converted_amt is not None:
+                if tx_type == Transaction.Type.INCOME:
+                    total_income_dec += converted_amt
+                elif tx_type == Transaction.Type.EXPENSE:
+                    total_expense_dec += converted_amt
+            else:
+                unconverted_count += tx_count
+
+    net_dec = total_income_dec - total_expense_dec
+    summary_totals = {
+        "income": total_income_dec,
+        "expense": total_expense_dec,
+        "net": net_dec,
+        "formatted_income": format_currency_amount(total_income_dec, display_currency) if display_currency else "0.00",
+        "formatted_expense": format_currency_amount(total_expense_dec, display_currency) if display_currency else "0.00",
+        "formatted_net": format_currency_amount(abs(net_dec), display_currency) if display_currency else "0.00",
+        "unconverted_count": unconverted_count,
+    }
+
+    has_page_stale_rates = any(getattr(tx, "display_is_stale", False) for tx in filtered["page_obj"].object_list)
+    hide_converted_column = bool(
+        display_currency
+        and filtered["total_count"] > 0
+        and not filtered["queryset"].exclude(currency=display_currency).exists()
     )
 
     tx_ids = [tx.id for tx in filtered["page_obj"].object_list]
@@ -448,7 +532,40 @@ def transactions(request):
     all_categories = list(
         get_accessible_categories_qs(request.user, include_archived=True)
     )
-    recent_transfers = list(get_accessible_transfers(request.user, limit=15))
+    recent_transfers = list(
+        get_accessible_transfers(
+            request.user,
+            limit=15,
+            start_date=filtered["filters"].get("effective_start_date"),
+            end_date=filtered["filters"].get("effective_end_date"),
+        )
+    )
+
+    # Compute month bar navigation metadata
+    today = timezone.localdate()
+    cur_month_str = today.strftime("%Y-%m")
+    month_mode = filtered["filters"].get("month_mode", "month")
+    selected_month_str = filtered["filters"].get("month") or cur_month_str
+    month_start = filtered["filters"].get("month_start")
+    month_end = filtered["filters"].get("month_end")
+
+    if month_start:
+        # Prev month: 1st of month - 1 day gives previous month
+        prev_month_date = date(month_start.year - (1 if month_start.month == 1 else 0), 12 if month_start.month == 1 else month_start.month - 1, 1)
+        prev_month_str = prev_month_date.strftime("%Y-%m")
+        # Next month
+        next_month_date = date(month_start.year + (1 if month_start.month == 12 else 0), 1 if month_start.month == 12 else month_start.month + 1, 1)
+        next_month_str = next_month_date.strftime("%Y-%m")
+        is_current_month = (selected_month_str == cur_month_str)
+        month_input_val = selected_month_str
+        selected_month_label = month_start.strftime("%B %Y")
+    else:
+        prev_month_str = cur_month_str
+        next_month_str = cur_month_str
+        is_current_month = False
+        month_input_val = cur_month_str
+        selected_month_label = filtered["filters"].get("period_label", "All time")
+
     currencies_list = list(Currency.objects.filter(is_active=True).order_by("code"))
 
     return render(
@@ -461,6 +578,7 @@ def transactions(request):
             "page_obj": filtered["page_obj"],
             "transactions_list": filtered["page_obj"].object_list,
             "display_currency": display_currency,
+            "effective_display_currency": display_currency,
             "total_count": filtered["total_count"],
             "filters": filtered["filters"],
             "has_active_filters": has_active_filters,
@@ -473,9 +591,23 @@ def transactions(request):
             "recent_transfers": recent_transfers,
             "currencies": currencies_list,
             "eligible_partner_spaces": eligible_partner_spaces,
+            "summary_totals": summary_totals,
+            "has_page_stale_rates": has_page_stale_rates,
+            "hide_converted_column": hide_converted_column,
             "tx_form": tx_form,
             "transfer_form": transfer_form,
             "category_form": category_form,
+            "month_bar": {
+                "mode": month_mode,
+                "selected_month": selected_month_str,
+                "selected_month_label": selected_month_label,
+                "current_month": cur_month_str,
+                "is_current_month": is_current_month,
+                "prev_month": prev_month_str,
+                "next_month": next_month_str,
+                "month_input_val": month_input_val,
+                "period_label": filtered["filters"].get("period_label"),
+            },
         },
     )
 
@@ -484,7 +616,12 @@ def transactions(request):
 @require_GET
 def export_transactions(request):
     fmt = (request.GET.get("format") or "csv").strip().lower()
-    rows = build_transactions_export_rows(request.user, request.GET)
+    params = request.GET.copy()
+    if params.get("all_time") in ("1", "true", "yes"):
+        params["month"] = "all"
+        params.pop("start_date", None)
+        params.pop("end_date", None)
+    rows = build_transactions_export_rows(request.user, params)
 
     if fmt == "json":
         response = HttpResponse(
@@ -1481,10 +1618,115 @@ def offline_page(request):
     return HttpResponse(html, content_type="text/html; charset=utf-8")
 
 
+_SW_CACHE_MAP = {}
+
+
+def compute_service_worker_cache_name(base_dir: Path | None = None) -> str:
+    """
+    Compute the deterministic service-worker CACHE_NAME from the SHA-256 hash
+    of the precached files and offline template so any change to a precached
+    file automatically rotates the service-worker cache name.
+
+    Results are cached by file mtimes and sizes to avoid recomputing the hash
+    on every request. When STATIC_ROOT is configured and populated (collectstatic),
+    the served files in STATIC_ROOT are hashed.
+    """
+    import hashlib
+    import re
+
+    if base_dir is None:
+        base_dir = Path(django_settings.BASE_DIR)
+    else:
+        base_dir = Path(base_dir)
+
+    static_root_setting = getattr(django_settings, "STATIC_ROOT", None)
+    static_root = Path(static_root_setting) if static_root_setting else None
+
+    # Service worker JS path: prefer STATIC_ROOT if present, else base_dir/static
+    sw_path = None
+    if static_root and (static_root / "js" / "service-worker.js").exists():
+        sw_path = static_root / "js" / "service-worker.js"
+    elif (base_dir / "static" / "js" / "service-worker.js").exists():
+        sw_path = base_dir / "static" / "js" / "service-worker.js"
+
+    urls = []
+    if sw_path and sw_path.exists():
+        sw_text = sw_path.read_text(encoding="utf-8")
+        urls = re.findall(r'"(/static/[^"?]+)(?:\?[^"]*)?"', sw_text)
+
+    resolved_assets = []
+    seen = set()
+    for url_path in urls:
+        if url_path in seen:
+            continue
+        seen.add(url_path)
+        rel_under_static = url_path[len("/static/"):].lstrip("/") if url_path.startswith("/static/") else url_path.lstrip("/")
+        asset_file = None
+        if static_root and (static_root / rel_under_static).exists():
+            asset_file = static_root / rel_under_static
+        elif (base_dir / "static" / rel_under_static).exists():
+            asset_file = base_dir / "static" / rel_under_static
+        elif (base_dir / url_path.lstrip("/")).exists():
+            asset_file = base_dir / url_path.lstrip("/")
+        resolved_assets.append((url_path, asset_file))
+
+    offline_tpl = base_dir / "templates" / "offline.html"
+
+    def file_sig(p):
+        if p and p.exists():
+            try:
+                st = p.stat()
+                return (str(p), st.st_mtime_ns, st.st_size)
+            except OSError:
+                return (str(p), 0, 0)
+        return (str(p) if p else None, 0, 0)
+
+    sig = (
+        file_sig(sw_path),
+        file_sig(offline_tpl),
+        tuple((u, file_sig(f)) for u, f in resolved_assets),
+    )
+    cache_key = (str(base_dir), str(static_root) if static_root else "")
+    cached = _SW_CACHE_MAP.get(cache_key)
+    if cached and cached.get("sig") == sig:
+        return cached["cache_name"]
+
+    hasher = hashlib.sha256()
+    for url_path, asset_file in resolved_assets:
+        hasher.update(url_path.encode("utf-8"))
+        if asset_file and asset_file.exists():
+            hasher.update(asset_file.read_bytes())
+
+    if offline_tpl and offline_tpl.exists():
+        hasher.update(b"/offline/")
+        hasher.update(offline_tpl.read_bytes())
+
+    digest = hasher.hexdigest()[:10]
+    cache_name = f"budget-tracker-shell-v12-{digest}"
+    _SW_CACHE_MAP[cache_key] = {"sig": sig, "cache_name": cache_name}
+    return cache_name
+
+
 @require_GET
 def service_worker(request):
-    sw_path = Path(django_settings.BASE_DIR) / "static" / "js" / "service-worker.js"
-    content = sw_path.read_text(encoding="utf-8") if sw_path.exists() else ""
+    import re
+
+    static_root_setting = getattr(django_settings, "STATIC_ROOT", None)
+    static_root = Path(static_root_setting) if static_root_setting else None
+    sw_path = None
+    if static_root and (static_root / "js" / "service-worker.js").exists():
+        sw_path = static_root / "js" / "service-worker.js"
+    elif (Path(django_settings.BASE_DIR) / "static" / "js" / "service-worker.js").exists():
+        sw_path = Path(django_settings.BASE_DIR) / "static" / "js" / "service-worker.js"
+
+    content = sw_path.read_text(encoding="utf-8") if sw_path and sw_path.exists() else ""
+    cache_name = compute_service_worker_cache_name()
+    content = re.sub(
+        r'const CACHE_NAME = "budget-tracker-shell-[^"]+";',
+        f'const CACHE_NAME = "{cache_name}";',
+        content,
+        count=1,
+    )
     response = HttpResponse(content, content_type="application/javascript; charset=utf-8")
     response["Service-Worker-Allowed"] = "/"
     response["Cache-Control"] = "no-cache"

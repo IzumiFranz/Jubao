@@ -499,4 +499,72 @@ document.addEventListener("DOMContentLoaded", function () {
             return getSelectDecimalPlaces(convFromSel, 2);
         });
     }
+
+    // 6. Show / hide password toggle buttons
+    var passwordToggleButtons = document.querySelectorAll(".btn-toggle-password");
+    Array.prototype.forEach.call(passwordToggleButtons, function (btn) {
+        btn.addEventListener("click", function () {
+            var targetId = btn.getAttribute("data-target") || "";
+            var input = targetId ? document.getElementById(targetId) : null;
+            if (!input) {
+                var parentGroup = btn.closest(".auth-input-wrapper") || btn.closest(".input-group");
+                if (parentGroup) {
+                    input = parentGroup.querySelector("input[type='password'], input[type='text']");
+                }
+            }
+            if (!input) return;
+
+            var isCurrentlyPassword = input.type === "password";
+            input.type = isCurrentlyPassword ? "text" : "password";
+            btn.setAttribute("aria-pressed", isCurrentlyPassword ? "true" : "false");
+            btn.setAttribute(
+                "aria-label",
+                isCurrentlyPassword ? "Hide password" : "Show password"
+            );
+
+            var eyeIcon = btn.querySelector(".icon-eye");
+            var eyeOffIcon = btn.querySelector(".icon-eye-off");
+            if (eyeIcon && eyeOffIcon) {
+                if (isCurrentlyPassword) {
+                    eyeIcon.classList.add("d-none");
+                    eyeOffIcon.classList.remove("d-none");
+                } else {
+                    eyeIcon.classList.remove("d-none");
+                    eyeOffIcon.classList.add("d-none");
+                }
+            }
+        });
+    });
+
+    function resetAllPasswordFields() {
+        Array.prototype.forEach.call(passwordToggleButtons, function (btn) {
+            var targetId = btn.getAttribute("data-target") || "";
+            var input = targetId ? document.getElementById(targetId) : null;
+            if (!input) {
+                var parentGroup = btn.closest(".auth-input-wrapper") || btn.closest(".input-group");
+                if (parentGroup) {
+                    input = parentGroup.querySelector("input");
+                }
+            }
+            if (input && input.type === "text") {
+                input.type = "password";
+                btn.setAttribute("aria-pressed", "false");
+                btn.setAttribute("aria-label", "Show password");
+                var eyeIcon = btn.querySelector(".icon-eye");
+                var eyeOffIcon = btn.querySelector(".icon-eye-off");
+                if (eyeIcon && eyeOffIcon) {
+                    eyeIcon.classList.remove("d-none");
+                    eyeOffIcon.classList.add("d-none");
+                }
+            }
+        });
+    }
+
+    var authForms = document.querySelectorAll("form");
+    Array.prototype.forEach.call(authForms, function (form) {
+        form.addEventListener("submit", resetAllPasswordFields);
+    });
+
+    window.addEventListener("pageshow", resetAllPasswordFields);
+    window.addEventListener("pagehide", resetAllPasswordFields);
 });

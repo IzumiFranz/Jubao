@@ -21,3 +21,6 @@ media/
 .idea/
 Thumbs.db
 .DS_Store
+
+# Headless browser test screenshots
+responsive_screenshots/

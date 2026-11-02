@@ -4,28 +4,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}{{ page_title|default:"Account" }} | Budget Tracker{% endblock %}</title>
+    <title>{% block title %}{{ page_title|default:"Account" }} | Jubao{% endblock %}</title>
+    <link rel="icon" href="{% static 'images/favicon.ico' %}" sizes="32x32">
+    <link rel="icon" href="{% static 'images/favicon.svg' %}" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="{% static 'images/apple-touch-icon.png' %}" sizes="180x180">
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=v11">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=v12">
 </head>
-<body class="app-body d-flex flex-column min-vh-100">
+<body class="app-body auth-page-body">
     <a class="visually-hidden-focusable skip-link" href="#auth-main-content">Skip to main content</a>
 
-    <header class="bg-white border-bottom py-3">
-        <div class="container">
-            <span class="fw-semibold fs-5 text-dark">Budget Tracker</span>
-        </div>
-    </header>
+    <main id="auth-main-content" class="auth-page-container" tabindex="-1">
+        <div class="auth-card-wrapper">
+            <img src="{% static 'images/auth/jubao_auth_art.svg' %}" alt="" width="870" height="775" class="auth-card-art">
 
-    <main id="auth-main-content" class="flex-grow-1 d-flex align-items-center py-4 py-md-5" tabindex="-1">
-        <div class="container">
-            <div class="row justify-content-center">
-                <div class="col-12 col-sm-10 col-md-7 col-lg-5 col-xl-4">
+            <div class="auth-form-overlay">
+                <div class="auth-form-column">
+                    <a href="{% url 'budgets:dashboard' %}" class="auth-logo-link" title="Jubao">
+                        <img src="{% static 'images/logo/jubao_text_light.png' %}" alt="Jubao" width="170" height="72" class="auth-logo-img">
+                    </a>
+
                     {% if messages %}
                     <div class="mb-3" aria-live="polite">
                         {% for message in messages %}
                         <div
-                            class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} py-2 px-3 small mb-2"
+                            class="auth-alert {% if message.tags == 'error' %}auth-alert-danger alert-danger{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %}"
                             role="status"
                         >
                             {{ message }}
@@ -34,14 +37,13 @@
                     </div>
                     {% endif %}
 
-                    <div class="dashboard-panel p-4">
-                        {% block auth_content %}{% endblock %}
-                    </div>
+                    {% block auth_content %}{% endblock %}
                 </div>
             </div>
         </div>
     </main>
 
     <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+    <script src="{% static 'js/app.js' %}?v=v12"></script>
 </body>
 </html>

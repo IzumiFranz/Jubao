@@ -5,10 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0d6efd">
-    <title>{% block title %}{{ page_title|default:"Budget Tracker" }} | Budget Tracker{% endblock %}</title>
+    <title>{% block title %}{{ page_title|default:"Dashboard" }} | Jubao{% endblock %}</title>
+    <link rel="icon" href="{% static 'images/favicon.ico' %}" sizes="32x32">
+    <link rel="icon" href="{% static 'images/favicon.svg' %}" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="{% static 'images/apple-touch-icon.png' %}" sizes="180x180">
     <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=v11">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=v12">
     {% block extra_css %}{% endblock %}
 </head>
 <body
@@ -20,13 +23,13 @@
 >
     <a class="visually-hidden-focusable skip-link" href="#main-content">Skip to main content</a>
 
-    <div class="app-shell d-flex min-vh-100">
+    <div class="app-shell d-flex">
         {% include "includes/sidebar.html" %}
 
         <div class="app-main-column d-flex flex-column flex-grow-1 min-w-0">
             {% include "includes/topbar.html" %}
 
-            <main id="main-content" class="app-content flex-grow-1 py-4 px-3 px-md-4" tabindex="-1">
+            <main id="main-content" class="app-content flex-grow-1 py-4" tabindex="-1">
                 <div class="container-fluid p-0">
                     <div
                         id="offline-sync-banner"
@@ -132,8 +135,8 @@
     {% block modals %}{% endblock %}
 
     <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
-    <script src="{% static 'js/app.js' %}?v=v11"></script>
-    <script src="{% static 'js/offline.js' %}?v=v11"></script>
+    <script src="{% static 'js/app.js' %}?v=v12"></script>
+    <script src="{% static 'js/offline.js' %}?v=v12"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

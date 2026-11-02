@@ -10,6 +10,7 @@ from django.db.models.deletion import ProtectedError
 from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
 
+from django.utils import timezone
 from apps.accounts.models import UserPreference
 
 from .currency_catalog import SUPPORTED_CURRENCIES
@@ -1193,10 +1194,12 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
         self.assertIn('id="offline-queued-list"', html)
         self.assertIn('id="offline-bounded-notice"', html)
 
-        # Service worker uses bumped cache v8 and deletes only budget-tracker-shell-* caches
+        # Service worker uses hash-derived cache name and deletes only budget-tracker-shell-* caches
+        from .views import compute_service_worker_cache_name
         sw_resp = self.client.get("/service-worker.js")
         sw_js = sw_resp.content.decode("utf-8")
-        self.assertIn('const CACHE_NAME = "budget-tracker-shell-v11"', sw_js)
+        expected_cache_name = compute_service_worker_cache_name()
+        self.assertIn(f'const CACHE_NAME = "{expected_cache_name}"', sw_js)
         self.assertIn('const CACHE_PREFIX = "budget-tracker-shell-"', sw_js)
         self.assertIn("k.indexOf(CACHE_PREFIX) === 0 && k !== CACHE_NAME", sw_js)
 
@@ -2008,7 +2011,7 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
             transaction_type="income",
             amount=Decimal("100.00"),
             wallet=wallet_usd,
-            transaction_date=date(2026, 10, 5),
+            transaction_date=timezone.localdate(),
             description="Consulting USD",
         )
         tx_eur = create_transaction_entry(
@@ -2016,7 +2019,7 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
             transaction_type="expense",
             amount=Decimal("50.00"),
             wallet=wallet_eur,
-            transaction_date=date(2026, 10, 6),
+            transaction_date=timezone.localdate(),
             description="Server hosting EUR",
         )
 
@@ -2159,7 +2162,7 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
                 transaction_type="expense",
                 amount=Decimal("1.00"),
                 wallet=wallet_usd,
-                transaction_date=date(2026, 10, 10),
+                transaction_date=timezone.localdate(),
                 description=f"Pagination test item {i}",
             )
         resp_paginated = self.client.get("/transactions/?display_currency=TWD")
@@ -2311,7 +2314,7 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
             transaction_type="expense",
             amount=Decimal("100.00"),
             wallet=wallet_p,
-            transaction_date=date(2026, 10, 5),
+            transaction_date=timezone.localdate(),
             scope="personal",
             description="Personal Grocery",
         )
@@ -2320,7 +2323,7 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
             transaction_type="expense",
             amount=Decimal("100.00"),
             wallet=wallet_a,
-            transaction_date=date(2026, 10, 6),
+            transaction_date=timezone.localdate(),
             scope="shared",
             shared_space=space_a,
             description="Alpha Server",
@@ -2330,7 +2333,7 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
             transaction_type="expense",
             amount=Decimal("50.00"),
             wallet=wallet_a,
-            transaction_date=date(2026, 10, 7),
+            transaction_date=timezone.localdate(),
             scope="shared",
             shared_space=space_a,
             description="Alpha Cables",
@@ -2340,7 +2343,7 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
             transaction_type="expense",
             amount=Decimal("100.00"),
             wallet=wallet_b,
-            transaction_date=date(2026, 10, 8),
+            transaction_date=timezone.localdate(),
             scope="shared",
             shared_space=space_b,
             description="Beta Subscription",
@@ -2350,7 +2353,7 @@ class TransactionsTransfersBudgetsGoalsAndSyncTests(TestCase):
             transaction_type="expense",
             amount=Decimal("500.00"),
             wallet=wallet_twd,
-            transaction_date=date(2026, 10, 9),
+            transaction_date=timezone.localdate(),
             scope="personal",
             description="TWD Lunch",
         )
@@ -2473,16 +2476,20 @@ class ExchangeRateProviderAndCoverageTests(TestCase):
 
     def test_frankfurter_v2_twd_response_parsing_and_cross_rates(self):
         from decimal import ROUND_HALF_UP
+        from django.utils import timezone
         from .exchange_rates import refresh_exchange_rates, get_latest_rate
+
+        today = timezone.now().date()
+        today_str = today.isoformat()
 
         def mock_fetcher(url):
             self.assertIn("api.frankfurter.dev/v2/rates", url)
             return [
-                {"date": "2026-10-25", "base": "PHP", "quote": "EUR", "rate": Decimal("0.01404000")},
-                {"date": "2026-10-25", "base": "PHP", "quote": "JPY", "rate": Decimal("2.47390000")},
-                {"date": "2026-10-25", "base": "PHP", "quote": "KWD", "rate": Decimal("0.00486000")},
-                {"date": "2026-10-25", "base": "PHP", "quote": "TWD", "rate": Decimal("0.51249000")},
-                {"date": "2026-10-25", "base": "PHP", "quote": "USD", "rate": Decimal("0.01575000")},
+                {"date": today_str, "base": "PHP", "quote": "EUR", "rate": Decimal("0.01404000")},
+                {"date": today_str, "base": "PHP", "quote": "JPY", "rate": Decimal("2.47390000")},
+                {"date": today_str, "base": "PHP", "quote": "KWD", "rate": Decimal("0.00486000")},
+                {"date": today_str, "base": "PHP", "quote": "TWD", "rate": Decimal("0.51249000")},
+                {"date": today_str, "base": "PHP", "quote": "USD", "rate": Decimal("0.01575000")},
             ]
 
         result = refresh_exchange_rates(base_currency_code="PHP", force=True, http_fetcher=mock_fetcher)
@@ -2495,7 +2502,7 @@ class ExchangeRateProviderAndCoverageTests(TestCase):
         self.assertEqual(lookup_php_twd.status, "available")
         self.assertEqual(lookup_php_twd.provider, "frankfurter_v2")
         self.assertEqual(lookup_php_twd.rate, Decimal("0.51249000"))
-        self.assertEqual(lookup_php_twd.rate_timestamp.date(), date(2026, 10, 25))
+        self.assertEqual(lookup_php_twd.rate_timestamp.date(), today)
         self.assertFalse(lookup_php_twd.is_manual)
 
         # Cross rate USD -> TWD derived from same-date inputs: 0.51249 / 0.01575
@@ -2858,7 +2865,7 @@ class PersonalTransactionSharingTests(TestCase):
             wallet=self.alice_wallet,
             category=self.alice_category,
             amount=Decimal("142.50"),
-            transaction_date=date(2026, 10, 15),
+            transaction_date=timezone.localdate(),
             description="Dentist checkup",
             notes="Root canal consultation and antibiotics prescription",
             scope=Transaction.Scope.PERSONAL,
@@ -5228,6 +5235,32 @@ class OfflineSyncBrowserRuntimeTests(TestCase):
         assertEq("offline_reload_logged_out_locked", lockedOfflineId.invalidated, true);
         assertEq("offline_reload_logged_out_empty_user", lockedOfflineId.userId, "");
         assertEq("offline_reload_zero_broadcast_loop", channelMessageCount, 0);
+
+        // SCENARIO 10: Stale lock expiration when tab crashes or closes without releasing
+        await setScenario("scenario_10_stale_lock_expiration");
+        localStorage.setItem("budget_tracker_sync_lock_u_1", JSON.stringify({
+            tab_id: "crashed-tab-uuid-888",
+            user_id: "1",
+            acquired_at: Date.now() - 40000,
+            expires_at: Date.now() - 10000
+        }));
+        // Restore server identity as Alice (user_id = 1)
+        currentServerUserId = 1;
+        currentServerUsername = "alice";
+        document.body.removeAttribute("data-tab-invalidated");
+        document.body.removeAttribute("data-offline-shell");
+        document.body.setAttribute("data-authenticated-user-id", "1");
+        document.body.setAttribute("data-authenticated-username", "alice");
+        localStorage.setItem("budget_tracker_active_user_id", "1");
+        localStorage.setItem("budget_tracker_active_username", "alice");
+        localStorage.setItem("budget_tracker_auth_state", "authenticated");
+        api.initializePageIdentity();
+        batchCalls = [];
+        var staleLockFlushRes = await withTimeout(api.flushMutationQueue(), 5000, "flush_stale_lock");
+        assertEq("stale_lock_safely_expired_and_overridden", staleLockFlushRes.status, "success");
+        var activeLockAfterStaleOverride = JSON.parse(localStorage.getItem("budget_tracker_sync_lock_u_1") || "{}");
+        // Lock should be released or owned by active tab (not crashed tab)
+        assertEq("stale_crashed_tab_lock_not_present", activeLockAfterStaleOverride.tab_id === "crashed-tab-uuid-888", false);
         bc.close();
         monitorBc.close();
         await setScenario("completed");
@@ -6270,38 +6303,97 @@ class JapaneseStationeryDashboardTests(TestCase):
         pos_s1_06 = html_future.find('value="2026-06"')
         self.assertTrue(pos_future < pos_s1_06)
 
-    def test_consistent_v11_cache_version_references(self):
+    def test_consistent_v12_cache_version_references(self):
+        import shutil
+        import tempfile
+        from pathlib import Path
+        from django.conf import settings
+        from django.test import override_settings
+        from .views import compute_service_worker_cache_name
+
         sw_resp = self.client.get("/service-worker.js")
         sw_js = sw_resp.content.decode("utf-8")
-        self.assertIn('const CACHE_NAME = "budget-tracker-shell-v11"', sw_js)
-        self.assertIn('"/static/css/dashboard.css?v=v11"', sw_js)
-        self.assertIn('"/static/css/app.css?v=v11"', sw_js)
-        self.assertIn('"/static/js/app.js?v=v11"', sw_js)
-        self.assertIn('"/static/js/offline.js?v=v11"', sw_js)
-        self.assertIn('"/static/js/pages/transaction.js?v=v11"', sw_js)
+        expected_cache_name = compute_service_worker_cache_name()
+        self.assertIn(f'const CACHE_NAME = "{expected_cache_name}"', sw_js)
+        self.assertIn('const CACHE_PREFIX = "budget-tracker-shell-"', sw_js)
+        self.assertIn('k.indexOf(CACHE_PREFIX) === 0 && k !== CACHE_NAME', sw_js)
+        self.assertIn('caches.delete(k)', sw_js)
+        self.assertIn('"/static/css/dashboard.css?v=v12"', sw_js)
+        self.assertIn('"/static/css/app.css?v=v12"', sw_js)
+        self.assertIn('"/static/js/app.js?v=v12"', sw_js)
+        self.assertIn('"/static/js/offline.js?v=v12"', sw_js)
+        self.assertIn('"/static/js/pages/transaction.js?v=v12"', sw_js)
+        self.assertIn('"/static/images/logo/jubao_text.png?v=v12"', sw_js)
+        self.assertIn('"/static/images/logo/jubao_text_light.png?v=v12"', sw_js)
+        self.assertIn('"/static/images/logo/jubao_logo.png?v=v12"', sw_js)
+        self.assertIn('"/static/images/logo/jubao_logo_light.png?v=v12"', sw_js)
+        self.assertIn('"/static/images/favicon.ico"', sw_js)
+        self.assertIn('"/static/images/favicon-32.png"', sw_js)
+        self.assertIn('"/static/images/favicon.svg"', sw_js)
+        self.assertIn('"/static/images/apple-touch-icon.png"', sw_js)
+        self.assertIn('"/static/images/icon-192.png"', sw_js)
+        self.assertIn('"/static/images/icon-512.png"', sw_js)
+
+        # Verify that if any precached file changes, the service-worker CACHE_NAME automatically changes
+        temp_base = Path(tempfile.mkdtemp(prefix="sw_hash_test_"))
+        try:
+            shutil.copytree(Path(settings.BASE_DIR) / "static", temp_base / "static")
+            shutil.copytree(Path(settings.BASE_DIR) / "templates", temp_base / "templates")
+            self.assertEqual(compute_service_worker_cache_name(temp_base), expected_cache_name)
+
+            # Mutate a precached CSS file and verify CACHE_NAME changes both via helper and /service-worker.js
+            app_css_copy = temp_base / "static" / "css" / "app.css"
+            app_css_copy.write_text(app_css_copy.read_text(encoding="utf-8") + "\n/* cache hash bust test */\n", encoding="utf-8")
+            mutated_cache_name = compute_service_worker_cache_name(temp_base)
+            self.assertNotEqual(mutated_cache_name, expected_cache_name)
+
+            with override_settings(BASE_DIR=temp_base):
+                sw_mut_resp = self.client.get("/service-worker.js")
+                sw_mut_js = sw_mut_resp.content.decode("utf-8")
+                self.assertIn(f'const CACHE_NAME = "{mutated_cache_name}"', sw_mut_js)
+                self.assertNotIn(f'const CACHE_NAME = "{expected_cache_name}"', sw_mut_js)
+
+                # Verify repeated calls return cached result without error
+                self.assertEqual(compute_service_worker_cache_name(temp_base), mutated_cache_name)
+        finally:
+            shutil.rmtree(temp_base, ignore_errors=True)
+
+        # Verify that compute_service_worker_cache_name hashes files in STATIC_ROOT when configured
+        temp_static_root = Path(tempfile.mkdtemp(prefix="sw_static_root_"))
+        try:
+            (temp_static_root / "css").mkdir(parents=True)
+            custom_app_css = temp_static_root / "css" / "app.css"
+            custom_app_css.write_text("/* collectstatic bundled app.css */\n", encoding="utf-8")
+            with override_settings(STATIC_ROOT=temp_static_root):
+                static_root_cache_name = compute_service_worker_cache_name()
+                self.assertNotEqual(static_root_cache_name, expected_cache_name)
+                # Verify cached return on repeated call
+                self.assertEqual(compute_service_worker_cache_name(), static_root_cache_name)
+        finally:
+            shutil.rmtree(temp_static_root, ignore_errors=True)
 
         self.client.force_login(self.user)
         dash_resp = self.client.get(self.dashboard_url)
         dash_html = dash_resp.content.decode("utf-8")
-        self.assertIn('css/dashboard.css?v=v11', dash_html)
-        self.assertIn('css/app.css?v=v11', dash_html)
-        self.assertIn('js/app.js?v=v11', dash_html)
-        self.assertIn('js/offline.js?v=v11', dash_html)
-        self.assertIn('js/pages/transaction.js?v=v11', dash_html)
+        self.assertIn('css/dashboard.css?v=v12', dash_html)
+        self.assertIn('css/app.css?v=v12', dash_html)
+        self.assertIn('js/app.js?v=v12', dash_html)
+        self.assertIn('js/offline.js?v=v12', dash_html)
+        self.assertIn('js/pages/transaction.js?v=v12', dash_html)
 
         tx_resp = self.client.get(reverse("budgets:transactions"))
         tx_html = tx_resp.content.decode("utf-8")
-        self.assertIn('css/dashboard.css?v=v11', tx_html)
-        self.assertIn('js/pages/transaction.js?v=v11', tx_html)
+        self.assertIn('css/dashboard.css?v=v12', tx_html)
+        self.assertIn('js/pages/transaction.js?v=v12', tx_html)
 
         off_resp = self.client.get(reverse("budgets:offline"))
         off_html = off_resp.content.decode("utf-8")
-        self.assertIn('css/app.css?v=v11', off_html)
-        self.assertIn('js/offline.js?v=v11', off_html)
+        self.assertIn('css/app.css?v=v12', off_html)
+        self.assertIn('js/offline.js?v=v12', off_html)
 
         login_resp = self.client.get(reverse("accounts:login"))
         login_html = login_resp.content.decode("utf-8")
-        self.assertIn('css/app.css?v=v11', login_html)
+        self.assertIn('css/app.css?v=v12', login_html)
 
     def test_dashboard_budgets_independent_of_display_currency_and_scoped(self):
         from .services import (
@@ -7770,7 +7862,7 @@ class MonetarySerializationBoundaryTests(TestCase):
             currency=self.usd,
             base_currency=self.eur,
             converted_amount=Decimal("160000.50"),
-            transaction_date=date(2026, 10, 1),
+            transaction_date=timezone.localdate(),
             description="Large client payment",
         )
         Transaction.objects.create(
@@ -7779,7 +7871,7 @@ class MonetarySerializationBoundaryTests(TestCase):
             transaction_type=Transaction.Type.EXPENSE,
             amount=Decimal("-12345.67"),
             currency=self.usd,
-            transaction_date=date(2026, 10, 2),
+            transaction_date=timezone.localdate(),
             description="Chargeback",
         )
         Transaction.objects.create(
@@ -7788,7 +7880,7 @@ class MonetarySerializationBoundaryTests(TestCase):
             transaction_type=Transaction.Type.EXPENSE,
             amount=Decimal("15000"),
             currency=self.jpy,
-            transaction_date=date(2026, 10, 3),
+            transaction_date=timezone.localdate(),
             description="Hotel reservation",
         )
         Transaction.objects.create(
@@ -7797,7 +7889,7 @@ class MonetarySerializationBoundaryTests(TestCase):
             transaction_type=Transaction.Type.EXPENSE,
             amount=Decimal("1089.125"),
             currency=self.kwd,
-            transaction_date=date(2026, 10, 4),
+            transaction_date=timezone.localdate(),
             description="Fuel",
         )
 
@@ -7906,7 +7998,7 @@ class MonetarySerializationBoundaryTests(TestCase):
             transaction_type=Transaction.Type.INCOME,
             amount=Decimal("175140.59"),
             currency=self.usd,
-            transaction_date=date(2026, 10, 1),
+            transaction_date=timezone.localdate(),
             description="Paycheck",
         )
         self.client.force_login(self.user)
@@ -9166,7 +9258,7 @@ class TransactionsPageReorganizationTests(TestCase):
         UserPreference.objects.create(
             user=self.user,
             personal_base_currency=self.usd,
-            display_currency=self.usd,
+            display_currency=None,
         )
         self.wallet1 = Wallet.objects.create(
             owner=self.user,
@@ -9184,16 +9276,18 @@ class TransactionsPageReorganizationTests(TestCase):
             opening_balance=Decimal("2000.00"),
             opening_balance_date=date(2026, 1, 1),
         )
+        from django.utils import timezone
         from .models import Category, Transaction, Transfer
         from .services import create_category, create_transaction_entry, create_transfer_entry
 
+        today = timezone.localdate()
         self.category = create_category(user=self.user, name="Groceries", kind="expense", scope="personal")
         self.tx1 = create_transaction_entry(
             user=self.user,
             transaction_type="expense",
             amount=Decimal("125.50"),
             wallet=self.wallet1,
-            transaction_date=date(2026, 10, 20),
+            transaction_date=today,
             category=self.category,
             description="Supermarket haul",
             notes="Weekly grocery run",
@@ -9204,7 +9298,7 @@ class TransactionsPageReorganizationTests(TestCase):
             source_wallet=self.wallet1,
             destination_wallet=self.wallet2,
             amount_sent=Decimal("300.00"),
-            transfer_date=date(2026, 10, 21),
+            transfer_date=today,
             notes="Emergency savings allocation",
         )
         self.client.force_login(self.user)
@@ -9275,7 +9369,7 @@ class TransactionsPageReorganizationTests(TestCase):
         self.assertIn('id="filter-category"', html)
         self.assertIn('id="filter-wallet"', html)
         self.assertIn('id="filter-currency"', html)
-        self.assertIn('id="filter-display-currency"', html)
+        self.assertNotIn('id="filter-display-currency"', html)
 
         # Filter form action and export URLs
         self.assertIn('format=csv', html)
@@ -9427,23 +9521,27 @@ class TransactionsPageReorganizationTests(TestCase):
         self.assertNotIn('id="active-filters-indicator"', html_both)
 
     def test_non_default_display_currency_expands_filters(self):
-        # Non-default display currency (EUR) should count as an active filter
+        # Non-default display currency (EUR) works as URL override but does not expand filters drawer
         resp = self.client.get(self.transactions_url + "?display_currency=EUR")
         self.assertEqual(resp.status_code, 200)
         html = resp.content.decode("utf-8")
 
-        # Collapse is expanded with show class
+        # Collapse remains collapsed
         collapse_decl = html.split('id="transaction-filter-collapse"')[0].split('<div')[-1]
-        self.assertIn('show', collapse_decl)
+        self.assertNotIn('show', collapse_decl)
 
-        # Toggle button has aria-expanded="true"
-        self.assertIn('aria-expanded="true"', html)
+        # Toggle button has aria-expanded="false"
+        self.assertIn('aria-expanded="false"', html)
 
-        # Active filters indicator is displayed
-        self.assertIn('id="active-filters-indicator"', html)
+        # Active filters indicator is NOT displayed
+        self.assertNotIn('id="active-filters-indicator"', html)
 
-        # Retains the EUR value selected in dropdown
-        self.assertIn('value="EUR"', html)
+        # The display currency converted amounts and headers reflect EUR override
+        self.assertIn('Converted (EUR)', html)
+        self.assertNotIn('id="filter-display-currency"', html)
+
+        # Topbar display currency selector reflects effective override currency EUR
+        self.assertIn('<option value="EUR" selected>', html)
 
     def test_active_filter_expansion_and_retained_values(self):
         # Multiple active filters
@@ -9461,6 +9559,622 @@ class TransactionsPageReorganizationTests(TestCase):
         self.assertIn('value="Supermarket"', html)
         self.assertIn('value="2026-10-01"', html)
         self.assertIn('value="2026-10-31"', html)
+
+    def test_summary_totals_across_multiple_pages(self):
+        """Summary strip totals must compute over the full filtered queryset across pages, excluding transfers."""
+        from datetime import timedelta
+        from django.utils import timezone
+        from .services import create_transaction_entry
+        today = timezone.localdate()
+        for i in range(30):
+            create_transaction_entry(
+                user=self.user,
+                transaction_type="expense",
+                amount=Decimal("10.00"),
+                wallet=self.wallet1,
+                transaction_date=today,
+                description=f"Pagination expense {i}",
+                scope="personal",
+            )
+        resp_p1 = self.client.get(self.transactions_url + "?page=1")
+        self.assertEqual(resp_p1.status_code, 200)
+        self.assertContains(resp_p1, "-425.50 USD")
+        self.assertNotIn("Current page", resp_p1.content.decode("utf-8"))
+
+        resp_p2 = self.client.get(self.transactions_url + "?page=2")
+        self.assertEqual(resp_p2.status_code, 200)
+        self.assertContains(resp_p2, "-425.50 USD")
+
+    def test_stale_rate_banner_shown_and_hidden(self):
+        """Banner appears above table if visible rows have stale rate, hidden otherwise."""
+        from datetime import timedelta
+        from django.utils import timezone
+        from .models import ExchangeRate
+        from .services import create_transaction_entry
+
+        wallet_eur = Wallet.objects.create(
+            owner=self.user,
+            name="EUR Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.eur,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        today = timezone.localdate()
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("50.00"),
+            wallet=wallet_eur,
+            transaction_date=today,
+            description="EUR Coffee",
+            scope="personal",
+        )
+        fresh_time = timezone.now() - timedelta(hours=1)
+        rate_obj, _ = ExchangeRate.objects.update_or_create(
+            from_currency=self.eur,
+            to_currency=self.usd,
+            scope=ExchangeRate.Scope.PROVIDER,
+            is_manual=False,
+            defaults={"rate": Decimal("1.10000000"), "rate_timestamp": fresh_time, "provider": "frankfurter_v2"},
+        )
+        resp_fresh = self.client.get(self.transactions_url)
+        self.assertEqual(resp_fresh.status_code, 200)
+        html_fresh = resp_fresh.content.decode("utf-8")
+        banner_tag_fresh = html_fresh.split('id="stale-rates-banner"')[1].split('>')[0]
+        self.assertIn("d-none", banner_tag_fresh)
+
+        stale_time = timezone.now() - timedelta(hours=72)
+        rate_obj.rate_timestamp = stale_time
+        rate_obj.save()
+
+        resp_stale = self.client.get(self.transactions_url)
+        self.assertEqual(resp_stale.status_code, 200)
+        html_stale = resp_stale.content.decode("utf-8")
+        banner_tag_stale = html_stale.split('id="stale-rates-banner"')[1].split('>')[0]
+        self.assertNotIn("d-none", banner_tag_stale)
+        self.assertIn("tx-stale-banner", html_stale)
+        self.assertIn("Refresh rates", html_stale)
+
+    def test_delete_confirmation_deleting_correct_row(self):
+        """Submitting delete action deletes the target transaction and preserves other transactions."""
+        from .models import Transaction
+        from .services import create_transaction_entry
+
+        target_tx = create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("42.00"),
+            wallet=self.wallet1,
+            transaction_date=date(2026, 10, 24),
+            description="Deletable item",
+            scope="personal",
+        )
+        post_data = {
+            "action": "delete_transaction",
+            "transaction_id": str(target_tx.id),
+            "expected_revision": str(target_tx.revision),
+        }
+        resp = self.client.post(self.transactions_url, post_data, follow=True)
+        self.assertEqual(resp.status_code, 200)
+
+        target_tx.refresh_from_db()
+        self.assertTrue(target_tx.is_deleted)
+        self.tx1.refresh_from_db()
+        self.assertFalse(self.tx1.is_deleted)
+
+    def test_delete_modal_submits_id_of_opened_row_menu(self):
+        """Delete confirmation modal submits the exact transaction ID of the row whose menu was opened."""
+        from .services import create_transaction_entry
+        import pathlib
+        from django.conf import settings
+
+        from django.utils import timezone
+        today = timezone.localdate()
+        tx2 = create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("88.00"),
+            wallet=self.wallet1,
+            transaction_date=today,
+            description="Item to be deleted specifically",
+            scope="personal",
+        )
+
+        resp = self.client.get(self.transactions_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # 1. Template validation: Each row has an independent tx-delete-form with its own transaction_id
+        self.assertIn(f'value="{self.tx1.id}"', html)
+        self.assertIn(f'value="{tx2.id}"', html)
+        self.assertIn('id="deleteConfirmModal"', html)
+        self.assertIn('id="btn-confirm-delete-tx"', html)
+
+        # 2. Browser-level interaction test verifying modal opens for tx2 and submits tx2's ID
+        browser_bin = self._find_browser_binary()
+        if not browser_bin:
+            return
+
+        static_dir = pathlib.Path(settings.BASE_DIR) / "static"
+        bs_js = (static_dir / "vendor" / "bootstrap" / "bootstrap.bundle.min.js").read_text(encoding="utf-8")
+        bs_css = (static_dir / "vendor" / "bootstrap" / "bootstrap.min.css").read_text(encoding="utf-8")
+        app_css = (static_dir / "css" / "app.css").read_text(encoding="utf-8")
+        dash_css = (static_dir / "css" / "dashboard.css").read_text(encoding="utf-8")
+        tx_js = (static_dir / "js" / "pages" / "transaction.js").read_text(encoding="utf-8")
+
+        tx1_id = str(self.tx1.id)
+        tx2_id = str(tx2.id)
+
+        harness_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>{bs_css}</style>
+    <style>{app_css}</style>
+    <style>{dash_css}</style>
+    <style>*, *::before, *::after {{ transition: none !important; animation: none !important; }}</style>
+</head>
+<body class="app-body">
+    {html}
+    <script>{bs_js}</script>
+    <script>
+    if (window.bootstrap && window.bootstrap.Popover && window.bootstrap.Popover.Default) {{
+        window.bootstrap.Popover.Default.animation = false;
+    }}
+    </script>
+    <script>{tx_js}</script>
+    <script>
+    window.addEventListener('DOMContentLoaded', async function () {{
+        await new Promise(r => setTimeout(r, 200));
+        var results = {{}};
+
+        var submittedPayload = null;
+        document.querySelectorAll('form.tx-delete-form').forEach(function (f) {{
+            f.submit = function () {{
+                var fd = new FormData(f);
+                submittedPayload = {{
+                    action: fd.get('action'),
+                    transaction_id: fd.get('transaction_id')
+                }};
+            }};
+        }});
+
+        // Find delete trigger inside tx2's row form
+        var tx2Input = document.querySelector('form.tx-delete-form input[value="{tx2_id}"]');
+        var tx2Form = tx2Input ? tx2Input.form : null;
+        var tx2Trigger = tx2Form ? tx2Form.querySelector('.tx-delete-trigger') : null;
+
+        if (tx2Trigger) {{
+            tx2Trigger.click();
+            await new Promise(r => setTimeout(r, 300));
+
+            var modalEl = document.getElementById('deleteConfirmModal');
+            var descEl = document.getElementById('delete-confirm-desc');
+            results.modalShown = modalEl && modalEl.classList.contains('show');
+            results.modalDesc = descEl ? descEl.textContent.trim() : '';
+
+            var confirmBtn = document.getElementById('btn-confirm-delete-tx');
+            if (confirmBtn) {{
+                confirmBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+            }}
+        }}
+
+        results.submittedPayload = submittedPayload;
+
+        fetch('/__test_done__', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(results)
+        }}).catch(function () {{}});
+    }});
+    </script>
+</body>
+</html>"""
+
+        rep = self._run_browser_harness(browser_bin, 1280, 800, harness_html)
+        self.assertIsNotNone(rep, "Browser delete modal harness timed out")
+        self.assertTrue(rep.get("modalShown"), "Delete confirmation modal should be shown after clicking delete trigger")
+        self.assertEqual(rep.get("modalDesc"), "Item to be deleted specifically")
+        self.assertIsNotNone(rep.get("submittedPayload"), "Delete form should have been submitted")
+        self.assertEqual(rep.get("submittedPayload", {}).get("transaction_id"), tx2_id)
+        self.assertNotEqual(rep.get("submittedPayload", {}).get("transaction_id"), tx1_id)
+
+    def test_popover_content_escaped_and_dismisses_on_esc_and_click_outside(self):
+        """Popover content is plain-text escaped and dismisses when pressing Escape or clicking outside."""
+        from django.utils import timezone
+        from .models import ExchangeRate
+        from .services import create_transaction_entry
+        import pathlib
+        from django.conf import settings
+
+        ExchangeRate.objects.update_or_create(
+            from_currency=self.usd,
+            to_currency=self.eur,
+            scope=ExchangeRate.Scope.PROVIDER,
+            is_manual=False,
+            defaults={
+                "rate": Decimal("0.92000000"),
+                "rate_timestamp": timezone.now() - timezone.timedelta(hours=72),
+                "provider": "frankfurter_v2",
+            },
+        )
+        resp = self.client.get(self.transactions_url + "?display_currency=EUR")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        browser_bin = self._find_browser_binary()
+        if not browser_bin:
+            return
+
+        static_dir = pathlib.Path(settings.BASE_DIR) / "static"
+        bs_js = (static_dir / "vendor" / "bootstrap" / "bootstrap.bundle.min.js").read_text(encoding="utf-8")
+        bs_css = (static_dir / "vendor" / "bootstrap" / "bootstrap.min.css").read_text(encoding="utf-8")
+        app_css = (static_dir / "css" / "app.css").read_text(encoding="utf-8")
+        dash_css = (static_dir / "css" / "dashboard.css").read_text(encoding="utf-8")
+        tx_js = (static_dir / "js" / "pages" / "transaction.js").read_text(encoding="utf-8")
+
+        harness_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>{bs_css}</style>
+    <style>{app_css}</style>
+    <style>{dash_css}</style>
+    <style>*, *::before, *::after {{ transition: none !important; animation: none !important; }}</style>
+</head>
+<body class="app-body">
+    {html}
+    <script>{bs_js}</script>
+    <script>
+    if (window.bootstrap && window.bootstrap.Popover && window.bootstrap.Popover.Default) {{
+        window.bootstrap.Popover.Default.animation = false;
+    }}
+    </script>
+    <script>{tx_js}</script>
+    <script>
+    window.addEventListener('DOMContentLoaded', async function () {{
+        await new Promise(r => setTimeout(r, 200));
+        var results = {{}};
+
+        var popoverTrigger = document.querySelector('[data-bs-toggle="popover"]');
+        if (popoverTrigger) {{
+            // 1. Open popover
+            var triggerWithNewline = document.querySelector('tr[data-tx-row-id="{self.tx1.id}"] .tx-col-converted [data-bs-toggle="popover"]') || popoverTrigger;
+            triggerWithNewline.click();
+            await new Promise(r => setTimeout(r, 300));
+            var openPopover = document.querySelector('.popover.show');
+            var popBody = openPopover ? openPopover.querySelector('.popover-body') : null;
+            results.openedOnFirstClick = !!openPopover;
+            results.popText = popBody ? popBody.textContent : '';
+            results.popWhiteSpace = popBody ? window.getComputedStyle(popBody).whiteSpace : '';
+            results.popoverKeepsLineBreaks = !!(
+                popBody &&
+                popBody.textContent.indexOf('\\n') !== -1 &&
+                window.getComputedStyle(popBody).whiteSpace === 'pre-line'
+            );
+
+            // 2. Press Escape
+            document.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Escape', bubbles: true }}));
+            await new Promise(r => setTimeout(r, 300));
+            var popoverAfterEsc = document.querySelector('.popover.show');
+            results.closedOnEscape = !popoverAfterEsc;
+
+            // 3. Open popover again
+            popoverTrigger.click();
+            await new Promise(r => setTimeout(r, 300));
+            var openPopover2 = document.querySelector('.popover.show');
+            results.openedOnSecondClick = !!openPopover2;
+
+            // 4. Click outside
+            document.body.click();
+            await new Promise(r => setTimeout(r, 300));
+            var popoverAfterOutsideClick = document.querySelector('.popover.show');
+            results.closedOnOutsideClick = !popoverAfterOutsideClick;
+        }}
+
+        fetch('/__test_done__', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(results)
+        }}).catch(function () {{}});
+    }});
+    </script>
+</body>
+</html>"""
+
+        rep = self._run_browser_harness(browser_bin, 1280, 800, harness_html)
+        self.assertIsNotNone(rep, "Popover browser harness timed out")
+        self.assertTrue(rep.get("openedOnFirstClick"), "Popover should open on click")
+        self.assertTrue(rep.get("popoverKeepsLineBreaks"), f"Popover text should keep line breaks: text={rep.get('popText')!r}, ws={rep.get('popWhiteSpace')!r}")
+        self.assertTrue(rep.get("closedOnEscape"), "Popover should close when Escape key is pressed")
+        self.assertTrue(rep.get("openedOnSecondClick"), "Popover should re-open on click")
+        self.assertTrue(rep.get("closedOnOutsideClick"), "Popover should close when clicking outside")
+
+    def test_summary_totals_match_displayed_row_conversions_across_dates(self):
+        """(a) Summary totals equal the sum of displayed row conversions with transactions on different dates in one foreign currency."""
+        from django.utils import timezone
+        from .models import ExchangeRate
+        from .services import create_transaction_entry
+
+        wallet_eur = Wallet.objects.create(
+            owner=self.user,
+            name="EUR Checking",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.eur,
+            opening_balance=Decimal("2000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        # Rate 1 EUR = 1.12 USD
+        ExchangeRate.objects.update_or_create(
+            from_currency=self.eur,
+            to_currency=self.usd,
+            scope=ExchangeRate.Scope.PROVIDER,
+            is_manual=False,
+            defaults={
+                "rate": Decimal("1.12000000"),
+                "rate_timestamp": timezone.now(),
+                "provider": "frankfurter_v2",
+            },
+        )
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("25.00"),
+            wallet=wallet_eur,
+            transaction_date=date(2026, 11, 1),
+            description="EUR Dinner Nov 1",
+            scope="personal",
+        )
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("40.00"),
+            wallet=wallet_eur,
+            transaction_date=date(2026, 11, 2),
+            description="EUR Train Nov 2",
+            scope="personal",
+        )
+
+        resp = self.client.get(self.transactions_url + "?currency=EUR")
+        self.assertEqual(resp.status_code, 200)
+        tx_list = resp.context["transactions_list"]
+        self.assertEqual(len(tx_list), 2)
+
+        row_sum = sum(tx.display_amount for tx in tx_list)
+        summary_expense = resp.context["summary_totals"]["expense"]
+        # 25.00 * 1.12 = 28.00 USD; 40.00 * 1.12 = 44.80 USD; sum = 72.80 USD
+        self.assertEqual(row_sum, Decimal("72.80"))
+        self.assertEqual(summary_expense, row_sum)
+
+    def test_topbar_currency_post_redirects_without_display_currency_param(self):
+        """(b) Topbar currency POST while ?display_currency=XXX is active redirects without that parameter."""
+        resp = self.client.post(
+            reverse("accounts:set_display_currency"),
+            {
+                "currency_code": "EUR",
+                "next": "/transactions/?q=Supermarket&display_currency=USD",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertNotIn("display_currency=", resp.url)
+        self.assertIn("q=Supermarket", resp.url)
+
+    def test_inline_filter_submission_drops_page_param_and_search_refocuses_at_end(self):
+        """(c) Submitting an inline filter drops ?page=; (d) after search auto-submit the input is refocused with cursor at the end."""
+        import pathlib
+        from django.conf import settings
+
+        resp = self.client.get(self.transactions_url + "?page=2&q=Supermarket")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Filter form has no hidden or visible input named "page", so submitting it drops ?page=
+        filter_form_segment = html.split('id="transaction-filter-form"')[1].split("</form>")[0]
+        self.assertNotIn('name="page"', filter_form_segment)
+
+        browser_bin = self._find_browser_binary()
+        if not browser_bin:
+            return
+
+        static_dir = pathlib.Path(settings.BASE_DIR) / "static"
+        bs_js = (static_dir / "vendor" / "bootstrap" / "bootstrap.bundle.min.js").read_text(encoding="utf-8")
+        bs_css = (static_dir / "vendor" / "bootstrap" / "bootstrap.min.css").read_text(encoding="utf-8")
+        app_css = (static_dir / "css" / "app.css").read_text(encoding="utf-8")
+        dash_css = (static_dir / "css" / "dashboard.css").read_text(encoding="utf-8")
+        tx_js = (static_dir / "js" / "pages" / "transaction.js").read_text(encoding="utf-8")
+
+        harness_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>{bs_css}</style>
+    <style>{app_css}</style>
+    <style>{dash_css}</style>
+</head>
+<body class="app-body">
+    {html}
+    <script>
+    try {{ sessionStorage.setItem('tx_search_autofocus', '1'); }} catch (e) {{}}
+    </script>
+    <script>{bs_js}</script>
+    <script>{tx_js}</script>
+    <script>
+    window.addEventListener('DOMContentLoaded', async function () {{
+        await new Promise(r => setTimeout(r, 150));
+        var results = {{}};
+        var qInput = document.getElementById('filter-search-notes');
+        var filterForm = document.getElementById('transaction-filter-form');
+
+        // Check refocus & cursor at end on page load after search auto-submit
+        results.isFocusedOnLoad = (document.activeElement === qInput);
+        results.cursorAtEndOnLoad = qInput ? (qInput.selectionStart === qInput.value.length && qInput.selectionEnd === qInput.value.length) : false;
+
+        // Check inline filter submission drops ?page=
+        var submittedQuery = null;
+        if (filterForm) {{
+            filterForm.submit = function () {{
+                var fd = new FormData(filterForm);
+                var params = new URLSearchParams(fd);
+                submittedQuery = params.toString();
+            }};
+        }}
+        if (qInput) {{
+            qInput.value = 'Groceries';
+            qInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            await new Promise(r => setTimeout(r, 500));
+            results.submittedQuery = submittedQuery;
+            results.droppedPageParam = submittedQuery !== null && submittedQuery.indexOf('page=') === -1;
+            results.isFocusedAfterAutoSubmit = (document.activeElement === qInput);
+            results.cursorAtEndAfterAutoSubmit = (qInput.selectionStart === qInput.value.length && qInput.selectionEnd === qInput.value.length);
+        }}
+
+        fetch('/__test_done__', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(results)
+        }}).catch(function () {{}});
+    }});
+    </script>
+</body>
+</html>"""
+
+        rep = self._run_browser_harness(browser_bin, 1280, 800, harness_html)
+        self.assertIsNotNone(rep, "Search autofocus / filter submission harness timed out")
+        self.assertTrue(rep.get("isFocusedOnLoad"), "Search input should be refocused after search auto-submit reload")
+        self.assertTrue(rep.get("cursorAtEndOnLoad"), "Cursor should be placed at the end of search input")
+        self.assertTrue(rep.get("droppedPageParam"), "Submitting inline filter must drop ?page=")
+        self.assertTrue(rep.get("isFocusedAfterAutoSubmit"), "Search input remains focused on auto-submit")
+        self.assertTrue(rep.get("cursorAtEndAfterAutoSubmit"), "Cursor remains at the end of search input")
+
+    def test_missing_conversion_badge_when_rate_unavailable(self):
+        """When an exchange rate is missing, row displays 'Conversion unavailable' and summary badge shows unconverted count."""
+        from .models import Currency
+        from .services import create_transaction_entry
+
+        jpy, _ = Currency.objects.get_or_create(code="JPY", defaults={"name": "Yen", "decimal_places": 0, "is_active": True})
+        wallet_jpy = Wallet.objects.create(
+            owner=self.user,
+            name="JPY Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=jpy,
+            opening_balance=Decimal("10000"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        from django.utils import timezone
+        today = timezone.localdate()
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("5000"),
+            wallet=wallet_jpy,
+            transaction_date=today,
+            description="JPY Item No Rate",
+            scope="personal",
+        )
+        resp = self.client.get(self.transactions_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+        self.assertIn("Conversion unavailable", html)
+        self.assertIn("Excludes 1 unconverted", html)
+
+    def test_date_group_rows_hidden_when_empty_and_sorted_descending(self):
+        """Date group rows group transactions by date and all transactions are ordered descending."""
+        from .services import create_transaction_entry
+
+        t_earlier = create_transaction_entry(
+            user=self.user,
+            transaction_type="income",
+            amount=Decimal("50.00"),
+            wallet=self.wallet1,
+            transaction_date=date(2026, 11, 1),
+            description="Early income",
+            scope="personal",
+        )
+        t_later = create_transaction_entry(
+            user=self.user,
+            transaction_type="income",
+            amount=Decimal("75.00"),
+            wallet=self.wallet1,
+            transaction_date=date(2026, 11, 3),
+            description="Late income",
+            scope="personal",
+        )
+        resp = self.client.get(self.transactions_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        pos_later = html.find("Late income")
+        pos_tx1 = html.find("Supermarket haul")
+        pos_earlier = html.find("Early income")
+        self.assertTrue(pos_later < pos_tx1 < pos_earlier, "Transactions must be sorted by date descending")
+
+        self.assertIn('data-date-group="2026-11-03"', html)
+        self.assertIn('data-date-group="2026-11-02"', html)
+        self.assertIn('data-date-group="2026-11-01"', html)
+
+    def test_converted_column_visibility_consistent_across_pages_when_foreign_currency_on_page_2(self):
+        """Converted column visibility is computed over the full filtered queryset so page 1 and page 2 match."""
+        from django.utils import timezone
+        from .models import Wallet
+        from .services import create_transaction_entry
+
+        eur_wallet = Wallet.objects.create(
+            owner=self.user,
+            name="EUR Savings",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.eur,
+            opening_balance=Decimal("1000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        # Create 25 newer USD transactions so page 1 has only USD rows
+        today = timezone.localdate()
+        for idx in range(25):
+            create_transaction_entry(
+                user=self.user,
+                transaction_type="expense",
+                amount=Decimal("10.00"),
+                wallet=self.wallet1,
+                transaction_date=today,
+                description=f"USD Page1 Item {idx:02d}",
+                scope="personal",
+            )
+        # Create 1 older EUR transaction that lands on page 2 in the same month
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("45.00"),
+            wallet=eur_wallet,
+            transaction_date=date(today.year, today.month, 1),
+            description="EUR Page2 Item",
+            scope="personal",
+        )
+
+        resp_p1 = self.client.get(f"{self.transactions_url}?page=1")
+        resp_p2 = self.client.get(f"{self.transactions_url}?page=2")
+        self.assertEqual(resp_p1.status_code, 200)
+        self.assertEqual(resp_p2.status_code, 200)
+
+        # Page 1 has only USD rows rendered, and Page 2 has the EUR row,
+        # yet both pages must have hide_converted_column == False
+        self.assertFalse(resp_p1.context["hide_converted_column"])
+        self.assertFalse(resp_p2.context["hide_converted_column"])
+        html_p1 = resp_p1.content.decode("utf-8")
+        html_p2 = resp_p2.content.decode("utf-8")
+        self.assertIn('data-hide-converted="false"', html_p1)
+        self.assertIn('data-hide-converted="false"', html_p2)
+        self.assertNotIn("tx-col-converted d-none", html_p1)
+        self.assertNotIn("tx-col-converted d-none", html_p2)
+
+        # When filtered to USD only (all 26 USD rows across page 1 and page 2),
+        # hide_converted_column is True on both pages
+        resp_usd_p1 = self.client.get(f"{self.transactions_url}?currency=USD&page=1")
+        resp_usd_p2 = self.client.get(f"{self.transactions_url}?currency=USD&page=2")
+        self.assertTrue(resp_usd_p1.context["hide_converted_column"])
+        self.assertTrue(resp_usd_p2.context["hide_converted_column"])
+        self.assertIn('data-hide-converted="true"', resp_usd_p1.content.decode("utf-8"))
+        self.assertIn('data-hide-converted="true"', resp_usd_p2.content.decode("utf-8"))
 
     def test_browser_desktop_and_mobile_layout_and_modal_interaction(self):
         import pathlib
@@ -9704,6 +10418,698 @@ class TransactionsPageReorganizationTests(TestCase):
         self.assertTrue(rep_mobile.get("hasNonWrapCells"), "Financial amounts should have text-nowrap to avoid clipping")
         self.assertTrue(rep_mobile.get("mobileModalFitsViewport"), "Transfer modal should fit within mobile viewport")
 
+    def test_responsive_viewports_and_zoom_levels(self):
+        """Headless-browser verification across all 14 viewports and zoom cases (150% & 200%)."""
+        import http.server
+        import json
+        import os
+        import pathlib
+        import shutil
+        import socket
+        import subprocess
+        import tempfile
+        import threading
+        from django.conf import settings
+        from django.utils import timezone
+        from .models import ExchangeRate
+        from .services import create_transaction_entry
+
+        browser_bin = self._find_browser_binary()
+        if not browser_bin:
+            self.skipTest("No browser binary found for headless responsive verification.")
+
+        # Add a second currency transaction with stale rate so Converted column, stale icon, and long description are tested
+        wallet_eur = Wallet.objects.create(
+            owner=self.user,
+            name="EUR Travel Account",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.eur,
+            opening_balance=Decimal("3000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        ExchangeRate.objects.update_or_create(
+            from_currency=self.eur,
+            to_currency=self.usd,
+            scope=ExchangeRate.Scope.PROVIDER,
+            is_manual=False,
+            defaults={
+                "rate": Decimal("1.08500000"),
+                "rate_timestamp": timezone.now() - timezone.timedelta(hours=96),
+                "provider": "frankfurter_v2",
+            },
+        )
+        today = timezone.localdate()
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("245.80"),
+            wallet=wallet_eur,
+            transaction_date=today,
+            category=self.category,
+            description="International conference hotel booking and catering services with long description text",
+            notes="Receipt #9042-B attached",
+            scope="personal",
+        )
+        create_transaction_entry(
+            user=self.user,
+            transaction_type="income",
+            amount=Decimal("2850.00"),
+            wallet=self.wallet1,
+            transaction_date=today,
+            description="Monthly consulting retainer deposit",
+            scope="personal",
+        )
+
+        # Verify server-side Converted-column hiding when all filtered rows match display currency
+        resp_same_curr = self.client.get(self.transactions_url + "?currency=USD")
+        self.assertEqual(resp_same_curr.status_code, 200)
+        self.assertTrue(resp_same_curr.context["hide_converted_column"])
+        same_curr_html = resp_same_curr.content.decode("utf-8")
+        self.assertIn('data-hide-converted="true"', same_curr_html)
+        self.assertIn('tx-col-converted d-none', same_curr_html)
+        self.assertIn('<td colspan="7">', same_curr_html)
+
+        # Verify real @media (pointer: coarse) rules remain in app.css and transactions.html
+        app_css_text = (pathlib.Path(settings.BASE_DIR) / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        tx_tpl_text = (pathlib.Path(settings.BASE_DIR) / "templates" / "budgets" / "transactions.html").read_text(encoding="utf-8")
+        self.assertIn("@media (min-width: 992px) and (max-width: 1199.98px) and (pointer: coarse)", app_css_text)
+        self.assertIn("font-size: 0.75rem;", app_css_text)
+        self.assertIn("@media (pointer: coarse)", app_css_text)
+        self.assertIn("@media (pointer: coarse)", tx_tpl_text)
+        self.assertNotIn("emulate-coarse-pointer", app_css_text)
+        self.assertNotIn("emulate-coarse-pointer", tx_tpl_text)
+
+        resp = self.client.get(self.transactions_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.context["hide_converted_column"])
+        page_html = resp.content.decode("utf-8").replace('data-sync-state-url="', 'data-sync-state-url-disabled="')
+        # Inject test-only CSS to disable transitions/animations during browser inspection
+        test_no_anim_css = "<style>*, *::before, *::after { transition: none !important; animation: none !important; }</style></head>"
+        page_html_clean = page_html.replace("</head>", test_no_anim_css)
+
+        screenshots_dir = pathlib.Path(tempfile.mkdtemp(prefix="tx_responsive_screenshots_"))
+        artifact_dir = pathlib.Path(r"C:\Users\franz\.gemini\antigravity\brain\9adec51b-2e14-4ba0-89bc-7ad056968045")
+
+        viewports = [
+            {"name": "360x800", "w": 360, "h": 800, "zoom": 1.0, "coarse": True},
+            {"name": "390x844", "w": 390, "h": 844, "zoom": 1.0, "coarse": True},
+            {"name": "430x932", "w": 430, "h": 932, "zoom": 1.0, "coarse": True},
+            {"name": "844x390", "w": 844, "h": 390, "zoom": 1.0, "coarse": False},
+            {"name": "768x1024", "w": 768, "h": 1024, "zoom": 1.0, "coarse": True},
+            {"name": "1024x768", "w": 1024, "h": 768, "zoom": 1.0, "coarse": False},
+            {"name": "1180x820", "w": 1180, "h": 820, "zoom": 1.0, "coarse": False},
+            {"name": "1280x720", "w": 1280, "h": 720, "zoom": 1.0, "coarse": False},
+            {"name": "1366x768", "w": 1366, "h": 768, "zoom": 1.0, "coarse": False},
+            {"name": "1536x864", "w": 1536, "h": 864, "zoom": 1.0, "coarse": False},
+            {"name": "1920x1080", "w": 1920, "h": 1080, "zoom": 1.0, "coarse": False},
+            {"name": "2560x1440", "w": 2560, "h": 1440, "zoom": 1.0, "coarse": False},
+            {"name": "1280x720_zoom150", "w": 1280, "h": 720, "zoom": 1.5, "coarse": False},
+            {"name": "1280x720_zoom200", "w": 1280, "h": 720, "zoom": 2.0, "coarse": False},
+        ]
+
+        temp_dir = tempfile.mkdtemp(prefix="tx_resp_suite_")
+        try:
+            static_dst = os.path.join(temp_dir, "static")
+            repo_static = os.path.join(settings.BASE_DIR, "static")
+            shutil.copytree(repo_static, static_dst)
+
+            with open(os.path.join(temp_dir, "tx_fine.html"), "w", encoding="utf-8") as f:
+                f.write(page_html_clean)
+            with open(os.path.join(temp_dir, "tx_coarse.html"), "w", encoding="utf-8") as f:
+                f.write(page_html_clean)
+
+            results_holder = {}
+            done_event = threading.Event()
+
+            class QuietHandler(http.server.SimpleHTTPRequestHandler):
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, directory=temp_dir, **kwargs)
+
+                def log_message(self, format, *args):
+                    pass
+
+                def do_POST(self):
+                    if self.path == "/__test_done__":
+                        length = int(self.headers.get("Content-Length", "0"))
+                        raw = self.rfile.read(length).decode("utf-8")
+                        results_holder["report"] = json.loads(raw)
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", "11")
+                        self.end_headers()
+                        self.wfile.write(b'{"ok":true}')
+                        done_event.set()
+                    else:
+                        self.send_response(404)
+                        self.end_headers()
+
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+            sock.close()
+
+            httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), QuietHandler)
+            server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+            server_thread.start()
+
+            try:
+                # 1. Run single fast multi-viewport inspection pass in headless Chrome
+                viewports_json = json.dumps(viewports)
+                runner_html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0; padding:0; background:#fff;">
+<iframe id="vp-frame" style="border:none; display:block;"></iframe>
+<script>
+const viewports = __VIEWPORTS_JSON__;
+const includeExtras = __INCLUDE_EXTRAS__;
+const frame = document.getElementById('vp-frame');
+const allReports = {{}};
+
+function loadFrame(url) {{
+    return new Promise((resolve) => {{
+        frame.onload = function() {{
+            setTimeout(resolve, 250);
+        }};
+        frame.src = url;
+    }});
+}}
+
+function inspectViewport(vp) {{
+    return new Promise((resolve) => {{
+        const cssW = Math.round(vp.w / vp.zoom);
+        const cssH = Math.round(vp.h / vp.zoom);
+        frame.style.width = cssW + 'px';
+        frame.style.height = cssH + 'px';
+        const doc = frame.contentDocument;
+        const win = frame.contentWindow;
+        setTimeout(function() {{
+            try {{
+                const pointerCoarseMatches = !!(win.matchMedia && win.matchMedia('(pointer: coarse)').matches);
+                const scrollW = doc.documentElement.scrollWidth;
+                const clientW = doc.documentElement.clientWidth;
+
+                // Check no element in main content overflows its container horizontally
+                const mainEl = doc.getElementById('main-content');
+                const mainRect = mainEl.getBoundingClientRect();
+                let overflowingElements = [];
+                mainEl.querySelectorAll('.stationery-panel, #tx-summary-strip, .transactions-table, tr.tx-data-row').forEach(function(el) {{
+                    const style = win.getComputedStyle(el);
+                    if (style.display === 'none' || style.visibility === 'hidden') return;
+                    const r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.right > mainRect.right + 2) {{
+                        overflowingElements.push(el.tagName + '.' + el.className + ' (right=' + Math.round(r.right) + ' > mainRight=' + Math.round(mainRect.right) + ')');
+                    }}
+                }});
+
+                // Check key interactive controls are visible and clickable
+                const requiredSelectors = [
+                    '#filter-search-notes',
+                    '#btn-toggle-filters',
+                    '#btn-more-actions',
+                    '#btn-record-transfer',
+                    '.btn-topbar-action',
+                    '#topbarAccountDropdown',
+                    '#workspace-view-select',
+                    '#display-currency-select',
+                    '.btn-edit-tx'
+                ];
+                let missingControls = [];
+                requiredSelectors.forEach(function(sel) {{
+                    const el = doc.querySelector(sel);
+                    if (!el) {{
+                        missingControls.push(sel + ' (missing)');
+                        return;
+                    }}
+                    const st = win.getComputedStyle(el);
+                    const rect = el.getBoundingClientRect();
+                    if (st.display === 'none' || st.visibility === 'hidden' || rect.width === 0 || rect.height === 0) {{
+                        missingControls.push(sel + ' (not visible)');
+                    }}
+                }});
+
+                // On coarse pointer emulation, verify primary interactive controls are >= 40px high
+                // (small controls inside dense tables and .btn-sm use pseudo-element hit-areas to avoid growing rows)
+                let smallButtons = [];
+                if (vp.coarse) {{
+                    doc.querySelectorAll('button:not(.btn-sm):not(table button):not(.tx-icon-btn), .btn:not(.btn-sm):not(table .btn):not(.tx-icon-btn), .tx-stale-rate-icon').forEach(function(btn) {{
+                        const st = win.getComputedStyle(btn);
+                        if (st.display === 'none' || st.visibility === 'hidden') return;
+                        const rect = elRect(btn);
+                        if (rect.width === 0 || rect.height === 0) return;
+                        if (rect.height < 39.5) {{
+                            smallButtons.push((btn.id || btn.className || btn.tagName) + ' (h=' + rect.height.toFixed(1) + ')');
+                        }}
+                    }});
+                }}
+                function elRect(b) {{ return b.getBoundingClientRect(); }}
+
+                // Check main content max-width at 2560px (<= 1600px)
+                const mainMaxWidthOk = mainRect.width <= 1602;
+
+                // Check none of the modals or any position:fixed element sits inside a container-type element
+                let fixedInsideContainer = [];
+                doc.querySelectorAll('.modal, #transactionModal, #deleteConfirmModal, #transferModal, .app-toast-container, .btn-topbar-action').forEach(function(el) {{
+                    const st = win.getComputedStyle(el);
+                    const isModalOrFixed = el.classList.contains('modal') || st.position === 'fixed';
+                    if (!isModalOrFixed) return;
+                    let parent = el.parentElement;
+                    while (parent) {{
+                        const pst = win.getComputedStyle(parent);
+                        if (pst.containerType && pst.containerType !== 'normal') {{
+                            fixedInsideContainer.push((el.id || el.className) + ' inside ' + (parent.id || parent.className));
+                            break;
+                        }}
+                        parent = parent.parentElement;
+                    }}
+                }});
+
+                // Under coarse pointer emulation, test touch area: document.elementFromPoint at 18px above and below center of small table button
+                let tableButtonTouchAreaOk = true;
+                let tableButtonTouchDetails = null;
+                if (vp.coarse) {{
+                    const visibleBtns = Array.from(doc.querySelectorAll('.transactions-table td button, .transactions-table .btn, .btn.btn-sm, table button')).filter(function(b) {{
+                        return b.offsetWidth > 0 && b.offsetHeight > 0;
+                    }});
+                    const tableBtn = visibleBtns[0];
+                    if (tableBtn) {{
+                        const pageY = tableBtn.getBoundingClientRect().top + (win.pageYOffset || doc.documentElement.scrollTop || 0);
+                        const targetScroll = Math.max(0, pageY - 200);
+                        win.scrollTo(0, targetScroll);
+                        if (doc.documentElement) doc.documentElement.scrollTop = targetScroll;
+                        if (doc.body) doc.body.scrollTop = targetScroll;
+                        const tr = tableBtn.getBoundingClientRect();
+                        const cx = tr.left + tr.width / 2;
+                        const cy = tr.top + tr.height / 2;
+                        const elAbove = doc.elementFromPoint(cx, cy - 18);
+                        const elBelow = doc.elementFromPoint(cx, cy + 18);
+                        const aboveHit = !!(elAbove && (elAbove === tableBtn || tableBtn.contains(elAbove)));
+                        const belowHit = !!(elBelow && (elBelow === tableBtn || tableBtn.contains(elBelow)));
+                        tableButtonTouchAreaOk = aboveHit && belowHit;
+                        tableButtonTouchDetails = {{
+                            cx: Math.round(cx),
+                            cy: Math.round(cy),
+                            w: Math.round(tr.width),
+                            h: Math.round(tr.height),
+                            aboveHit: aboveHit,
+                            belowHit: belowHit,
+                            aboveEl: elAbove ? (elAbove.id || elAbove.className || elAbove.tagName) : null,
+                            belowEl: elBelow ? (elBelow.id || elBelow.className || elBelow.tagName) : null
+                        }};
+                    }}
+                }}
+
+                // Measure control height to verify pointer emulation affects rules (e.g. .btn-topbar-action)
+                const topbarActionEl = doc.querySelector('.btn-topbar-action');
+                const topbarActionH = topbarActionEl ? Math.round(topbarActionEl.getBoundingClientRect().height) : null;
+
+                resolve({{
+                    name: vp.name,
+                    cssW: cssW,
+                    cssH: cssH,
+                    scrollW: scrollW,
+                    clientW: clientW,
+                    pointerCoarseMatches: pointerCoarseMatches,
+                    noHorizontalScroll: scrollW <= clientW,
+                    overflowingElements: overflowingElements,
+                    missingControls: missingControls,
+                    smallButtons: smallButtons,
+                    tableButtonTouchAreaOk: tableButtonTouchAreaOk,
+                    tableButtonTouchDetails: tableButtonTouchDetails,
+                    topbarActionH: topbarActionH,
+                    mainWidth: Math.round(mainRect.width),
+                    mainMaxWidthOk: mainMaxWidthOk,
+                    fixedInsideContainer: fixedInsideContainer
+                }});
+            }} catch (e) {{
+                resolve({{ name: vp.name, error: e.toString() }});
+            }}
+        }}, 80);
+    }});
+}}
+
+(async function() {{
+    try {{
+        await loadFrame('http://127.0.0.1:{port}/tx_fine.html');
+        for (const vp of viewports) {{
+            allReports[vp.name] = await inspectViewport(vp);
+        }}
+
+        if (includeExtras) {{
+            // Verify Converted-hidden column width redistribution at >=1100px container widths (1366, 1920, 2560)
+            const convHiddenReports = {{}};
+            const doc = frame.contentDocument;
+            const win = frame.contentWindow;
+            const txTable = doc.querySelector('.transactions-table');
+            if (txTable) {{
+                txTable.classList.add('tx-converted-hidden');
+                doc.querySelectorAll('.tx-col-converted').forEach(function(el) {{ el.classList.add('d-none'); }});
+                for (const cw of [1366, 1920, 2560]) {{
+                    frame.style.width = cw + 'px';
+                    frame.style.height = '900px';
+                    await new Promise(function(r) {{ setTimeout(r, 50); }});
+                    const tRect = txTable.getBoundingClientRect();
+                    const descTh = txTable.querySelector('th.tx-col-desc');
+                    const dRect = descTh.getBoundingClientRect();
+                    const descShare = tRect.width > 0 ? (dRect.width / tRect.width) : 1;
+                    convHiddenReports[String(cw)] = {{
+                        tableW: Math.round(tRect.width),
+                        descW: Math.round(dRect.width),
+                        descShare: Number(descShare.toFixed(3)),
+                        descAtMost35Pct: descShare <= 0.35
+                    }};
+                }}
+                txTable.classList.remove('tx-converted-hidden');
+                doc.querySelectorAll('.tx-col-converted').forEach(function(el) {{ el.classList.remove('d-none'); }});
+            }}
+            allReports['__conv_hidden__'] = convHiddenReports;
+
+            // Verify opening Edit (#transactionModal), Delete-confirm (#deleteConfirmModal), and Transfer (#transferModal)
+            // at 360x800, 768x1024, and 1366x768: modal bounding box is centered in viewport and backdrop covers full viewport.
+            const modalViewports = [
+                {{ name: '360x800', w: 360, h: 800 }},
+                {{ name: '768x1024', w: 768, h: 1024 }},
+                {{ name: '1366x768', w: 1366, h: 768 }}
+            ];
+            const modalIds = ['transactionModal', 'deleteConfirmModal', 'transferModal'];
+            const modalReports = {{}};
+            const bs = win.bootstrap;
+
+            for (const mvp of modalViewports) {{
+                frame.style.width = mvp.w + 'px';
+                frame.style.height = mvp.h + 'px';
+                await new Promise(function(r) {{ setTimeout(r, 60); }});
+                modalReports[mvp.name] = {{}};
+
+                for (const mid of modalIds) {{
+                    const topbarEl = doc.querySelector('.app-topbar');
+                    const fabEl = doc.querySelector('.btn-topbar-action');
+                    const beforeTopbarRect = topbarEl ? topbarEl.getBoundingClientRect() : null;
+                    const beforeFabRect = fabEl ? fabEl.getBoundingClientRect() : null;
+
+                    const mEl = doc.getElementById(mid);
+                    const inst = bs.Modal.getOrCreateInstance(mEl);
+                    inst.show();
+                    await new Promise(function(r) {{ setTimeout(r, 220); }});
+
+                    const dialog = mEl.querySelector('.modal-dialog');
+                    const dRect = dialog.getBoundingClientRect();
+                    const mClientW = mEl.clientWidth || mvp.w;
+                    const backdrop = doc.querySelector('.modal-backdrop');
+                    const bRect = backdrop ? backdrop.getBoundingClientRect() : null;
+
+                    const dialogCenterX = dRect.left + dRect.width / 2;
+                    const vpCenterX = mClientW / 2;
+                    const centeredHorizontally = Math.abs(dialogCenterX - vpCenterX) <= 4;
+                    const fitsViewport = dRect.left >= 0 && dRect.right <= mvp.w + 1;
+                    const backdropCoversFullViewport = !!(
+                        bRect &&
+                        Math.abs(bRect.left) <= 1 &&
+                        Math.abs(bRect.top) <= 1 &&
+                        Math.abs(bRect.width - mvp.w) <= 2 &&
+                        Math.abs(bRect.height - mvp.h) <= 2
+                    );
+
+                    const afterTopbarRect = topbarEl ? topbarEl.getBoundingClientRect() : null;
+                    const afterFabRect = fabEl ? fabEl.getBoundingClientRect() : null;
+                    const fabSt = fabEl ? win.getComputedStyle(fabEl) : null;
+                    const fabHiddenOnMobile = mvp.w < 576 ? (fabSt && fabSt.visibility === 'hidden' && fabSt.display !== 'none') : true;
+                    const desktopActionStaysVisible = mvp.w >= 576 ? !!(fabSt && fabSt.visibility === 'visible' && fabSt.display !== 'none' && afterFabRect && afterFabRect.width > 0) : true;
+                    const desktopTopbarNoReflow = mvp.w >= 576 ? !!(
+                        beforeTopbarRect && afterTopbarRect &&
+                        Math.abs(beforeTopbarRect.height - afterTopbarRect.height) <= 1 &&
+                        beforeFabRect && afterFabRect &&
+                        Math.abs(beforeFabRect.top - afterFabRect.top) <= 1 &&
+                        Math.abs(beforeFabRect.height - afterFabRect.height) <= 1
+                    ) : true;
+
+                    modalReports[mvp.name][mid] = {{
+                        centeredHorizontally: centeredHorizontally,
+                        fitsViewport: fitsViewport,
+                        backdropCoversFullViewport: backdropCoversFullViewport,
+                        fabHiddenOnMobile: fabHiddenOnMobile,
+                        desktopActionStaysVisible: desktopActionStaysVisible,
+                        desktopTopbarNoReflow: desktopTopbarNoReflow,
+                        dialogLeft: Math.round(dRect.left),
+                        dialogRight: Math.round(dRect.right),
+                        backdropW: bRect ? Math.round(bRect.width) : 0,
+                        backdropH: bRect ? Math.round(bRect.height) : 0
+                    }};
+
+                    inst.hide();
+                    await new Promise(function(r) {{ setTimeout(r, 220); }});
+                }}
+            }}
+            allReports['__modals__'] = modalReports;
+        }}
+    }} catch (err) {{
+        allReports['__runner_error__'] = err.toString();
+    }}
+
+    fetch('/__test_done__', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify(allReports)
+    }});
+}})();
+</script>
+</body>
+</html>"""
+                def run_runner_pass(subset_viewports, coarse_mode=False, include_extras=False):
+                    done_event.clear()
+                    results_holder.clear()
+                    vp_json = json.dumps(subset_viewports)
+                    inc_extras_js = "true" if include_extras else "false"
+                    r_html = runner_html.replace("__VIEWPORTS_JSON__", vp_json).replace("__INCLUDE_EXTRAS__", inc_extras_js)
+                    r_path = os.path.join(temp_dir, "runner.html")
+                    with open(r_path, "w", encoding="utf-8") as f:
+                        f.write(r_html)
+                    u_dir = tempfile.mkdtemp(prefix="tx_resp_chrome_")
+                    cmd = [
+                        browser_bin,
+                        "--headless=new",
+                        "--disable-gpu",
+                        "--no-first-run",
+                        "--no-default-browser-check",
+                        "--window-size=2600,1500",
+                        f"--user-data-dir={u_dir}",
+                    ]
+                    if coarse_mode:
+                        cmd.append("--blink-settings=primaryPointerType=2,availablePointerTypes=2")
+                    cmd.append(f"http://127.0.0.1:{port}/runner.html")
+                    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    try:
+                        fin = done_event.wait(timeout=45)
+                        self.assertTrue(fin, "Responsive viewport suite timed out")
+                    finally:
+                        p.kill()
+                        p.wait(timeout=5)
+                        shutil.rmtree(u_dir, ignore_errors=True)
+                    return results_holder.get("report", {})
+
+                fine_vps = [vp for vp in viewports if not vp["coarse"]]
+                coarse_vps = [vp for vp in viewports if vp["coarse"]]
+                rep_fine = run_runner_pass(fine_vps, coarse_mode=False, include_extras=True)
+                rep_coarse = run_runner_pass(coarse_vps, coarse_mode=True, include_extras=False)
+                reports = {**rep_fine, **rep_coarse}
+
+                self.assertNotIn("__runner_error__", reports, f"Runner error: {reports.get('__runner_error__')}")
+                for vp in viewports:
+                    name = vp["name"]
+                    with self.subTest(viewport=name):
+                        rep = reports.get(name)
+                        self.assertIsNotNone(rep, f"Missing report for viewport {name}")
+                        self.assertNotIn("error", rep, f"Error in viewport {name}: {rep.get('error')}")
+                        self.assertTrue(
+                            rep.get("noHorizontalScroll"),
+                            f"Horizontal scroll detected at {name}: scrollWidth={rep.get('scrollW')} > clientWidth={rep.get('clientW')}",
+                        )
+                        self.assertEqual(
+                            rep.get("overflowingElements"),
+                            [],
+                            f"Overflowing elements in main content at {name}: {rep.get('overflowingElements')}",
+                        )
+                        self.assertEqual(
+                            rep.get("missingControls"),
+                            [],
+                            f"Interactive controls not visible/clickable at {name}: {rep.get('missingControls')}",
+                        )
+                        if vp["coarse"]:
+                            self.assertTrue(
+                                rep.get("pointerCoarseMatches"),
+                                f"Expected matchMedia('(pointer: coarse)').matches to be True at {name}",
+                            )
+                            self.assertEqual(
+                                rep.get("smallButtons"),
+                                [],
+                                f"Coarse pointer buttons < 40px high at {name}: {rep.get('smallButtons')}",
+                            )
+                            self.assertTrue(
+                                rep.get("tableButtonTouchAreaOk"),
+                                f"Small table button 18px above/below touch test failed at {name}: {rep.get('tableButtonTouchDetails')}",
+                            )
+                            if rep.get("topbarActionH") is not None:
+                                self.assertGreaterEqual(
+                                    rep.get("topbarActionH"),
+                                    40,
+                                    f"Expected .btn-topbar-action height >= 40 under coarse pointer at {name}",
+                                )
+                        else:
+                            if rep.get("topbarActionH") is not None and vp["w"] >= 576:
+                                self.assertLess(
+                                    rep.get("topbarActionH"),
+                                    40,
+                                    f"Expected .btn-topbar-action height < 40 under fine pointer at {name}",
+                                )
+                        if vp["w"] == 2560:
+                            self.assertTrue(
+                                rep.get("mainMaxWidthOk"),
+                                f"Main content stretched wider than 1600px at 2560px: width={rep.get('mainWidth')}",
+                            )
+                        self.assertEqual(
+                            rep.get("fixedInsideContainer"),
+                            [],
+                            f"Modal or position:fixed element inside container-type parent at {name}: {rep.get('fixedInsideContainer')}",
+                        )
+
+                conv_hidden_reports = reports.get("__conv_hidden__", {})
+                for cw_key in ["1366", "1920", "2560"]:
+                    with self.subTest(converted_hidden_width=cw_key):
+                        self.assertIn(cw_key, conv_hidden_reports)
+                        self.assertTrue(
+                            conv_hidden_reports[cw_key].get("descAtMost35Pct"),
+                            f"Description column exceeded 35% when Converted hidden at {cw_key}px: {conv_hidden_reports[cw_key]}",
+                        )
+
+                modal_reports = reports.get("__modals__", {})
+                for mvp_name in ["360x800", "768x1024", "1366x768"]:
+                    self.assertIn(mvp_name, modal_reports)
+                    for mid in ["transactionModal", "deleteConfirmModal", "transferModal"]:
+                        with self.subTest(modal_viewport=mvp_name, modal_id=mid):
+                            mrep = modal_reports[mvp_name].get(mid, {})
+                            self.assertTrue(
+                                mrep.get("centeredHorizontally"),
+                                f"Modal {mid} not centered horizontally at {mvp_name}: {mrep}",
+                            )
+                            self.assertTrue(
+                                mrep.get("fitsViewport"),
+                                f"Modal {mid} overflows viewport at {mvp_name}: {mrep}",
+                            )
+                            self.assertTrue(
+                                mrep.get("backdropCoversFullViewport"),
+                                f"Modal backdrop for {mid} does not cover full viewport at {mvp_name}: {mrep}",
+                            )
+                            self.assertTrue(
+                                mrep.get("fabHiddenOnMobile"),
+                                f"Floating Add transaction button should have visibility:hidden while modal {mid} is open at {mvp_name}: {mrep}",
+                            )
+                            self.assertTrue(
+                                mrep.get("desktopActionStaysVisible"),
+                                f"Topbar Add transaction button should stay visible while modal {mid} is open at {mvp_name}: {mrep}",
+                            )
+                            self.assertTrue(
+                                mrep.get("desktopTopbarNoReflow"),
+                                f"Topbar should not reflow when modal {mid} opens at {mvp_name}: {mrep}",
+                            )
+
+                # 2. Save a screenshot per viewport to screenshots_dir (and copy requested ones to artifact_dir)
+                shot_profile = tempfile.mkdtemp(prefix="shot_shared_profile_")
+                try:
+                    for vp in viewports:
+                        name = vp["name"]
+                        css_w = round(vp["w"] / vp["zoom"])
+                        css_h = max(round(vp["h"] / vp["zoom"]), 900)
+                        shot_win_h = max(vp["h"], round(900 * vp["zoom"]))
+                        page_file = "tx_coarse.html" if vp["coarse"] else "tx_fine.html"
+                        shot_html_name = f"shot_{name}.html"
+                        shot_html_path = os.path.join(temp_dir, shot_html_name)
+                        with open(shot_html_path, "w", encoding="utf-8") as f:
+                            f.write(f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;overflow:hidden;background:#f6f7f9;">
+<iframe src="http://127.0.0.1:{port}/{page_file}" style="width:{css_w}px;height:{css_h}px;border:none;display:block;transform:scale({vp['zoom']});transform-origin:0 0;"></iframe>
+</body>
+</html>""")
+                        out_png = screenshots_dir / f"transactions_{name}.png"
+                        shot_cmd = [
+                            browser_bin,
+                            "--headless=new",
+                            "--disable-gpu",
+                            "--no-first-run",
+                            "--no-default-browser-check",
+                            "--hide-scrollbars",
+                        ]
+                        if vp["coarse"]:
+                            shot_cmd.append("--blink-settings=primaryPointerType=2,availablePointerTypes=2")
+                        shot_cmd.extend([
+                            f"--window-size={vp['w']},{shot_win_h}",
+                            f"--user-data-dir={shot_profile}",
+                            f"--screenshot={out_png}",
+                            f"http://127.0.0.1:{port}/{shot_html_name}",
+                        ])
+                        subprocess.run(
+                            shot_cmd,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=20,
+                            check=False,
+                        )
+                        self.assertTrue(out_png.exists(), f"Screenshot not saved for {name}")
+                        if artifact_dir.exists():
+                            shutil.copy2(out_png, artifact_dir / f"transactions_{name}.png")
+
+                    # Save 360x800 screenshot with Delete confirmation modal open
+                    del_html_path = os.path.join(temp_dir, "shot_360_delete_modal.html")
+                    with open(del_html_path, "w", encoding="utf-8") as f:
+                        f.write(f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;overflow:hidden;background:#f6f7f9;">
+<iframe id="del-frame" src="http://127.0.0.1:{port}/tx_coarse.html" style="width:360px;height:800px;border:none;display:block;"></iframe>
+<script>
+const df = document.getElementById('del-frame');
+df.onload = function() {{
+    const doc = df.contentDocument;
+    const mEl = doc.getElementById('deleteConfirmModal');
+    if (mEl) mEl.classList.remove('fade');
+    const trig = doc.querySelector('.tx-delete-trigger');
+    if (trig) trig.click();
+}};
+</script>
+</body>
+</html>""")
+                    del_png = screenshots_dir / "transactions_360x800_delete_modal.png"
+                    subprocess.run(
+                        [
+                            browser_bin,
+                            "--headless=new",
+                            "--disable-gpu",
+                            "--no-first-run",
+                            "--no-default-browser-check",
+                            "--hide-scrollbars",
+                            "--blink-settings=primaryPointerType=2,availablePointerTypes=2",
+                            "--window-size=360,800",
+                            f"--user-data-dir={shot_profile}",
+                            f"--screenshot={del_png}",
+                            f"http://127.0.0.1:{port}/shot_360_delete_modal.html",
+                        ],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=20,
+                        check=False,
+                    )
+                    if artifact_dir.exists() and del_png.exists():
+                        shutil.copy2(del_png, artifact_dir / "transactions_360x800_delete_modal.png")
+                finally:
+                    shutil.rmtree(shot_profile, ignore_errors=True)
+            finally:
+                httpd.shutdown()
+                httpd.server_close()
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            shutil.rmtree(screenshots_dir, ignore_errors=True)
+
     def _run_browser_harness(self, browser_bin, width, height, html_content):
         import http.server
         import json
@@ -9777,6 +11183,144 @@ class TransactionsPageReorganizationTests(TestCase):
             httpd.shutdown()
             httpd.server_close()
             shutil.rmtree(user_data_dir, ignore_errors=True)
+
+
+
+    def test_month_navigation_and_filtering_behavior(self):
+        """Comprehensive unit and integration tests for Transactions month-by-month filtering."""
+        from django.utils import timezone
+        from .services import create_transaction_entry, create_transfer_entry
+
+        today = timezone.localdate()
+        cur_month_str = today.strftime("%Y-%m")
+        prev_month_date = date(today.year - (1 if today.month == 1 else 0), 12 if today.month == 1 else today.month - 1, 15)
+        prev_month_str = prev_month_date.strftime("%Y-%m")
+
+        # 1. Create transactions in current month and previous month
+        tx_current = create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("50.00"),
+            wallet=self.wallet1,
+            transaction_date=today,
+            description="November current expense",
+            scope="personal",
+        )
+        tx_prev = create_transaction_entry(
+            user=self.user,
+            transaction_type="expense",
+            amount=Decimal("80.00"),
+            wallet=self.wallet1,
+            transaction_date=prev_month_date,
+            description="October previous expense",
+            scope="personal",
+        )
+        tr_prev = create_transfer_entry(
+            user=self.user,
+            source_wallet=self.wallet1,
+            destination_wallet=self.wallet2,
+            amount_sent=Decimal("150.00"),
+            transfer_date=prev_month_date,
+            notes="Previous month transfer",
+        )
+
+        # A. Missing month parameter -> defaults to current month
+        resp_def = self.client.get(self.transactions_url)
+        self.assertEqual(resp_def.status_code, 200)
+        self.assertEqual(resp_def.context["filters"]["month"], cur_month_str)
+        self.assertEqual(resp_def.context["filters"]["month_mode"], "month")
+        self.assertTrue(resp_def.context["filters"]["is_default_month"])
+        self.assertEqual(resp_def.context["active_filters_count"], 0)
+        self.assertFalse(resp_def.context["has_active_filters"])
+        def_tx_ids = [tx.id for tx in resp_def.context["transactions_list"]]
+        self.assertIn(tx_current.id, def_tx_ids)
+        self.assertNotIn(tx_prev.id, def_tx_ids)
+        # Summary totals match current month only
+        self.assertContains(resp_def, "-175.50 USD")  # self.tx1 (125.50) + tx_current (50.00)
+        self.assertContains(resp_def, f"· {today.strftime('%B %Y')}")
+
+        # Month bar controls
+        html_def = resp_def.content.decode("utf-8")
+        self.assertIn('id="btn-prev-month"', html_def)
+        self.assertIn('id="btn-next-month"', html_def)
+        self.assertIn('disabled', html_def)  # Next button disabled when current month
+        self.assertIn('id="btn-all-time"', html_def)
+        self.assertIn('id="native-month-input"', html_def)
+        self.assertNotIn('active', html_def.split('id="btn-all-time"')[0].split('<a')[-1])
+
+        # B. Specific month parameter -> ?month=YYYY-MM
+        resp_prev = self.client.get(f"{self.transactions_url}?month={prev_month_str}")
+        self.assertEqual(resp_prev.status_code, 200)
+        self.assertEqual(resp_prev.context["filters"]["month"], prev_month_str)
+        self.assertFalse(resp_prev.context["filters"]["is_default_month"])
+        prev_tx_ids = [tx.id for tx in resp_prev.context["transactions_list"]]
+        self.assertIn(tx_prev.id, prev_tx_ids)
+        self.assertNotIn(tx_current.id, prev_tx_ids)
+        self.assertContains(resp_prev, "-80.00 USD")
+        self.assertContains(resp_prev, f"· {prev_month_date.strftime('%B %Y')}")
+        # Next button is NOT disabled for previous month
+        html_prev = resp_prev.content.decode("utf-8")
+        next_btn_chunk = html_prev.split('id="btn-next-month"')[0].split('<')[-1]
+        self.assertNotIn('disabled', next_btn_chunk)
+
+        # Transfers section follows the same month
+        transfers_prev = resp_prev.context["recent_transfers"]
+        self.assertEqual(len(transfers_prev), 1)
+        self.assertEqual(transfers_prev[0].id, tr_prev.id)
+
+        # C. All time -> ?month=all
+        resp_all = self.client.get(f"{self.transactions_url}?month=all")
+        self.assertEqual(resp_all.status_code, 200)
+        self.assertEqual(resp_all.context["filters"]["month_mode"], "all")
+        self.assertEqual(resp_all.context["filters"]["month"], "all")
+        all_tx_ids = [tx.id for tx in resp_all.context["transactions_list"]]
+        self.assertIn(tx_current.id, all_tx_ids)
+        self.assertIn(tx_prev.id, all_tx_ids)
+        self.assertContains(resp_all, "· All time")
+        html_all = resp_all.content.decode("utf-8")
+        all_time_pill_class = html_all.split('id="btn-all-time"')[0].split('<a')[-1]
+        self.assertIn('active', all_time_pill_class)
+
+        # D. Custom date range overrides month
+        resp_custom = self.client.get(f"{self.transactions_url}?month={cur_month_str}&start_date={prev_month_str}-10&end_date={prev_month_str}-20")
+        self.assertEqual(resp_custom.status_code, 200)
+        self.assertEqual(resp_custom.context["filters"]["month_mode"], "custom")
+        self.assertContains(resp_custom, "· Custom range")
+        self.assertEqual(resp_custom.context["active_filters_count"], 2)  # start_date, end_date
+        custom_tx_ids = [tx.id for tx in resp_custom.context["transactions_list"]]
+        self.assertIn(tx_prev.id, custom_tx_ids)
+        self.assertNotIn(tx_current.id, custom_tx_ids)
+
+        # E. Invalid month fallback to current month
+        resp_invalid = self.client.get(f"{self.transactions_url}?month=invalid-date")
+        self.assertEqual(resp_invalid.status_code, 200)
+        self.assertEqual(resp_invalid.context["filters"]["month"], cur_month_str)
+
+        # F. Empty month state
+        future_month = f"{today.year + 2}-01"
+        resp_empty = self.client.get(f"{self.transactions_url}?month={future_month}")
+        self.assertEqual(resp_empty.status_code, 200)
+        self.assertContains(resp_empty, f"No transactions in January {today.year + 2}")
+        self.assertContains(resp_empty, 'id="btn-empty-prev-month"')
+        self.assertContains(resp_empty, 'id="btn-empty-all-time"')
+
+        # G. Dashboard "View all >" links to month=all
+        resp_dash = self.client.get(reverse("budgets:dashboard"))
+        self.assertEqual(resp_dash.status_code, 200)
+        self.assertContains(resp_dash, 'href="/transactions/?month=all"')
+
+        # H. Export respects month & export all time
+        resp_exp_cur = self.client.get(reverse("budgets:export_transactions") + f"?format=csv&month={cur_month_str}")
+        self.assertEqual(resp_exp_cur.status_code, 200)
+        content_cur = resp_exp_cur.content.decode("utf-8")
+        self.assertIn("November current expense", content_cur)
+        self.assertNotIn("October previous expense", content_cur)
+
+        resp_exp_all = self.client.get(reverse("budgets:export_transactions") + "?format=csv&all_time=1")
+        self.assertEqual(resp_exp_all.status_code, 200)
+        content_all = resp_exp_all.content.decode("utf-8")
+        self.assertIn("November current expense", content_all)
+        self.assertIn("October previous expense", content_all)
 
 
 

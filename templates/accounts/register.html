@@ -1,94 +1,165 @@
 {% extends "accounts/auth_base.html" %}
 
-{% block title %}Create Account | Budget Tracker{% endblock %}
+{% block title %}Sign up | Jubao{% endblock %}
+
 
 {% block auth_content %}
-<h1 class="h5 fw-semibold mb-1">Create account</h1>
-<p class="small text-secondary mb-3">
-    Choose a username and password to register your Budget Tracker account.
-</p>
+<h1 class="auth-heading">SIGN UP</h1>
+<p class="auth-subtitle">to track your budget &amp; gather treasure</p>
 
 {% if form.non_field_errors %}
-<div class="alert alert-danger py-2 px-3 small" role="alert">
-    {% for error in form.non_field_errors %}
-    <div>{{ error }}</div>
-    {% endfor %}
+<div class="auth-alert alert-danger" role="alert">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="flex-shrink-0">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+    <div>
+        {% for error in form.non_field_errors %}
+        <div>{{ error }}</div>
+        {% endfor %}
+    </div>
 </div>
 {% endif %}
 
 <form method="post" action="{% url 'accounts:register' %}" novalidate>
     {% csrf_token %}
 
-    <div class="mb-3">
-        <label for="{{ form.username.id_for_label }}" class="form-label small fw-medium">
+    <div class="auth-form-group">
+        <label for="{{ form.username.id_for_label }}" class="auth-field-label">
             Username
         </label>
-        {{ form.username }}
-        {% if form.username.help_text %}
-        <div class="form-text small" id="register-username-help">
-            {{ form.username.help_text }}
+        <div class="auth-input-wrapper {% if form.username.errors %}is-invalid{% endif %}">
+            <input
+                type="text"
+                name="{{ form.username.name }}"
+                id="{{ form.username.id_for_label }}"
+                value="{{ form.username.value|default_if_none:'' }}"
+                class="form-control auth-form-input {% if form.username.errors %}is-invalid{% endif %}"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                maxlength="150"
+                placeholder="Enter your username"
+                required
+                autofocus
+                {% if form.username.errors %}aria-invalid="true" aria-describedby="register-username-errors"{% endif %}
+            >
         </div>
-        {% endif %}
         {% if form.username.errors %}
-        <div class="invalid-feedback d-block" id="register-username-errors">
+        <div class="auth-field-error" id="register-username-errors" role="alert">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
             {% for error in form.username.errors %}
-            <div>{{ error }}</div>
+            <span>{{ error }}</span>
             {% endfor %}
         </div>
         {% endif %}
     </div>
 
-    <div class="mb-3">
-        <label for="{{ form.password1.id_for_label }}" class="form-label small fw-medium">
+    <div class="auth-form-group">
+        <label for="{{ form.password1.id_for_label }}" class="auth-field-label">
             Password
         </label>
-        {{ form.password1 }}
-        {% if form.password1.help_text %}
-        <div class="form-text small" id="register-password1-help">
-            {{ form.password1.help_text }}
+        <div class="auth-input-wrapper {% if form.password1.errors %}is-invalid{% endif %}">
+            <input
+                type="password"
+                name="{{ form.password1.name }}"
+                id="{{ form.password1.id_for_label }}"
+                class="form-control auth-form-input {% if form.password1.errors %}is-invalid{% endif %}"
+                autocomplete="new-password"
+                placeholder="••••••••••••"
+                required
+                {% if form.password1.errors %}aria-invalid="true" aria-describedby="register-password1-errors"{% endif %}
+            >
+            <button
+                type="button"
+                class="btn-toggle-password"
+                data-target="{{ form.password1.id_for_label }}"
+                aria-label="Show password"
+                aria-pressed="false"
+            >
+                <svg class="icon-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                <svg class="icon-eye-off d-none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+            </button>
         </div>
-        {% endif %}
         {% if form.password1.errors %}
-        <div class="invalid-feedback d-block" id="register-password1-errors">
+        <div class="auth-field-error" id="register-password1-errors" role="alert">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
             {% for error in form.password1.errors %}
-            <div>{{ error }}</div>
+            <span>{{ error }}</span>
             {% endfor %}
         </div>
         {% endif %}
     </div>
 
-    <div class="mb-3">
-        <label for="{{ form.password2.id_for_label }}" class="form-label small fw-medium">
+    <div class="auth-form-group">
+        <label for="{{ form.password2.id_for_label }}" class="auth-field-label">
             Password confirmation
         </label>
-        {{ form.password2 }}
-        {% if form.password2.help_text %}
-        <div class="form-text small" id="register-password2-help">
-            {{ form.password2.help_text }}
+        <div class="auth-input-wrapper {% if form.password2.errors %}is-invalid{% endif %}">
+            <input
+                type="password"
+                name="{{ form.password2.name }}"
+                id="{{ form.password2.id_for_label }}"
+                class="form-control auth-form-input {% if form.password2.errors %}is-invalid{% endif %}"
+                autocomplete="new-password"
+                placeholder="••••••••••••"
+                required
+                {% if form.password2.errors %}aria-invalid="true" aria-describedby="register-password2-errors"{% endif %}
+            >
+            <button
+                type="button"
+                class="btn-toggle-password"
+                data-target="{{ form.password2.id_for_label }}"
+                aria-label="Show password"
+                aria-pressed="false"
+            >
+                <svg class="icon-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                <svg class="icon-eye-off d-none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+            </button>
         </div>
-        {% endif %}
         {% if form.password2.errors %}
-        <div class="invalid-feedback d-block" id="register-password2-errors">
+        <div class="auth-field-error" id="register-password2-errors" role="alert">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
             {% for error in form.password2.errors %}
-            <div>{{ error }}</div>
+            <span>{{ error }}</span>
             {% endfor %}
         </div>
         {% endif %}
     </div>
 
-    <div class="d-grid mt-4">
-        <button type="submit" class="btn btn-primary">
-            Create account
-        </button>
-    </div>
+    <button type="submit" class="btn-auth-submit">
+        Sign up
+    </button>
 </form>
 
-<hr class="my-3 text-secondary-emphasis">
-
-<p class="small text-secondary text-center mb-0">
-    Already have an account?
-    <a href="{% url 'accounts:login' %}" class="text-decoration-none fw-medium">
-        Sign in
+<div class="auth-switch-link-wrapper">
+    <a href="{% url 'accounts:login' %}" class="auth-switch-link">
+        Already have an account? Log in
     </a>
-</p>
+</div>
 {% endblock %}

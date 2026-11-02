@@ -4027,8 +4027,41 @@
         },
     };
 
+    window.addEventListener("pagehide", function () {
+        releaseAllLocksForThisTab();
+    });
+    window.addEventListener("beforeunload", function () {
+        releaseAllLocksForThisTab();
+    });
+
     document.addEventListener("DOMContentLoaded", function () {
         if ("serviceWorker" in navigator) {
+            var hadController = !!navigator.serviceWorker.controller;
+            navigator.serviceWorker.addEventListener("controllerchange", function () {
+                releaseAllLocksForThisTab();
+                if (!hadController) return;
+                if (typeof window.showAppToast === "function") {
+                    var toastEl = window.showAppToast(
+                        "New version available — reload",
+                        "info",
+                        { autohide: false }
+                    );
+                    if (toastEl) {
+                        var bodyEl = toastEl.querySelector(".app-toast-body");
+                        if (bodyEl) {
+                            bodyEl.textContent = "New version available — ";
+                            var reloadBtn = document.createElement("button");
+                            reloadBtn.type = "button";
+                            reloadBtn.className = "btn btn-link btn-sm p-0 align-baseline fw-semibold text-decoration-underline";
+                            reloadBtn.textContent = "reload";
+                            reloadBtn.addEventListener("click", function () {
+                                window.location.reload();
+                            });
+                            bodyEl.appendChild(reloadBtn);
+                        }
+                    }
+                }
+            });
             navigator.serviceWorker
                 .register("/service-worker.js", { scope: "/" })
                 .catch(function () {});

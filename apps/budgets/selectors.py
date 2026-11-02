@@ -1,3 +1,4 @@
+import calendar
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
@@ -514,16 +515,67 @@ def get_filtered_transactions(user, params: dict, *, per_page: int = 25) -> dict
     if start_date_raw:
         try:
             start_date = date.fromisoformat(start_date_raw)
-            qs = qs.filter(transaction_date__gte=start_date)
         except ValueError:
             start_date = None
 
     if end_date_raw:
         try:
             end_date = date.fromisoformat(end_date_raw)
-            qs = qs.filter(transaction_date__lte=end_date)
         except ValueError:
             end_date = None
+
+    # Month filtering logic
+    today = timezone.localdate()
+    cur_month_str = today.strftime("%Y-%m")
+    raw_month = (params.get("month") or "").strip()
+
+    month_mode = "month"
+    selected_month_str = cur_month_str
+    month_start = None
+    month_end = None
+    is_default_month = False
+
+    if start_date or end_date:
+        month_mode = "custom"
+        selected_month_str = ""
+        period_label = "Custom range"
+        if start_date:
+            qs = qs.filter(transaction_date__gte=start_date)
+        if end_date:
+            qs = qs.filter(transaction_date__lte=end_date)
+    elif raw_month == "all":
+        month_mode = "all"
+        selected_month_str = "all"
+        period_label = "All time"
+    else:
+        # Specific month or fallback to current month
+        valid_month = False
+        if raw_month:
+            try:
+                parts = raw_month.split("-")
+                if len(parts) == 2:
+                    y, m = int(parts[0]), int(parts[1])
+                    if 1 <= m <= 12 and 1900 <= y <= 9999:
+                        last_day = calendar.monthrange(y, m)[1]
+                        month_start = date(y, m, 1)
+                        month_end = date(y, m, last_day)
+                        selected_month_str = f"{y:04d}-{m:02d}"
+                        valid_month = True
+            except (ValueError, TypeError):
+                valid_month = False
+
+        if not valid_month:
+            y, m = today.year, today.month
+            last_day = calendar.monthrange(y, m)[1]
+            month_start = date(y, m, 1)
+            month_end = date(y, m, last_day)
+            selected_month_str = cur_month_str
+            is_default_month = True
+        else:
+            is_default_month = (selected_month_str == cur_month_str)
+
+        qs = qs.filter(transaction_date__gte=month_start, transaction_date__lte=month_end)
+        period_label = month_start.strftime("%B %Y")
 
     paginator = Paginator(qs, per_page)
     page_number = params.get("page") or 1
@@ -543,11 +595,26 @@ def get_filtered_transactions(user, params: dict, *, per_page: int = 25) -> dict
             "display_currency": display_currency_code,
             "start_date": start_date_raw if start_date else "",
             "end_date": end_date_raw if end_date else "",
+            "month": selected_month_str,
+            "month_mode": month_mode,
+            "period_label": period_label,
+            "is_default_month": is_default_month,
+            "month_start": month_start,
+            "month_end": month_end,
+            "effective_start_date": start_date or month_start,
+            "effective_end_date": end_date or month_end,
         },
     }
 
 
-def get_accessible_transfers(user, *, scope: str | None = None, limit: int = 20):
+def get_accessible_transfers(
+    user,
+    *,
+    scope: str | None = None,
+    limit: int = 20,
+    start_date: date | None = None,
+    end_date: date | None = None,
+):
     if not user or not user.is_authenticated:
         return Transfer.objects.none()
 
@@ -566,9 +633,14 @@ def get_accessible_transfers(user, *, scope: str | None = None, limit: int = 20)
     else:
         qs = Transfer.objects.filter(personal_q | shared_q)
 
+    qs = qs.filter(is_deleted=False)
+    if start_date:
+        qs = qs.filter(transfer_date__gte=start_date)
+    if end_date:
+        qs = qs.filter(transfer_date__lte=end_date)
+
     return (
-        qs.filter(is_deleted=False)
-        .select_related(
+        qs.select_related(
             "source_wallet",
             "destination_wallet",
             "source_currency",

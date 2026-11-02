@@ -1,19 +1,34 @@
 const CACHE_PREFIX = "budget-tracker-shell-";
-const CACHE_NAME = "budget-tracker-shell-v11";
+const CACHE_NAME = "budget-tracker-shell-v12";
 const REQUIRED_PRECACHE_URLS = [
     "/static/vendor/bootstrap/bootstrap.min.css",
     "/static/vendor/bootstrap/bootstrap.bundle.min.js",
     "/static/css/app.css",
-    "/static/css/app.css?v=v11",
+    "/static/css/app.css?v=v12",
     "/static/css/dashboard.css",
-    "/static/css/dashboard.css?v=v11",
+    "/static/css/dashboard.css?v=v12",
     "/static/js/app.js",
-    "/static/js/app.js?v=v11",
+    "/static/js/app.js?v=v12",
     "/static/js/offline.js",
-    "/static/js/offline.js?v=v11",
+    "/static/js/offline.js?v=v12",
     "/static/js/pages/transaction.js",
-    "/static/js/pages/transaction.js?v=v11",
+    "/static/js/pages/transaction.js?v=v12",
     "/static/manifest.webmanifest",
+    "/static/images/auth/jubao_auth_art.svg",
+    "/static/images/logo/jubao_text.png",
+    "/static/images/logo/jubao_text.png?v=v12",
+    "/static/images/logo/jubao_text_light.png",
+    "/static/images/logo/jubao_text_light.png?v=v12",
+    "/static/images/logo/jubao_logo.png",
+    "/static/images/logo/jubao_logo.png?v=v12",
+    "/static/images/logo/jubao_logo_light.png",
+    "/static/images/logo/jubao_logo_light.png?v=v12",
+    "/static/images/favicon.ico",
+    "/static/images/favicon-32.png",
+    "/static/images/favicon.svg",
+    "/static/images/apple-touch-icon.png",
+    "/static/images/icon-192.png",
+    "/static/images/icon-512.png",
 ];
 const PRECACHE_URLS = REQUIRED_PRECACHE_URLS;
 const OPTIONAL_PRECACHE_URLS = [];

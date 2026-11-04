@@ -12,7 +12,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Count, Q, Sum
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template import loader as template_loader
 from django.urls import reverse
@@ -835,10 +835,40 @@ def shared_space(request):
         except (ValueError, TypeError):
             pass
 
+    qr_action = (request.POST.get("action") or request.GET.get("action") or "").strip().lower()
+    if qr_action in ("show_qr", "qr", "invitation_qr"):
+        inv_id = (
+            request.POST.get("invitation_id")
+            or request.GET.get("invitation_id")
+            or request.POST.get("id")
+            or request.GET.get("id")
+            or ""
+        ).strip()
+        if not inv_id:
+            raise Http404("Invitation ID is required.")
+        inv = get_object_or_404(SharedSpaceInvitation, pk=inv_id)
+        if inv.shared_space.created_by_id != request.user.id:
+            raise PermissionDenied("Only the space owner can view invitation QR codes.")
+        if inv.status != SharedSpaceInvitation.Status.PENDING or inv.is_expired:
+            return HttpResponse(
+                "QR code is only available for active pending invitations.",
+                status=400,
+                content_type="text/plain",
+            )
+        join_url = request.build_absolute_uri(f"{reverse('budgets:shared_space')}?code={inv.code}")
+        svg = generate_invitation_qr_svg(join_url, inv.created_by.username)
+        return HttpResponse(svg, content_type="image/svg+xml")
+
     space_form = SharedSpaceForm(
         initial={
             "name": current_space.name if current_space else "",
             "base_currency": current_space.base_currency if current_space else ws["personal_base_currency"],
+        }
+    )
+    create_space_form = SharedSpaceForm(
+        initial={
+            "name": "",
+            "base_currency": ws["personal_base_currency"],
         }
     )
     invite_form = SharedSpaceInvitationForm()
@@ -849,12 +879,12 @@ def shared_space(request):
         action = (request.POST.get("action") or "").strip()
         try:
             if action == "create_space":
-                space_form = SharedSpaceForm(request.POST)
-                if space_form.is_valid():
+                create_space_form = SharedSpaceForm(request.POST)
+                if create_space_form.is_valid():
                     space = create_shared_space(
                         user=request.user,
-                        name=space_form.cleaned_data["name"],
-                        base_currency=space_form.cleaned_data["base_currency"],
+                        name=create_space_form.cleaned_data["name"],
+                        base_currency=create_space_form.cleaned_data["base_currency"],
                     )
                     pref = ws["preference"]
                     if pref:
@@ -865,7 +895,9 @@ def shared_space(request):
                         request,
                         f'Shared space "{space.name}" ({space.base_currency.code}) created.',
                     )
-                    return redirect("budgets:shared_space")
+                    return redirect(f"{reverse('budgets:shared_space')}?space={space.id}")
+                else:
+                    space_form = create_space_form
 
             elif action == "update_space" and current_space:
                 space_form = SharedSpaceForm(request.POST)
@@ -904,6 +936,8 @@ def shared_space(request):
             elif action == "revoke_invitation":
                 inv_id = request.POST.get("invitation_id")
                 inv = get_object_or_404(SharedSpaceInvitation, pk=inv_id)
+                if inv.shared_space.created_by_id != request.user.id:
+                    raise PermissionDenied("Only the space owner can revoke invitations.")
                 revoke_shared_space_invitation(user=request.user, invitation=inv)
                 messages.success(request, "Invitation has been revoked.")
                 return redirect("budgets:shared_space")
@@ -932,7 +966,21 @@ def shared_space(request):
                     request,
                     f'You have left "{current_space.name}". Historical shared entries remain preserved.',
                 )
-                return redirect("budgets:shared_space")
+                pref = ws["preference"]
+                remaining_memberships = list(get_user_active_memberships(request.user))
+                if remaining_memberships:
+                    sensible_space = remaining_memberships[0].shared_space
+                    if pref:
+                        pref.active_scope = "shared"
+                        pref.active_shared_space = sensible_space
+                        pref.save(update_fields=["active_scope", "active_shared_space", "updated_at"])
+                    return redirect(f"{reverse('budgets:shared_space')}?space={sensible_space.id}")
+                else:
+                    if pref:
+                        pref.active_scope = "personal"
+                        pref.active_shared_space = None
+                        pref.save(update_fields=["active_scope", "active_shared_space", "updated_at"])
+                    return redirect("budgets:shared_space")
 
             elif action == "create_shared_category" and current_space:
                 category_form = CategoryForm(request.POST)
@@ -947,7 +995,9 @@ def shared_space(request):
                     messages.success(request, f'Shared category "{cat.name}" created.')
                     return redirect("budgets:shared_space")
 
-        except (ValidationError, PermissionDenied) as exc:
+        except PermissionDenied:
+            raise
+        except ValidationError as exc:
             messages.error(request, _format_error_message(exc))
 
     space_members = []
@@ -970,9 +1020,14 @@ def shared_space(request):
             .order_by("-created_at")[:10]
         )
         for inv in space_invitations:
-            if inv.status == SharedSpaceInvitation.Status.PENDING and not inv.is_expired:
+            if is_creator and inv.status == SharedSpaceInvitation.Status.PENDING and not inv.is_expired:
                 inv.join_url = request.build_absolute_uri(f"{reverse('budgets:shared_space')}?code={inv.code}")
                 inv.qr_svg = generate_invitation_qr_svg(inv.join_url, inv.created_by.username)
+            else:
+                inv.join_url = ""
+                inv.qr_svg = ""
+            if not is_creator:
+                inv.code = ""
         shared_wallets = enrich_wallets_with_balances(
             Wallet.objects.filter(
                 ownership_scope=Wallet.OwnershipScope.SHARED,
@@ -1102,6 +1157,7 @@ def shared_space(request):
             "shared_transactions": shared_transactions,
             "shared_personal_activity": shared_personal_activity,
             "space_form": space_form,
+            "create_space_form": create_space_form,
             "invite_form": invite_form,
             "accept_form": accept_form,
             "category_form": category_form,

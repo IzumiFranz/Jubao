@@ -249,6 +249,12 @@ class SharedSpaceInvitation(models.Model):
         return self.code
 
     @property
+    def masked_code(self) -> str:
+        clean = (self.code or "").strip()
+        prefix = clean[:3]
+        return f"{prefix}..."
+
+    @property
     def accessible_code_label(self) -> str:
         if len(self.code) == 6:
             p1 = ", ".join(list(self.code[:3]))
@@ -291,7 +297,24 @@ class SharedSpaceInvitation(models.Model):
             return f"{hours}h remaining"
         else:
             days = total_seconds // 86400
-            return f"{days}d remaining" 
+            return f"{days}d remaining"
+
+    @property
+    def expires_column_display(self) -> str:
+        from django.utils.formats import date_format
+        if self.status == self.Status.ACCEPTED:
+            joiner = self.accepted_by.username if self.accepted_by else "Partner"
+            dt = self.responded_at or self.created_at
+            formatted_date = date_format(dt, "M j, Y") if dt else ""
+            return f"Joined by {joiner} on {formatted_date}".strip()
+        if self.status == self.Status.REVOKED:
+            dt = self.responded_at or self.expires_at or self.created_at
+            formatted_date = date_format(dt, "M j, Y") if dt else ""
+            return f"Revoked {formatted_date}".strip()
+        if self.is_expired or self.status == self.Status.EXPIRED:
+            formatted_date = date_format(self.expires_at, "M j, Y") if self.expires_at else ""
+            return f"Expired {formatted_date}".strip()
+        return self.remaining_time_display 
 
 
 class Wallet(models.Model):

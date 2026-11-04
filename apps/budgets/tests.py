@@ -12745,3 +12745,356 @@ class SharedSpaceInvitationV2Tests(TestCase):
         self.assertEqual(resp.status_code, 200)
         inv.refresh_from_db()
         self.assertEqual(inv.status, SharedSpaceInvitation.Status.REVOKED)
+
+    def test_owner_sees_both_buttons_on_pending_legacy_and_short_invitations(self):
+        """Owner sees Show QR and Revoke for both short and legacy pending invitations."""
+        short_inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        legacy_code = "8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d"
+        legacy_inv = SharedSpaceInvitation.objects.create(
+            shared_space=self.space,
+            code=legacy_code,
+            created_by=self.owner,
+            status=SharedSpaceInvitation.Status.PENDING,
+            expires_at=timezone.now() + timedelta(days=2),
+        )
+
+        resp = self.client_owner.get(reverse("budgets:shared_space"))
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Both unmasked codes are visible to owner
+        self.assertIn(short_inv.formatted_code, html)
+        self.assertIn(legacy_code, html)
+
+        # Show QR buttons present for both
+        self.assertIn(f'data-inv-id="{short_inv.id}"', html)
+        self.assertIn(f'data-inv-id="{legacy_inv.id}"', html)
+        self.assertEqual(html.count("Show QR"), 2)
+
+        # Revoke forms present for both
+        self.assertIn(f'value="{short_inv.id}"', html)
+        self.assertIn(f'value="{legacy_inv.id}"', html)
+        self.assertIn("Revoke", html)
+
+    def test_no_buttons_on_used_expired_revoked_rows_and_masked_codes(self):
+        """Used, expired, and revoked rows display no action buttons and mask the code."""
+        from django.utils.formats import date_format
+        now = timezone.now()
+
+        # Used invitation
+        used_inv = SharedSpaceInvitation.objects.create(
+            shared_space=self.space,
+            code="USD123",
+            created_by=self.owner,
+            accepted_by=self.joiner,
+            status=SharedSpaceInvitation.Status.ACCEPTED,
+            expires_at=now + timedelta(days=1),
+            responded_at=now - timedelta(hours=2),
+        )
+
+        # Revoked invitation
+        revoked_inv = SharedSpaceInvitation.objects.create(
+            shared_space=self.space,
+            code="RVK456",
+            created_by=self.owner,
+            status=SharedSpaceInvitation.Status.REVOKED,
+            expires_at=now + timedelta(days=1),
+            responded_at=now - timedelta(hours=3),
+        )
+
+        # Expired invitation (status explicitly expired)
+        expired_inv = SharedSpaceInvitation.objects.create(
+            shared_space=self.space,
+            code="EXP789",
+            created_by=self.owner,
+            status=SharedSpaceInvitation.Status.EXPIRED,
+            expires_at=now - timedelta(days=1),
+        )
+
+        # Pending invitation that is expired by time
+        time_expired_inv = SharedSpaceInvitation.objects.create(
+            shared_space=self.space,
+            code="TEX000",
+            created_by=self.owner,
+            status=SharedSpaceInvitation.Status.PENDING,
+            expires_at=now - timedelta(minutes=10),
+        )
+
+        resp = self.client_owner.get(reverse("budgets:shared_space"))
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Action buttons: neither Show QR nor Revoke should appear for these 4 non-pending rows
+        self.assertNotIn("Show QR", html)
+        self.assertNotIn(">Revoke<", html)
+
+        # Masked codes (first 3 chars followed by dots)
+        self.assertIn("USD...", html)
+        self.assertIn("RVK...", html)
+        self.assertIn("EXP...", html)
+        self.assertIn("TEX...", html)
+
+        # Full codes must NOT be rendered in HTML
+        self.assertNotIn("USD-123", html)
+        self.assertNotIn("RVK-456", html)
+        self.assertNotIn("EXP-789", html)
+        self.assertNotIn("TEX-000", html)
+
+        # Expires column formatted labels
+        joined_date = date_format(used_inv.responded_at, "M j, Y")
+        self.assertIn(f"Joined by {self.joiner.username} on {joined_date}", html)
+
+        rev_date = date_format(revoked_inv.responded_at, "M j, Y")
+        self.assertIn(f"Revoked {rev_date}", html)
+
+        exp_date = date_format(expired_inv.expires_at, "M j, Y")
+        self.assertIn(f"Expired {exp_date}", html)
+
+        tex_date = date_format(time_expired_inv.expires_at, "M j, Y")
+        self.assertIn(f"Expired {tex_date}", html)
+
+    def test_non_owner_member_cannot_see_codes_or_buttons_and_endpoints_reject(self):
+        """Non-owner member sees only status (no codes, no QR, no buttons); endpoints return 403/404."""
+        # Joiner joins the space
+        init_inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        accept_shared_space_invitation(user=self.joiner, code=init_inv.code)
+
+        # Space now has 2 members: self.owner (creator) and self.joiner (member)
+        # Create a pending invite in the space
+        pending_inv = SharedSpaceInvitation.objects.create(
+            shared_space=self.space,
+            code="ABC777",
+            created_by=self.owner,
+            status=SharedSpaceInvitation.Status.PENDING,
+            expires_at=timezone.now() + timedelta(days=2),
+        )
+
+        resp = self.client_joiner.get(reverse("budgets:shared_space"))
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Non-owner member does NOT see codes or masked codes
+        self.assertNotIn("ABC777", html)
+        self.assertNotIn("ABC-777", html)
+        self.assertNotIn("ABC...", html)
+        self.assertNotIn(init_inv.code, html)
+
+        # Non-owner member does NOT see action buttons or QR modal
+        self.assertNotIn("Show QR", html)
+        self.assertNotIn(">Revoke<", html)
+        self.assertNotIn('id="qrModal"', html)
+
+        # Non-owner member sees status pills, but NOT expiry/response dates or joiner names
+        self.assertIn("Pending", html)
+        self.assertIn("Used", html)
+        self.assertNotIn(f"Joined by {self.joiner.username}", html)
+        self.assertNotIn("remaining", html)
+
+        # Non-owner member rejected on Revoke endpoint -> 403
+        resp_revoke = self.client_joiner.post(
+            reverse("budgets:shared_space"),
+            {"action": "revoke_invitation", "invitation_id": pending_inv.id},
+        )
+        self.assertEqual(resp_revoke.status_code, 403)
+
+        # Non-owner member rejected on Show QR endpoint -> 403
+        resp_qr = self.client_joiner.get(
+            reverse("budgets:shared_space"),
+            {"action": "show_qr", "invitation_id": pending_inv.id},
+        )
+        self.assertEqual(resp_qr.status_code, 403)
+
+        # Owner gets 200 on Show QR endpoint
+        resp_owner_qr = self.client_owner.get(
+            reverse("budgets:shared_space"),
+            {"action": "show_qr", "invitation_id": pending_inv.id},
+        )
+        self.assertEqual(resp_owner_qr.status_code, 200)
+        self.assertEqual(resp_owner_qr["Content-Type"], "image/svg+xml")
+
+        # Non-existent invitation returns 404 for both endpoints
+        import uuid
+        dummy_id = uuid.uuid4()
+        resp_404_rev = self.client_owner.post(
+            reverse("budgets:shared_space"),
+            {"action": "revoke_invitation", "invitation_id": dummy_id},
+        )
+        self.assertEqual(resp_404_rev.status_code, 404)
+
+        resp_404_qr = self.client_owner.get(
+            reverse("budgets:shared_space"),
+            {"action": "show_qr", "invitation_id": dummy_id},
+        )
+        self.assertEqual(resp_404_qr.status_code, 404)
+
+    def test_revoking_legacy_code_makes_it_unusable(self):
+        """Revoking a legacy long-code invitation prevents redemption."""
+        legacy_code = "7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d"
+        legacy_inv = SharedSpaceInvitation.objects.create(
+            shared_space=self.space,
+            code=legacy_code,
+            created_by=self.owner,
+            status=SharedSpaceInvitation.Status.PENDING,
+            expires_at=timezone.now() + timedelta(days=2),
+        )
+
+        # Owner revokes legacy code
+        resp = self.client_owner.post(
+            reverse("budgets:shared_space"),
+            {"action": "revoke_invitation", "invitation_id": legacy_inv.id},
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        legacy_inv.refresh_from_db()
+        self.assertEqual(legacy_inv.status, SharedSpaceInvitation.Status.REVOKED)
+        self.assertIsNotNone(legacy_inv.responded_at)
+
+        # Attempt to accept via POST returns error
+        from .services import INVITATION_ERROR_MESSAGE
+        resp_attempt = self.client_joiner.post(
+            reverse("budgets:shared_space"),
+            {"action": "accept_invitation", "code": legacy_code},
+            follow=True,
+        )
+        self.assertEqual(resp_attempt.status_code, 200)
+        self.assertContains(resp_attempt, INVITATION_ERROR_MESSAGE)
+
+        # Attempting via direct service call raises ValidationError
+        from django.core.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            accept_shared_space_invitation(user=self.joiner, code=legacy_code)
+
+    def test_create_another_shared_space(self):
+        """User can create another shared space via the UI entry point, updating active space preference."""
+        from apps.accounts.models import UserPreference
+        from .models import SharedSpace
+        from .selectors import get_user_active_memberships
+        owner_pref, _ = UserPreference.objects.get_or_create(
+            user=self.owner, defaults={"personal_base_currency": self.usd}
+        )
+
+        # Check initial page renders "Create another shared space" button and modal
+        resp = self.client_owner.get(reverse("budgets:shared_space"))
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+        self.assertIn("Create another shared space", html)
+        self.assertIn('id="createSpaceModal"', html)
+        self.assertIn('id="btnCreateAnotherSpace"', html)
+
+        # Post create_space action
+        post_resp = self.client_owner.post(
+            reverse("budgets:shared_space"),
+            {
+                "action": "create_space",
+                "name": "Second Family Vacation",
+                "base_currency": self.usd.pk,
+            },
+        )
+        new_space = SharedSpace.objects.get(name="Second Family Vacation")
+        self.assertEqual(new_space.created_by, self.owner)
+        self.assertRedirects(post_resp, f"{reverse('budgets:shared_space')}?space={new_space.id}")
+
+        # Owner preference is switched to the new shared space
+        owner_pref.refresh_from_db()
+        self.assertEqual(owner_pref.active_scope, "shared")
+        self.assertEqual(owner_pref.active_shared_space, new_space)
+
+        # User has active memberships in both spaces
+        owner_spaces = [m.shared_space for m in get_user_active_memberships(self.owner)]
+        self.assertIn(self.space, owner_spaces)
+        self.assertIn(new_space, owner_spaces)
+
+    def test_member_leave_shared_space_redirects_and_updates_preference(self):
+        """A member can leave a shared space, updating their workspace preference to personal or remaining space."""
+        from apps.accounts.models import UserPreference
+        from .models import SharedSpace, SharedSpaceMembership
+        joiner_pref, _ = UserPreference.objects.get_or_create(
+            user=self.joiner, defaults={"personal_base_currency": self.usd}
+        )
+
+        # Joiner joins self.space
+        inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        accept_shared_space_invitation(user=self.joiner, code=inv.code)
+        joiner_pref.active_scope = "shared"
+        joiner_pref.active_shared_space = self.space
+        joiner_pref.save()
+
+        # Joiner page renders "Leave this shared space" button
+        resp = self.client_joiner.get(reverse("budgets:shared_space"))
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+        self.assertIn("Leave this shared space", html)
+        self.assertIn('id="btnLeaveSharedSpace"', html)
+
+        # Member leaves the space (no remaining shared spaces)
+        leave_resp = self.client_joiner.post(
+            reverse("budgets:shared_space"),
+            {"action": "leave_space"},
+        )
+        self.assertRedirects(leave_resp, reverse("budgets:shared_space"))
+
+        # Verify membership status
+        mem = SharedSpaceMembership.objects.get(shared_space=self.space, user=self.joiner)
+        self.assertFalse(mem.is_active)
+        self.assertIsNotNone(mem.left_at)
+
+        # Verify preference updated to personal workspace
+        joiner_pref.refresh_from_db()
+        self.assertEqual(joiner_pref.active_scope, "personal")
+        self.assertIsNone(joiner_pref.active_shared_space)
+
+        # Multi-space scenario: joiner is member of space2 and space3; leaves space2 -> redirected to space3
+        space2 = create_shared_space(user=self.owner, name="Space Two", base_currency=self.usd)
+        space3 = create_shared_space(user=self.owner, name="Space Three", base_currency=self.usd)
+        inv2 = create_shared_space_invitation(user=self.owner, shared_space=space2)
+        inv3 = create_shared_space_invitation(user=self.owner, shared_space=space3)
+        accept_shared_space_invitation(user=self.joiner, code=inv2.code)
+        accept_shared_space_invitation(user=self.joiner, code=inv3.code)
+
+        # Set active space to space2
+        joiner_pref.active_scope = "shared"
+        joiner_pref.active_shared_space = space2
+        joiner_pref.save()
+
+        # Leave space2
+        leave_resp2 = self.client_joiner.post(
+            f"{reverse('budgets:shared_space')}?space={space2.id}",
+            {"action": "leave_space"},
+        )
+        self.assertRedirects(leave_resp2, f"{reverse('budgets:shared_space')}?space={space3.id}")
+
+        joiner_pref.refresh_from_db()
+        self.assertEqual(joiner_pref.active_scope, "shared")
+        self.assertEqual(joiner_pref.active_shared_space, space3)
+
+    def test_owner_with_active_member_safeguard(self):
+        """Owner cannot leave while an active member remains; guidance is displayed and leave action is prevented."""
+        from .models import SharedSpaceMembership
+
+        # Joiner joins self.space
+        inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        accept_shared_space_invitation(user=self.joiner, code=inv.code)
+
+        # Owner views page: guidance notice is shown, and "Leave this shared space" button is hidden
+        resp = self.client_owner.get(reverse("budgets:shared_space"))
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+        self.assertIn("The shared-space creator cannot leave while managing the space.", html)
+        self.assertNotIn("Leave this shared space", html)
+
+        # Owner attempts POST action="leave_space"
+        post_resp = self.client_owner.post(
+            reverse("budgets:shared_space"),
+            {"action": "leave_space"},
+            follow=True,
+        )
+        self.assertEqual(post_resp.status_code, 200)
+        self.assertContains(post_resp, "The shared-space creator cannot leave while managing the space.")
+
+        # Owner and member memberships remain active
+        owner_mem = SharedSpaceMembership.objects.get(shared_space=self.space, user=self.owner)
+        self.assertTrue(owner_mem.is_active)
+        self.assertIsNone(owner_mem.left_at)
+
+        joiner_mem = SharedSpaceMembership.objects.get(shared_space=self.space, user=self.joiner)
+        self.assertTrue(joiner_mem.is_active)

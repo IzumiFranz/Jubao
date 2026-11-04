@@ -567,4 +567,107 @@ document.addEventListener("DOMContentLoaded", function () {
 
     window.addEventListener("pageshow", resetAllPasswordFields);
     window.addEventListener("pagehide", resetAllPasswordFields);
+
+    // --- Shared Space QR & Invitation Modal ---
+    var qrModal = document.getElementById("qrModal");
+    if (qrModal) {
+        var qrSvgContainer = document.getElementById("qrModalSvgContainer");
+        var qrCodeDisplay = document.getElementById("qrModalCodeDisplay");
+        var qrExpiryDisplay = document.getElementById("qrModalExpiry");
+        var btnCopyCode = document.getElementById("btnCopyCode");
+        var btnCopyLink = document.getElementById("btnCopyLink");
+        var btnShareInvite = document.getElementById("btnShareInvite");
+
+        var activeCode = "";
+        var activeLink = "";
+
+        if (navigator.share && btnShareInvite) {
+            btnShareInvite.classList.remove("d-none");
+        }
+
+        qrModal.addEventListener("show.bs.modal", function (event) {
+            var triggerBtn = event.relatedTarget;
+            if (!triggerBtn) {
+                triggerBtn = document.querySelector("[data-auto-open='true']");
+            }
+            if (!triggerBtn) return;
+
+            var formattedCode = triggerBtn.getAttribute("data-qr-code") || "";
+            var rawCode = triggerBtn.getAttribute("data-raw-code") || formattedCode;
+            var ariaLabel = triggerBtn.getAttribute("data-qr-aria") || formattedCode;
+            var joinUrl = triggerBtn.getAttribute("data-join-url") || "";
+            var expiry = triggerBtn.getAttribute("data-expiry") || "";
+            var invId = triggerBtn.getAttribute("data-inv-id") || "";
+
+            activeCode = formattedCode;
+            activeLink = joinUrl;
+
+            if (qrCodeDisplay) {
+                qrCodeDisplay.textContent = formattedCode;
+                qrCodeDisplay.setAttribute("aria-label", "Invitation code: " + ariaLabel);
+            }
+            if (qrExpiryDisplay) {
+                qrExpiryDisplay.textContent = expiry;
+            }
+            if (qrSvgContainer && invId) {
+                var sourceSvg = document.getElementById("qr-svg-" + invId);
+                if (sourceSvg) {
+                    qrSvgContainer.innerHTML = sourceSvg.innerHTML;
+                }
+            }
+        });
+
+        if (btnCopyCode) {
+            btnCopyCode.addEventListener("click", function () {
+                if (!activeCode) return;
+                var text = activeCode;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(function () {
+                        var span = btnCopyCode.querySelector("span");
+                        if (span) {
+                            var prev = span.textContent;
+                            span.textContent = "Copied!";
+                            setTimeout(function () { span.textContent = prev; }, 2000);
+                        }
+                    }).catch(function () {});
+                }
+            });
+        }
+
+        if (btnCopyLink) {
+            btnCopyLink.addEventListener("click", function () {
+                if (!activeLink) return;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(activeLink).then(function () {
+                        var span = btnCopyLink.querySelector("span");
+                        if (span) {
+                            var prev = span.textContent;
+                            span.textContent = "Copied!";
+                            setTimeout(function () { span.textContent = prev; }, 2000);
+                        }
+                    }).catch(function () {});
+                }
+            });
+        }
+
+        if (btnShareInvite) {
+            btnShareInvite.addEventListener("click", function () {
+                if (navigator.share && activeLink) {
+                    navigator.share({
+                        title: "Join my shared space on Jubao",
+                        text: "Use invitation code " + activeCode + " to join my shared space on Jubao: " + activeLink,
+                        url: activeLink
+                    }).catch(function () {});
+                }
+            });
+        }
+
+        // Auto-open modal if an invitation was just created
+        var autoOpenBtn = document.querySelector("[data-auto-open='true']");
+        if (autoOpenBtn && window.bootstrap && window.bootstrap.Modal) {
+            var modalInst = new window.bootstrap.Modal(qrModal);
+            modalInst.show(autoOpenBtn);
+        }
+    }
+
 });

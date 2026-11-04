@@ -9,6 +9,32 @@
 
 {% block content %}
 <div class="dashboard-stationery pb-4">
+    <!-- Dashboard Hub Tabs -->
+    <ul class="nav nav-tabs settings-nav-tabs mb-3" id="dashboardHubTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <a
+                class="nav-link settings-nav-link active"
+                id="tab-dashboard-overview"
+                href="{% url 'budgets:dashboard' %}"
+                role="tab"
+                aria-selected="true"
+            >
+                Overview
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a
+                class="nav-link settings-nav-link"
+                id="tab-dashboard-reports"
+                href="{% url 'budgets:reports' %}"
+                role="tab"
+                aria-selected="false"
+            >
+                Reports
+            </a>
+        </li>
+    </ul>
+
     <!-- 1. Period Header -->
     <header class="dashboard-period-header mb-3" aria-labelledby="heading-period-overview">
         <h2 id="heading-period-overview" class="visually-hidden">Monthly Overview</h2>
@@ -52,74 +78,98 @@
         <div class="summary-strip-card">
             <!-- Income -->
             <div class="summary-strip-col">
-                <div class="summary-strip-header">
-                    <span class="summary-accent-indicator accent-income" aria-hidden="true"></span>
-                    <span class="summary-strip-label">Income</span>
+                <div class="summary-strip-header d-flex align-items-center justify-content-between mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="summary-accent-indicator accent-income" aria-hidden="true"></span>
+                        <span class="summary-strip-label summary-card-label">Income</span>
+                    </div>
+                    <div class="summary-card-icon-box" aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                    </div>
                 </div>
-                <p class="summary-strip-value">
+                <p class="summary-strip-value summary-card-value">
                     {% if month_summary.is_complete and month_summary.target_currency %}
                         {{ month_summary.formatted_income }}
                     {% else %}
                         —
                     {% endif %}
                 </p>
-                <p class="summary-strip-subtext">
-                    {% if not month_summary.target_currency %}
-                        Set base currency on Currencies page
-                    {% elif month_summary.unconverted_count %}
-                        {{ month_summary.unconverted_count }} entry pending conversion
-                    {% else %}
-                        {{ month_summary.target_currency.code }} &middot; {{ workspace.active_scope|title }} scope
-                    {% endif %}
-                </p>
+                <div class="summary-card-footer mt-auto">
+                    <span class="summary-card-dot" aria-hidden="true"></span>
+                    <span class="summary-strip-subtext mb-0">
+                        {% if not month_summary.target_currency %}
+                            Set base currency on Currencies page
+                        {% elif month_summary.unconverted_count %}
+                            {{ month_summary.unconverted_count }} entry pending conversion
+                        {% else %}
+                            {{ month_summary.target_currency.code }} &middot; {{ workspace.active_scope|title }} scope
+                        {% endif %}
+                    </span>
+                </div>
             </div>
 
             <!-- Expenses -->
             <div class="summary-strip-col">
-                <div class="summary-strip-header">
-                    <span class="summary-accent-indicator accent-expenses" aria-hidden="true"></span>
-                    <span class="summary-strip-label">Expenses</span>
+                <div class="summary-strip-header d-flex align-items-center justify-content-between mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="summary-accent-indicator accent-expenses" aria-hidden="true"></span>
+                        <span class="summary-strip-label summary-card-label">Expenses</span>
+                    </div>
+                    <div class="summary-card-icon-box" aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>
+                    </div>
                 </div>
-                <p class="summary-strip-value">
+                <p class="summary-strip-value summary-card-value">
                     {% if month_summary.is_complete and month_summary.target_currency %}
                         {{ month_summary.formatted_expense }}
                     {% else %}
                         —
                     {% endif %}
                 </p>
-                <p class="summary-strip-subtext">
-                    {% if not month_summary.target_currency %}
-                        Set base currency on Currencies page
-                    {% elif month_summary.unconverted_count %}
-                        {{ month_summary.unconverted_count }} entry pending conversion
-                    {% else %}
-                        {{ month_summary.target_currency.code }} &middot; Excludes transfers
-                    {% endif %}
-                </p>
+                <div class="summary-card-footer mt-auto">
+                    <span class="summary-card-dot" aria-hidden="true"></span>
+                    <span class="summary-strip-subtext mb-0">
+                        {% if not month_summary.target_currency %}
+                            Set base currency on Currencies page
+                        {% elif month_summary.unconverted_count %}
+                            {{ month_summary.unconverted_count }} entry pending conversion
+                        {% else %}
+                            {{ month_summary.target_currency.code }} &middot; Excludes transfers
+                        {% endif %}
+                    </span>
+                </div>
             </div>
 
             <!-- Current Balance -->
             <div class="summary-strip-col">
-                <div class="summary-strip-header">
-                    <span class="summary-accent-indicator accent-balance" aria-hidden="true"></span>
-                    <span class="summary-strip-label">Current balance</span>
+                <div class="summary-strip-header d-flex align-items-center justify-content-between mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="summary-accent-indicator accent-balance" aria-hidden="true"></span>
+                        <span class="summary-strip-label summary-card-label">Current balance</span>
+                    </div>
+                    <div class="summary-card-icon-box" aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+                    </div>
                 </div>
-                <p class="summary-strip-value {% if formatted_wallet_total|slice:':1' == '-' %}text-negative-balance{% endif %}">
+                <p class="summary-strip-value summary-card-value {% if formatted_wallet_total|slice:':1' == '-' %}text-negative-balance{% endif %}">
                     {% if wallet_total_complete and workspace.effective_display_currency %}
                         {{ formatted_wallet_total }}
                     {% else %}
                         —
                     {% endif %}
                 </p>
-                <p class="summary-strip-subtext">
-                    {% if not workspace.effective_display_currency %}
-                        Set base currency on Currencies page
-                    {% elif wallet_unconverted %}
-                        {{ wallet_unconverted }} wallet{{ wallet_unconverted|pluralize }} pending conversion
-                    {% else %}
-                        {{ workspace.effective_display_currency.code }} &middot; {{ wallet_count }} active wallet{{ wallet_count|pluralize }}
-                    {% endif %}
-                </p>
+                <div class="summary-card-footer mt-auto">
+                    <span class="summary-card-dot" aria-hidden="true"></span>
+                    <span class="summary-strip-subtext mb-0">
+                        {% if not workspace.effective_display_currency %}
+                            Set base currency on Currencies page
+                        {% elif wallet_unconverted %}
+                            {{ wallet_unconverted }} wallet{{ wallet_unconverted|pluralize }} pending conversion
+                        {% else %}
+                            {{ workspace.effective_display_currency.code }} &middot; {{ wallet_count }} active wallet{{ wallet_count|pluralize }}
+                        {% endif %}
+                    </span>
+                </div>
             </div>
 
             <!-- Budget Remaining -->

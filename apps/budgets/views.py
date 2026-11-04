@@ -85,7 +85,14 @@ from .selectors import (
     resolve_user_effective_display_currency,
 )
 from .services import (
+    INVITATION_ERROR_MESSAGE,
+    INVITATION_LOCKOUT_MESSAGE,
     accept_shared_space_invitation,
+    check_invitation_rate_limit,
+    clear_invitation_rate_limit,
+    generate_invitation_qr_svg,
+    normalize_invitation_code,
+    record_invitation_failure,
     archive_category,
     archive_category_budget,
     archive_savings_goal,
@@ -135,6 +142,10 @@ def _format_error_message(exc) -> str:
 
 @login_required
 def dashboard(request):
+    tab = (request.GET.get("tab") or "").strip().lower()
+    if tab == "reports":
+        return reports(request)
+
     raw_period = (request.GET.get("period") or request.GET.get("month") or "").strip()
     ctx = get_dashboard_context(request.user, period=raw_period or None)
     tx_form = TransactionEntryForm(user=request.user)
@@ -149,6 +160,7 @@ def dashboard(request):
         "budgets/dashboard.html",
         {
             "page_title": "Dashboard",
+            "active_tab": "overview",
             "transaction_modal_enabled": True,
             "tx_form": tx_form,
             "accessible_wallets": accessible_wallets,
@@ -742,6 +754,39 @@ def budgets(request):
         get_accessible_categories_qs(request.user, include_archived=False)
     )
 
+    try:
+        p_year, p_month = [int(x) for x in overview["period"].split("-")]
+        if p_month == 1:
+            prev_period = f"{p_year - 1}-12"
+        else:
+            prev_period = f"{p_year}-{p_month - 1:02d}"
+        if p_month == 12:
+            next_period = f"{p_year + 1}-01"
+        else:
+            next_period = f"{p_year}-{p_month + 1:02d}"
+    except Exception:
+        prev_period = ""
+        next_period = ""
+
+    active_categories_count = len(overview["rows"])
+    on_track_count = sum(1 for r in overview["rows"] if r["status_label"] == "On track")
+    near_limit_count = sum(1 for r in overview["rows"] if r["status_label"] == "Near limit")
+    over_budget_count = sum(1 for r in overview["rows"] if r["status_label"] == "Over budget")
+
+    total_spent_pct = None
+    if overview.get("summary_available") and overview.get("rows"):
+        tot_b = sum((r["limit_amount"] for r in overview["rows"]), Decimal("0"))
+        tot_s = sum((r["spent_amount"] for r in overview["rows"]), Decimal("0"))
+        if tot_b > Decimal("0"):
+            total_spent_pct = ((tot_s / tot_b) * Decimal("100")).quantize(Decimal("0.1"))
+
+    for r in overview["rows"]:
+        if r["limit_amount"] > Decimal("0"):
+            rem_pct = ((r["remaining_amount"] / r["limit_amount"]) * Decimal("100")).quantize(Decimal("0.1"))
+            r["remaining_pct"] = rem_pct
+        else:
+            r["remaining_pct"] = None
+
     return render(
         request,
         "budgets/budgets.html",
@@ -753,6 +798,13 @@ def budgets(request):
             "category_form": category_form,
             "currencies": currencies_list,
             "categories": categories_list,
+            "prev_period": prev_period,
+            "next_period": next_period,
+            "active_categories_count": active_categories_count,
+            "on_track_count": on_track_count,
+            "near_limit_count": near_limit_count,
+            "over_budget_count": over_budget_count,
+            "total_spent_pct": total_spent_pct,
         },
     )
 
@@ -761,11 +813,27 @@ def budgets(request):
 @require_http_methods(["GET", "POST"])
 @cache_control(private=True, no_cache=True, no_store=True, must_revalidate=True)
 def shared_space(request):
+    tab = (request.GET.get("tab") or "").strip().lower()
+    if tab == "activity":
+        return shared_activity(request)
+    elif tab in ("privacy", "sharing", "sharing_privacy"):
+        return sharing_privacy(request)
+
     ws = get_active_workspace_context(request.user)
     memberships = list(get_user_active_memberships(request.user))
     current_space = ws["active_shared_space"] or (
         memberships[0].shared_space if memberships else None
     )
+
+    space_id_raw = (request.GET.get("space") or "").strip()
+    if space_id_raw:
+        try:
+            space_uuid = uuid.UUID(space_id_raw)
+            matched = next((m.shared_space for m in memberships if m.shared_space.id == space_uuid), None)
+            if matched:
+                current_space = matched
+        except (ValueError, TypeError):
+            pass
 
     space_form = SharedSpaceForm(
         initial={
@@ -817,15 +885,19 @@ def shared_space(request):
             elif action == "create_invitation" and current_space:
                 invite_form = SharedSpaceInvitationForm(request.POST)
                 if invite_form.is_valid():
+                    expiry_val = invite_form.cleaned_data.get("expiry") or "24h"
+                    expires_in_days_val = invite_form.cleaned_data.get("expires_in_days")
                     inv = create_shared_space_invitation(
                         user=request.user,
                         shared_space=current_space,
                         partner_hint=invite_form.cleaned_data.get("partner_hint") or "",
-                        expires_in_days=invite_form.cleaned_data.get("expires_in_days") or 7,
+                        expiry=expiry_val,
+                        expires_in_days=expires_in_days_val if expires_in_days_val is not None else None,
                     )
+                    request.session["newly_created_invite_id"] = str(inv.id)
                     messages.success(
                         request,
-                        f"Invitation code generated: {inv.code}",
+                        f"Invitation code generated: {inv.formatted_code} ({inv.code})",
                     )
                     return redirect("budgets:shared_space")
 
@@ -837,22 +909,22 @@ def shared_space(request):
                 return redirect("budgets:shared_space")
 
             elif action == "accept_invitation":
-                accept_form = AcceptInvitationForm(request.POST)
-                if accept_form.is_valid():
-                    membership = accept_shared_space_invitation(
-                        user=request.user,
-                        code=accept_form.cleaned_data["code"],
-                    )
-                    pref = ws["preference"]
-                    if pref:
-                        pref.active_scope = "shared"
-                        pref.active_shared_space = membership.shared_space
-                        pref.save(update_fields=["active_scope", "active_shared_space", "updated_at"])
-                    messages.success(
-                        request,
-                        f'Joined shared space "{membership.shared_space.name}".',
-                    )
-                    return redirect("budgets:shared_space")
+                submitted_code = request.POST.get("code") or ""
+                membership = accept_shared_space_invitation(
+                    user=request.user,
+                    code=submitted_code,
+                    request=request,
+                )
+                pref = ws["preference"]
+                if pref:
+                    pref.active_scope = "shared"
+                    pref.active_shared_space = membership.shared_space
+                    pref.save(update_fields=["active_scope", "active_shared_space", "updated_at"])
+                messages.success(
+                    request,
+                    f'Joined shared space "{membership.shared_space.name}".',
+                )
+                return redirect("budgets:shared_space")
 
             elif action == "leave_space" and current_space:
                 leave_shared_space(user=request.user, shared_space=current_space)
@@ -897,6 +969,10 @@ def shared_space(request):
             .filter(shared_space=current_space)
             .order_by("-created_at")[:10]
         )
+        for inv in space_invitations:
+            if inv.status == SharedSpaceInvitation.Status.PENDING and not inv.is_expired:
+                inv.join_url = request.build_absolute_uri(f"{reverse('budgets:shared_space')}?code={inv.code}")
+                inv.qr_svg = generate_invitation_qr_svg(inv.join_url, inv.created_by.username)
         shared_wallets = enrich_wallets_with_balances(
             Wallet.objects.filter(
                 ownership_scope=Wallet.OwnershipScope.SHARED,
@@ -924,16 +1000,99 @@ def shared_space(request):
         shared_personal_activity = get_shared_personal_activity_for_space(
             request.user, current_space, page=sp_page
         )
+        today = timezone.localdate()
+        cur_period = today.strftime("%Y-%m")
+        period_start = date(today.year, today.month, 1)
+        if today.month == 12:
+            period_end = date(today.year + 1, 1, 1) - timezone.timedelta(days=1)
+        else:
+            period_end = date(today.year, today.month + 1, 1) - timezone.timedelta(days=1)
+
+        this_month_shared_txs = [
+            tx for tx in shared_transactions
+            if period_start <= tx.transaction_date <= period_end
+        ]
+        this_month_shared_spending = sum(
+            (tx.amount for tx in this_month_shared_txs if tx.transaction_type == Transaction.Type.EXPENSE),
+            Decimal("0.00")
+        )
+        this_month_shared_spending_display = format_currency_amount(
+            this_month_shared_spending, current_space.base_currency
+        )
+        shared_budgets_overview = get_budget_overview_for_period(
+            request.user,
+            period=cur_period,
+            scope="shared",
+            shared_space=current_space,
+        )
+        shared_budgets = shared_budgets_overview.get("rows", [])
+        cur_period_display = period_start.strftime("%B %Y")
+        this_month_shared_txs_count = len(this_month_shared_txs)
     else:
         shared_personal_activity = None
+        this_month_shared_spending_display = "—"
+        this_month_shared_txs_count = 0
+        shared_budgets = []
+        cur_period_display = ""
+
+    join_confirmation = None
+    join_error = None
+    is_locked = False
+    lock_msg = ""
+
+    raw_query_code = (request.GET.get("code") or "").strip()
+    if raw_query_code:
+        is_locked, lock_msg = check_invitation_rate_limit(request)
+        if is_locked:
+            join_error = lock_msg
+            messages.error(request, lock_msg)
+        else:
+            compact = re.sub(r"[\s\-]", "", raw_query_code)
+            lookup_code = compact.upper() if len(compact) == 6 else raw_query_code
+            now = timezone.now()
+            invitation = (
+                SharedSpaceInvitation.objects.select_related("shared_space", "created_by", "shared_space__base_currency")
+                .filter(Q(code=lookup_code) | Q(code=compact.upper()) | Q(code=raw_query_code))
+                .first()
+            )
+            if not invitation or invitation.status != SharedSpaceInvitation.Status.PENDING or invitation.expires_at <= now:
+                record_invitation_failure(request, raw_query_code)
+                join_error = INVITATION_ERROR_MESSAGE
+                messages.error(request, INVITATION_ERROR_MESSAGE)
+            elif invitation.shared_space.created_by_id == request.user.id or invitation.created_by_id == request.user.id:
+                join_error = "You cannot join your own shared space."
+                messages.error(request, join_error)
+            elif SharedSpaceMembership.objects.filter(shared_space=invitation.shared_space, user=request.user, is_active=True).exists():
+                join_error = "You are already an active member of this shared space."
+                messages.info(request, join_error)
+            elif SharedSpaceMembership.objects.filter(shared_space=invitation.shared_space, is_active=True).count() >= SharedSpace.MAX_ACTIVE_MEMBERS:
+                join_error = "This shared space has already reached its two-member limit."
+                messages.error(request, join_error)
+            else:
+                join_confirmation = {
+                    "invitation": invitation,
+                    "space": invitation.shared_space,
+                    "owner": invitation.created_by,
+                    "code": raw_query_code,
+                    "formatted_code": invitation.formatted_code,
+                }
+
+    newly_created_invite_id = request.session.pop("newly_created_invite_id", None)
 
     return render(
         request,
         "budgets/shared_space.html",
         {
             "page_title": "Shared Space",
+            "join_confirmation": join_confirmation,
+            "join_error": join_error,
+            "is_locked": is_locked,
+            "lock_msg": lock_msg,
+            "newly_created_invite_id": newly_created_invite_id,
+            "active_tab": "overview",
             "workspace": ws,
             "current_space": current_space,
+            "selected_space": current_space,
             "is_creator": is_creator,
             "space_members": space_members,
             "active_member_count": sum(1 for m in space_members if m.is_active),
@@ -947,6 +1106,11 @@ def shared_space(request):
             "accept_form": accept_form,
             "category_form": category_form,
             "currencies": list(Currency.objects.filter(is_active=True).order_by("code")),
+            "this_month_shared_spending_display": this_month_shared_spending_display,
+            "this_month_shared_txs_count": this_month_shared_txs_count,
+            "shared_budgets": shared_budgets,
+            "cur_period_display": cur_period_display,
+            "active_spaces": [m.shared_space for m in memberships],
         },
     )
 
@@ -1021,9 +1185,11 @@ def shared_activity(request):
         request,
         "budgets/shared_activity.html",
         {
-            "page_title": "Shared Activity",
+            "page_title": "Shared Space — Activity",
+            "active_tab": "activity",
             "workspace": ws,
             "selected_space": selected_space,
+            "current_space": selected_space,
             "active_spaces": active_spaces,
             "partner": partner,
             "partner_balance": partner_balance,
@@ -1175,9 +1341,11 @@ def sharing_privacy(request):
         request,
         "budgets/sharing_privacy.html",
         {
-            "page_title": "Sharing & Privacy",
+            "page_title": "Shared Space — Privacy & sharing",
+            "active_tab": "privacy",
             "workspace": ws,
             "selected_space": selected_space,
+            "current_space": selected_space,
             "active_spaces": active_spaces,
             "partner": partner,
             "perm": perm,
@@ -1426,130 +1594,34 @@ def reports(request):
         request,
         "budgets/reports.html",
         {
-            "page_title": "Reports",
+            "page_title": "Dashboard — Reports",
+            "active_tab": "reports",
             "currencies": currencies_list,
             **ctx,
         },
     )
 
 
-@login_required
-@require_http_methods(["GET", "POST"])
-def currencies(request):
+def get_currencies_context(request, post_data=None):
     ws = get_active_workspace_context(request.user)
     preference = get_cached_user_preference(request)
     supported_currencies = list(Currency.objects.filter(is_active=True).order_by("code"))
     has_active_currencies = bool(supported_currencies)
 
-    form = PersonalBaseCurrencyForm(instance=preference)
+    form = PersonalBaseCurrencyForm(
+        post_data if (post_data and post_data.get("action") == "save_base_currency") else None,
+        instance=preference,
+    )
     converter_form = CurrencyConverterForm(
-        request.GET if request.GET.get("convert") else None,
+        post_data if (post_data and post_data.get("action") == "convert_currency") else (request.GET if request.GET.get("convert") else None),
         initial={"scope": ws["active_scope"]},
     )
-    manual_rate_form = ManualExchangeRateForm(initial={"scope": ws["active_scope"]})
+    manual_rate_form = ManualExchangeRateForm(
+        post_data if (post_data and post_data.get("action") == "record_manual_rate") else None,
+        initial={"scope": ws["active_scope"]},
+    )
     conversion_result = None
     table_source_currency = ws.get("effective_display_currency")
-
-    if request.method == "POST":
-        action = (request.POST.get("action") or "save_base_currency").strip()
-        try:
-            if action == "save_base_currency":
-                form = PersonalBaseCurrencyForm(request.POST, instance=preference)
-                if form.is_valid() and has_active_currencies:
-                    saved_pref = form.save(commit=False)
-                    saved_pref.user = request.user
-                    saved_pref.full_clean()
-                    saved_pref.save()
-                    request._cached_user_preference = saved_pref
-                    messages.success(
-                        request,
-                        f"Personal base currency saved as {saved_pref.personal_base_currency.code} ({saved_pref.personal_base_currency.name}).",
-                    )
-                    return redirect("budgets:currencies")
-
-            elif action == "convert_currency":
-                converter_form = CurrencyConverterForm(request.POST)
-                if converter_form.is_valid():
-                    cd = converter_form.cleaned_data
-                    amt = cd["amount"]
-                    from_curr = cd["from_currency"]
-                    to_curr = cd["to_currency"]
-                    conv_scope = cd.get("scope") or ws["active_scope"] or "personal"
-                    conv_space = ws["active_shared_space"] if conv_scope == "shared" else None
-                    lookup = get_latest_rate(
-                        from_curr,
-                        to_curr,
-                        user=request.user,
-                        scope=conv_scope,
-                        shared_space=conv_space,
-                    )
-                    if lookup.rate is not None:
-                        converted = convert_decimal_amount(amt, lookup.rate, to_curr)
-                        conversion_result = {
-                            "available": True,
-                            "from_currency": from_curr,
-                            "to_currency": to_curr,
-                            "formatted_input": format_currency_amount(amt, from_curr),
-                            "formatted_output": format_currency_amount(converted, to_curr),
-                            "rate": lookup.rate,
-                            "provider": lookup.provider,
-                            "rate_timestamp": lookup.rate_timestamp,
-                            "is_stale": lookup.is_stale,
-                            "status_label": lookup.status_label,
-                            "scope": conv_scope,
-                        }
-                    else:
-                        conversion_result = {
-                            "available": False,
-                            "from_currency": from_curr,
-                            "to_currency": to_curr,
-                            "status_label": lookup.status_label,
-                            "scope": conv_scope,
-                        }
-
-            elif action == "record_manual_rate":
-                manual_rate_form = ManualExchangeRateForm(request.POST)
-                if manual_rate_form.is_valid():
-                    cd = manual_rate_form.cleaned_data
-                    rate_dt = None
-                    if cd.get("rate_date"):
-                        rate_dt = timezone.make_aware(
-                            datetime.combine(cd["rate_date"], dt_time(12, 0))
-                        )
-                    rate_scope = cd.get("scope") or "personal"
-                    rate_space = ws["active_shared_space"] if rate_scope == "shared" else None
-                    rec = record_manual_exchange_rate(
-                        from_currency=cd["from_currency"],
-                        to_currency=cd["to_currency"],
-                        rate=cd["rate"],
-                        user=request.user,
-                        scope=rate_scope,
-                        shared_space=rate_space,
-                        rate_timestamp=rate_dt,
-                    )
-                    messages.success(
-                        request,
-                        f"Manual exchange rate ({rec.get_scope_display()}) saved: 1 {rec.from_currency.code} = {rec.rate} {rec.to_currency.code}.",
-                    )
-                    return redirect("budgets:currencies")
-                else:
-                    messages.error(
-                        request, _format_error_message(ValidationError(manual_rate_form.errors))
-                    )
-
-            elif action == "refresh_rates":
-                base_code = table_source_currency.code if table_source_currency else "PHP"
-                result = refresh_exchange_rates(base_currency_code=base_code, force=False)
-                if result["status"] == "updated":
-                    messages.success(request, result["message"])
-                elif result["status"] == "cooldown":
-                    messages.info(request, result["message"])
-                else:
-                    messages.warning(request, result["message"])
-                return redirect("budgets:currencies")
-
-        except (ValidationError, PermissionDenied) as exc:
-            messages.error(request, _format_error_message(exc))
 
     saved_base_currency = (
         preference.personal_base_currency
@@ -1586,25 +1658,157 @@ def currencies(request):
                 }
             )
 
-    return render(
-        request,
-        "budgets/currencies.html",
-        {
-            "page_title": "Currencies",
-            "workspace": ws,
-            "form": form,
-            "converter_form": converter_form,
-            "conversion_result": conversion_result,
-            "manual_rate_form": manual_rate_form,
-            "supported_currencies": supported_currencies,
-            "has_active_currencies": has_active_currencies,
-            "saved_base_currency": saved_base_currency,
-            "table_source_currency": table_source_currency,
-            "rate_table_rows": rate_table_rows,
-            "provider_info": provider_info,
-            "recent_rates": recent_rates,
-        },
-    )
+    return {
+        "workspace": ws,
+        "preference": preference,
+        "form": form,
+        "currency_form": form,
+        "converter_form": converter_form,
+        "conversion_result": conversion_result,
+        "manual_rate_form": manual_rate_form,
+        "supported_currencies": supported_currencies,
+        "has_active_currencies": has_active_currencies,
+        "saved_base_currency": saved_base_currency,
+        "table_source_currency": table_source_currency,
+        "rate_table_rows": rate_table_rows,
+        "provider_info": provider_info,
+        "recent_rates": recent_rates,
+    }
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def currencies(request):
+    curr_ctx = get_currencies_context(request)
+    ws = curr_ctx["workspace"]
+    preference = curr_ctx["preference"]
+    has_active_currencies = curr_ctx["has_active_currencies"]
+    table_source_currency = curr_ctx["table_source_currency"]
+
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+        if not action and "personal_base_currency" in request.POST:
+            action = "save_base_currency"
+
+        try:
+            if action == "save_base_currency":
+                form = PersonalBaseCurrencyForm(request.POST, instance=preference)
+                if form.is_valid() and has_active_currencies:
+                    saved_pref = form.save(commit=False)
+                    saved_pref.user = request.user
+                    saved_pref.full_clean()
+                    saved_pref.save()
+                    request._cached_user_preference = saved_pref
+                    messages.success(
+                        request,
+                        f"Personal base currency saved as {saved_pref.personal_base_currency.code} ({saved_pref.personal_base_currency.name}).",
+                    )
+                    return redirect("budgets:currencies")
+                else:
+                    curr_ctx["form"] = form
+                    curr_ctx["currency_form"] = form
+
+            elif action == "convert_currency":
+                converter_form = CurrencyConverterForm(request.POST)
+                if converter_form.is_valid():
+                    cd = converter_form.cleaned_data
+                    amt = cd["amount"]
+                    from_curr = cd["from_currency"]
+                    to_curr = cd["to_currency"]
+                    conv_scope = cd.get("scope") or ws["active_scope"] or "personal"
+                    conv_space = ws["active_shared_space"] if conv_scope == "shared" else None
+                    lookup = get_latest_rate(
+                        from_curr,
+                        to_curr,
+                        user=request.user,
+                        scope=conv_scope,
+                        shared_space=conv_space,
+                    )
+                    if lookup.rate is not None:
+                        converted = convert_decimal_amount(amt, lookup.rate, to_curr)
+                        curr_ctx["conversion_result"] = {
+                            "available": True,
+                            "from_currency": from_curr,
+                            "to_currency": to_curr,
+                            "formatted_input": format_currency_amount(amt, from_curr),
+                            "formatted_output": format_currency_amount(converted, to_curr),
+                            "rate": lookup.rate,
+                            "provider": lookup.provider,
+                            "rate_timestamp": lookup.rate_timestamp,
+                            "is_stale": lookup.is_stale,
+                            "status_label": lookup.status_label,
+                            "scope": conv_scope,
+                        }
+                    else:
+                        curr_ctx["conversion_result"] = {
+                            "available": False,
+                            "from_currency": from_curr,
+                            "to_currency": to_curr,
+                            "status_label": lookup.status_label,
+                            "scope": conv_scope,
+                        }
+                curr_ctx["converter_form"] = converter_form
+
+            elif action == "record_manual_rate":
+                manual_rate_form = ManualExchangeRateForm(request.POST)
+                if manual_rate_form.is_valid():
+                    cd = manual_rate_form.cleaned_data
+                    rate_dt = None
+                    if cd.get("rate_date"):
+                        rate_dt = timezone.make_aware(
+                            datetime.combine(cd["rate_date"], dt_time(12, 0))
+                        )
+                    rate_scope = cd.get("scope") or "personal"
+                    rate_space = ws["active_shared_space"] if rate_scope == "shared" else None
+                    rec = record_manual_exchange_rate(
+                        from_currency=cd["from_currency"],
+                        to_currency=cd["to_currency"],
+                        rate=cd["rate"],
+                        user=request.user,
+                        scope=rate_scope,
+                        shared_space=rate_space,
+                        rate_timestamp=rate_dt,
+                    )
+                    messages.success(
+                        request,
+                        f"Manual exchange rate ({rec.get_scope_display()}) saved: 1 {rec.from_currency.code} = {rec.rate} {rec.to_currency.code}.",
+                    )
+                    return redirect("budgets:currencies")
+                else:
+                    curr_ctx["manual_rate_form"] = manual_rate_form
+                    messages.error(
+                        request, _format_error_message(ValidationError(manual_rate_form.errors))
+                    )
+
+            elif action == "refresh_rates":
+                base_code = table_source_currency.code if table_source_currency else "PHP"
+                result = refresh_exchange_rates(base_currency_code=base_code, force=False)
+                if result["status"] == "updated":
+                    messages.success(request, result["message"])
+                elif result["status"] == "cooldown":
+                    messages.info(request, result["message"])
+                else:
+                    messages.warning(request, result["message"])
+                return redirect("budgets:currencies")
+
+        except (ValidationError, PermissionDenied) as exc:
+            messages.error(request, _format_error_message(exc))
+
+    from apps.accounts.forms import ProfileDisplayNameForm, UserPreferencesForm
+    display_name = request.user.get_full_name().strip() or request.user.username
+    profile_form = ProfileDisplayNameForm(initial={"display_name": display_name})
+    preferences_form = UserPreferencesForm(instance=preference)
+
+    context = {
+        "page_title": "Settings — Currency",
+        "active_tab": "currency",
+        "profile_display_name": display_name,
+        "profile_email": request.user.email or "",
+        "profile_form": profile_form,
+        "preferences_form": preferences_form,
+        **curr_ctx,
+    }
+    return render(request, "accounts/settings.html", context)
 
 
 def offline_page(request):

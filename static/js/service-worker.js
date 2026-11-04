@@ -14,7 +14,7 @@ const REQUIRED_PRECACHE_URLS = [
     "/static/js/pages/transaction.js",
     "/static/js/pages/transaction.js?v=v12",
     "/static/manifest.webmanifest",
-    "/static/images/auth/jubao_auth_art.svg",
+    "/static/images/auth/jubao_auth_art.webp",
     "/static/images/logo/jubao_text.png",
     "/static/images/logo/jubao_text.png?v=v12",
     "/static/images/logo/jubao_text_light.png",

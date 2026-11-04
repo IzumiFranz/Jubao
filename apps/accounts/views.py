@@ -166,6 +166,7 @@ def register(request):
 def settings(request):
     from apps.budgets.forms import PersonalBaseCurrencyForm
     from apps.budgets.models import Currency
+    from apps.budgets.views import get_currencies_context, currencies as currencies_view
 
     pref = (
         UserPreference.objects.select_related("personal_base_currency")
@@ -179,12 +180,20 @@ def settings(request):
 
     profile_form = ProfileDisplayNameForm(initial={"display_name": display_name})
     preferences_form = UserPreferencesForm(instance=pref)
-    currency_form = PersonalBaseCurrencyForm(instance=pref)
-    has_active_currencies = Currency.objects.filter(is_active=True).exists()
+    curr_ctx = get_currencies_context(request)
+    currency_form = curr_ctx["form"]
+    has_active_currencies = curr_ctx["has_active_currencies"]
+    active_tab = (request.GET.get("tab") or "profile").strip().lower()
 
     if request.method == "POST":
-        action = request.POST.get("action", "")
-        if action == "save_profile":
+        action = request.POST.get("action", "").strip()
+        if not action and "personal_base_currency" in request.POST:
+            action = "save_base_currency"
+
+        if action in ("save_base_currency", "convert_currency", "record_manual_rate", "refresh_rates"):
+            return currencies_view(request)
+
+        elif action == "save_profile":
             profile_form = ProfileDisplayNameForm(request.POST)
             if profile_form.is_valid():
                 update_user_profile(
@@ -204,31 +213,20 @@ def settings(request):
                 request._cached_user_preference = updated_pref
                 messages.success(request, "Display and calendar preferences have been saved.")
                 return redirect("accounts:settings")
-        elif action == "save_base_currency":
-            currency_form = PersonalBaseCurrencyForm(request.POST, instance=pref)
-            if currency_form.is_valid() and has_active_currencies:
-                saved_pref = currency_form.save(commit=False)
-                saved_pref.user = request.user
-                saved_pref.full_clean()
-                saved_pref.save()
-                request._cached_user_preference = saved_pref
-                messages.success(
-                    request,
-                    f"Personal base currency saved as {saved_pref.personal_base_currency.code}.",
-                )
-                return redirect("accounts:settings")
 
     return render(
         request,
         "accounts/settings.html",
         {
             "page_title": "Settings",
+            "active_tab": active_tab,
             "profile_display_name": display_name,
             "profile_email": email,
             "profile_form": profile_form,
             "preferences_form": preferences_form,
             "currency_form": currency_form,
             "has_active_currencies": has_active_currencies,
+            **curr_ctx,
         },
     )
 

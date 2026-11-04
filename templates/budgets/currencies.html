@@ -3,10 +3,6 @@
 {% block title %}Currencies | Jubao{% endblock %}
 
 {% block content %}
-<p class="text-secondary mb-4">
-    Every wallet and transaction retains its original amount and currency. Selecting a personal base currency records your preferred reference currency for personal views without altering existing wallet balances.
-</p>
-
 <div class="row g-3 mb-4">
     <div class="col-12 col-lg-5">
         <section
@@ -193,12 +189,18 @@
 
             <div class="row g-2">
                 <div class="col-12">
-                    <div class="summary-card p-3">
-                        <p class="text-secondary small fw-medium mb-1">Configured provider</p>
-                        <p class="h6 fw-semibold mb-1">{{ provider_info.name }}</p>
-                        <p class="small text-secondary mb-0">
-                            Host: <code>{{ provider_info.host }}</code> ({{ provider_info.coverage_note }})
-                        </p>
+                    <div class="stationery-summary-card summary-card p-3">
+                        <div class="summary-card-header">
+                            <span class="summary-card-label">Configured provider</span>
+                            <div class="summary-card-icon-box" aria-hidden="true">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                            </div>
+                        </div>
+                        <p class="summary-card-value summary-value mb-1" style="font-size: 1.15rem;">{{ provider_info.name }}</p>
+                        <div class="summary-card-footer">
+                            <span class="summary-card-dot" aria-hidden="true"></span>
+                            <span>Host: <code>{{ provider_info.host }}</code> ({{ provider_info.coverage_note }})</span>
+                        </div>
                     </div>
                 </div>
             </div>

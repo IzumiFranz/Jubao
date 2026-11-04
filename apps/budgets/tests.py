@@ -14,7 +14,7 @@ from django.utils import timezone
 from apps.accounts.models import UserPreference
 
 from .currency_catalog import SUPPORTED_CURRENCIES
-from .models import Currency, Wallet, format_currency_amount
+from .models import Category, Currency, Transaction, Wallet, format_currency_amount
 
 seed_migration = import_module("apps.budgets.migrations.0002_seed_supported_currencies")
 twd_migration = import_module("apps.budgets.migrations.0003_add_twd_currency")
@@ -10083,6 +10083,9 @@ class TransactionsPageReorganizationTests(TestCase):
         """Date group rows group transactions by date and all transactions are ordered descending."""
         from .services import create_transaction_entry
 
+        self.tx1.transaction_date = date(2026, 11, 2)
+        self.tx1.save()
+
         t_earlier = create_transaction_entry(
             user=self.user,
             transaction_type="income",
@@ -11322,8 +11325,1423 @@ df.onload = function() {{
         self.assertIn("November current expense", content_all)
         self.assertIn("October previous expense", content_all)
 
+class BudgetsPageStationeryRedesignTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from apps.accounts.models import UserPreference
+        from .models import Currency, Wallet
+        from decimal import Decimal
+        from datetime import date
+
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="budgets_stationery_user",
+            password="StrongPassword123!",
+        )
+        self.usd = Currency.objects.get(code="USD")
+        self.jpy, _ = Currency.objects.get_or_create(
+            code="JPY",
+            defaults={"name": "Japanese Yen", "decimal_places": 0, "is_active": True},
+        )
+        UserPreference.objects.create(
+            user=self.user,
+            personal_base_currency=self.usd,
+            display_currency=None,
+        )
+        self.wallet = Wallet.objects.create(
+            owner=self.user,
+            name="Checking",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("10000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        self.client.force_login(self.user)
+        self.budgets_url = reverse("budgets:budgets")
+
+    def _find_browser_binary(self):
+        import os
+        candidates = [
+            os.environ.get("CHROME_BIN"),
+            os.environ.get("EDGE_BIN"),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        ]
+        for c in candidates:
+            if c and os.path.exists(c):
+                return c
+        return None
+
+    def _run_browser_harness(self, browser_bin, width, height, html_content):
+        import http.server
+        import json
+        import shutil
+        import socket
+        import subprocess
+        import tempfile
+        import threading
+
+        results_holder = {}
+        done_event = threading.Event()
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+            def do_GET(self):
+                data = html_content.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length).decode("utf-8")
+                results_holder["report"] = json.loads(raw)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "11")
+                self.end_headers()
+                self.wfile.write(b'{"ok":true}')
+                done_event.set()
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+
+        httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+
+        user_data_dir = tempfile.mkdtemp(prefix=f"budgets_browser_{width}_{height}_")
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                [
+                    browser_bin,
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    f"--window-size={width},{height}",
+                    f"--user-data-dir={user_data_dir}",
+                    f"http://127.0.0.1:{port}/",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            finished = done_event.wait(timeout=25)
+            if not finished:
+                return None
+            return results_holder.get("report")
+        finally:
+            if proc:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+            httpd.shutdown()
+            httpd.server_close()
+            shutil.rmtree(user_data_dir, ignore_errors=True)
+
+    def test_budgets_page_structure_and_stationery_styling(self):
+        resp = self.client.get(self.budgets_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # 1. Generic page summary subtitle removed, controls bar starts cleanly
+        self.assertNotIn("Plan monthly category spending limits and monitor progress across personal and shared spaces.", html)
+        self.assertNotIn("Set monthly category spending limits for a chosen period across both personal and shared spaces.", html)
+
+        # 2. Stationery classes and styling
+        self.assertIn("budgets-stationery", html)
+        self.assertIn("stationery-panel", html)
+        self.assertIn("stationery-summary-card", html)
+        self.assertIn("budgets-table", html)
+
+        # 3. Panel headings & sections
+        self.assertIn('id="budget-create-heading"', html)
+        self.assertIn("Set monthly category budget", html)
+        self.assertIn('id="budget-controls-heading"', html)
+        self.assertIn("Filter budget period", html)
+        self.assertIn('id="budget-overview-heading"', html)
+        self.assertIn('id="category-budgets-heading"', html)
+        self.assertIn("Quick add category", html)
+
+        # 4. Summary cards
+        self.assertIn("Planned Budget", html)
+        self.assertIn("Spent", html)
+        self.assertIn("Remaining", html)
+
+        # 5. Table columns (9 columns)
+        for col_header in ["Category", "Scope", "Period", "Currency", "Limit", "Spent", "Remaining", "Status", "Actions"]:
+            self.assertIn(f">{col_header}</th>", html)
+
+        # 6. Action buttons
+        self.assertIn("Save budget", html)
+        self.assertIn("View period", html)
+        self.assertIn("Add category", html)
+
+    def test_preserved_filter_values(self):
+        resp = self.client.get(f"{self.budgets_url}?period=2026-11&scope=personal")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["overview"]["period"], "2026-11")
+        self.assertEqual(resp.context["overview"]["scope"], "personal")
+
+        html = resp.content.decode("utf-8")
+        self.assertIn('name="period"', html)
+        self.assertIn('value="2026-11"', html)
+        self.assertIn('value="personal" selected', html)
+
+    def test_budget_form_validation_errors(self):
+        resp = self.client.post(self.budgets_url, {
+            "action": "save_budget",
+            "period": "2026-11",
+            "limit_amount": "-25.00",
+        })
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+        self.assertTrue("invalid-feedback" in html or "alert-danger" in html)
+
+    def test_quick_add_category_validation_errors(self):
+        resp = self.client.post(self.budgets_url, {
+            "action": "create_category",
+            "name": "",
+            "kind": "expense",
+        })
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+        self.assertTrue("invalid-feedback" in html or "alert-danger" in html)
+
+    def test_empty_state_and_populated_budget_rows(self):
+        from .services import create_category, save_category_budget
+        from django.utils import timezone
+        from decimal import Decimal
+
+        resp_empty = self.client.get(self.budgets_url)
+        self.assertEqual(resp_empty.status_code, 200)
+        self.assertContains(resp_empty, "No budgets created for this period.")
+
+        cat = create_category(user=self.user, name="Groceries", kind="expense", scope="personal")
+        cur_period = timezone.localdate().strftime("%Y-%m")
+        b = save_category_budget(
+            user=self.user,
+            category=cat,
+            period=cur_period,
+            currency=self.usd,
+            limit_amount=Decimal("350.00"),
+            scope="personal",
+        )
+
+        resp_pop = self.client.get(self.budgets_url)
+        self.assertEqual(resp_pop.status_code, 200)
+        self.assertNotContains(resp_pop, "No budgets created for this period.")
+        html_pop = resp_pop.content.decode("utf-8")
+
+        self.assertIn("Groceries", html_pop)
+        self.assertIn("Personal", html_pop)
+        self.assertIn(cur_period, html_pop)
+        self.assertIn("USD", html_pop)
+        self.assertIn("350.00", html_pop)
+        self.assertIn("0.00", html_pop)
+        self.assertIn("On track", html_pop)
+        self.assertIn('name="action" value="archive_budget"', html_pop)
+        self.assertIn(f'name="budget_id" value="{b.id}"', html_pop)
+        self.assertIn("Remove", html_pop)
+
+        resp_arch = self.client.post(self.budgets_url, {
+            "action": "archive_budget",
+            "budget_id": b.id,
+        }, follow=True)
+        self.assertEqual(resp_arch.status_code, 200)
+        self.assertContains(resp_arch, "No budgets created for this period.")
+
+    def test_desktop_and_mobile_responsiveness(self):
+        import pathlib
+        from django.conf import settings
+        from .services import create_category, save_category_budget
+        from django.utils import timezone
+        from decimal import Decimal
+
+        browser_bin = self._find_browser_binary()
+        if not browser_bin:
+            self.skipTest("No browser binary found for headless verification.")
+
+        cat = create_category(user=self.user, name="Healthcare & Medical", kind="expense", scope="personal")
+        cur_period = timezone.localdate().strftime("%Y-%m")
+        save_category_budget(
+            user=self.user,
+            category=cat,
+            period=cur_period,
+            currency=self.usd,
+            limit_amount=Decimal("500.00"),
+            scope="personal",
+        )
+
+        static_dir = pathlib.Path(settings.BASE_DIR) / "static"
+        bs_js = (static_dir / "vendor" / "bootstrap" / "bootstrap.bundle.min.js").read_text(encoding="utf-8")
+        bs_css = (static_dir / "vendor" / "bootstrap" / "bootstrap.min.css").read_text(encoding="utf-8")
+        app_css = (static_dir / "css" / "app.css").read_text(encoding="utf-8")
+        dash_css = (static_dir / "css" / "dashboard.css").read_text(encoding="utf-8")
+
+        resp = self.client.get(self.budgets_url)
+        page_html = resp.content.decode("utf-8")
+
+        def make_harness(html):
+            return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>{bs_css}</style>
+    <style>{app_css}</style>
+    <style>{dash_css}</style>
+</head>
+<body class="app-body">
+    {html}
+    <script>{bs_js}</script>
+    <script>
+    window.addEventListener('DOMContentLoaded', async function () {{
+        await new Promise(r => setTimeout(r, 200));
+        var results = {{
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            hasHorizontalDocumentOverflow: document.documentElement.scrollWidth > window.innerWidth,
+            hasTableResponsive: !!document.querySelector('.table-responsive'),
+            hasBudgetsTable: !!document.querySelector('.budgets-table'),
+            hasSummaryCards: document.querySelectorAll('.stationery-summary-card').length === 3,
+            hasPanels: document.querySelectorAll('.stationery-panel').length >= 2,
+        }};
+        fetch('/__test_done__', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(results)
+        }}).catch(function () {{}});
+    }});
+    </script>
+</body>
+</html>"""
+
+        # 1. Desktop Viewport (1366 x 768)
+        desktop_harness = make_harness(page_html)
+        rep_desktop = self._run_browser_harness(browser_bin, 1366, 768, desktop_harness)
+        self.assertIsNotNone(rep_desktop, "Desktop browser verification timed out")
+        self.assertGreaterEqual(rep_desktop.get("viewportWidth", 0), 1024, "Desktop viewport width should be >= 1024")
+        self.assertGreaterEqual(rep_desktop.get("viewportHeight", 0), 600, "Desktop viewport height should be >= 600")
+        self.assertFalse(rep_desktop.get("hasHorizontalDocumentOverflow"), "Desktop should have no horizontal overflow")
+        self.assertTrue(rep_desktop.get("hasTableResponsive"), "Table responsive wrapper must exist")
+        self.assertTrue(rep_desktop.get("hasBudgetsTable"), "Budgets table must exist")
+        self.assertTrue(rep_desktop.get("hasSummaryCards"), "3 summary cards must exist")
+        self.assertTrue(rep_desktop.get("hasPanels"), "Panels must exist")
+
+        # 2. Mobile Viewport (360 x 800) - Chromium headless on Windows clamps Aura window min-width to <= 575px (Bootstrap mobile breakpoint)
+        mobile_harness = make_harness(page_html)
+        rep_mobile = self._run_browser_harness(browser_bin, 360, 800, mobile_harness)
+        self.assertIsNotNone(rep_mobile, "Mobile browser verification timed out")
+        self.assertLessEqual(rep_mobile.get("viewportWidth", 999), 575, "Mobile viewport width should be <= 575 (Bootstrap mobile breakpoint)")
+        self.assertGreaterEqual(rep_mobile.get("viewportHeight", 0), 600, "Mobile viewport height should be >= 600")
+        self.assertFalse(rep_mobile.get("hasHorizontalDocumentOverflow"), "Mobile should have no horizontal page overflow")
+        self.assertTrue(rep_mobile.get("hasTableResponsive"), "Table responsive wrapper must exist on mobile")
+        self.assertTrue(rep_mobile.get("hasBudgetsTable"), "Budgets table must exist on mobile")
+        self.assertTrue(rep_mobile.get("hasSummaryCards"), "3 summary cards must exist on mobile")
+        self.assertTrue(rep_mobile.get("hasPanels"), "Panels must exist on mobile")
+class SharedSpaceStationeryRedesignTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from apps.accounts.models import UserPreference
+        from .models import Currency, Wallet, SharedSpace, SharedSpaceMembership
+        from .services import create_shared_space, create_category, create_transaction_entry
+        from decimal import Decimal
+        from datetime import date
+
+        User = get_user_model()
+        self.alice = User.objects.create_user(username="alice_stationery", password="Str0ng!Password#2026")
+        self.bob = User.objects.create_user(username="bob_stationery", password="Str0ng!Password#2026")
+        self.carol = User.objects.create_user(username="carol_stationery", password="Str0ng!Password#2026")
+
+        self.php = Currency.objects.get(code="PHP")
+        self.usd = Currency.objects.get(code="USD")
+
+        self.pref_alice = UserPreference.objects.create(
+            user=self.alice,
+            personal_base_currency=self.usd,
+            active_scope="shared",
+        )
+        self.pref_bob = UserPreference.objects.create(
+            user=self.bob,
+            personal_base_currency=self.usd,
+            active_scope="shared",
+        )
+        self.pref_carol = UserPreference.objects.create(
+            user=self.carol,
+            personal_base_currency=self.usd,
+            active_scope="personal",
+        )
+
+        self.space = create_shared_space(user=self.alice, name="Home Household", base_currency=self.php)
+        self.pref_alice.active_shared_space = self.space
+        self.pref_alice.save(update_fields=["active_shared_space"])
+
+        self.wallet = Wallet.objects.create(
+            owner=self.alice,
+            name="Household Cash",
+            wallet_type=Wallet.WalletType.CASH,
+            currency=self.php,
+            ownership_scope=Wallet.OwnershipScope.SHARED,
+            shared_space=self.space,
+            opening_balance=Decimal("5000.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+
+        self.category = create_category(
+            user=self.alice,
+            name="Groceries",
+            kind="expense",
+            scope="shared",
+            shared_space=self.space,
+        )
+
+        self.tx = create_transaction_entry(
+            user=self.alice,
+            wallet=self.wallet,
+            transaction_type="expense",
+            amount=Decimal("1250.00"),
+            transaction_date=date(2026, 11, 2),
+            category=self.category,
+            description="Weekly fresh groceries",
+            scope="shared",
+            shared_space=self.space,
+        )
+
+        self.shared_url = reverse("budgets:shared_space")
+
+    def _find_browser_binary(self):
+        import os
+        candidates = [
+            os.environ.get("CHROME_BIN"),
+            os.environ.get("EDGE_BIN"),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        ]
+        for c in candidates:
+            if c and os.path.exists(c):
+                return c
+        return None
+
+    def _run_browser_harness(self, browser_bin, width, height, html_content):
+        import http.server
+        import json
+        import shutil
+        import socket
+        import subprocess
+        import tempfile
+        import threading
+
+        results_holder = {}
+        done_event = threading.Event()
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+            def do_GET(self):
+                data = html_content.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length).decode("utf-8")
+                results_holder["report"] = json.loads(raw)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "11")
+                self.end_headers()
+                self.wfile.write(b'{"ok":true}')
+                done_event.set()
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+
+        httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+
+        user_data_dir = tempfile.mkdtemp(prefix=f"sp_browser_{width}_{height}_")
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                [
+                    browser_bin,
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    f"--window-size={width},{height}",
+                    f"--user-data-dir={user_data_dir}",
+                    f"http://127.0.0.1:{port}/",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            finished = done_event.wait(timeout=25)
+            if not finished:
+                return None
+            return results_holder.get("report")
+        finally:
+            if proc:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+            httpd.shutdown()
+            httpd.server_close()
+            shutil.rmtree(user_data_dir, ignore_errors=True)
+
+    def test_shared_space_page_structure_and_stationery_theme(self):
+        self.client.force_login(self.alice)
+        resp = self.client.get(self.shared_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Visual theme classes
+        self.assertIn("shared-space-stationery", html)
+        self.assertIn("stationery-panel", html)
+        self.assertIn("stationery-summary-card", html)
+        self.assertIn("sp-table", html)
+
+        # Headings
+        self.assertIn("Shared Space", html)
+        self.assertIn("Home Household", html)
+        self.assertIn("Shared budget progress", html)
+        self.assertIn("Members", html)
+        self.assertIn("Partner invitations", html)
+        self.assertIn("Shared spending &amp; income", html)
+        self.assertIn("Shared personal activity", html)
+
+        # Summary cards
+        self.assertIn("Members", html)
+        self.assertIn("Shared Wallets", html)
+        self.assertIn("This Month's Spending", html)
+        self.assertIn("Base Currency", html)
+        self.assertIn("PHP", html)
+
+        # Actions
+        self.assertIn("Add shared transaction", html)
+
+        # Header hierarchy & standardized summary cards
+        self.assertNotIn('<h1 class="sp-page-title', html)
+        self.assertNotIn("A shared space lets two people track joint budgets", html)
+        self.assertIn("summary-card-icon-box", html)
+        self.assertIn("summary-card-dot", html)
+
+    def test_authorized_member_visibility(self):
+        from .services import create_shared_space_invitation, accept_shared_space_invitation
+
+        # Alice invites Bob; Bob accepts
+        inv = create_shared_space_invitation(user=self.alice, shared_space=self.space, partner_hint="bob_stationery")
+        accept_shared_space_invitation(user=self.bob, code=inv.code)
+        self.pref_bob.refresh_from_db()
+        self.pref_bob.active_shared_space = self.space
+        self.pref_bob.save(update_fields=["active_shared_space"])
+
+        # Alice (creator) views page
+        self.client.force_login(self.alice)
+        resp_a = self.client.get(self.shared_url)
+        self.assertEqual(resp_a.status_code, 200)
+        html_a = resp_a.content.decode("utf-8")
+        self.assertIn("alice_stationery", html_a)
+        self.assertIn("bob_stationery", html_a)
+        self.assertIn('name="action" value="update_space"', html_a)
+        self.assertIn("Update shared space", html_a)
+        self.assertNotIn("Leave space", html_a)
+
+        # Bob (member) views page
+        self.client.force_login(self.bob)
+        resp_b = self.client.get(self.shared_url)
+        self.assertEqual(resp_b.status_code, 200)
+        html_b = resp_b.content.decode("utf-8")
+        self.assertIn("alice_stationery", html_b)
+        self.assertIn("bob_stationery", html_b)
+        self.assertNotIn('name="action" value="update_space"', html_b)
+        self.assertIn('name="action" value="leave_space"', html_b)
+        self.assertIn("Leave space", html_b)
+
+    def test_nonmember_and_inactive_isolation(self):
+        from .services import create_shared_space_invitation, accept_shared_space_invitation, leave_shared_space
+
+        # Carol (not in any shared space)
+        self.client.force_login(self.carol)
+        resp_c = self.client.get(self.shared_url)
+        self.assertEqual(resp_c.status_code, 200)
+        html_c = resp_c.content.decode("utf-8")
+        self.assertIn("Create a shared space", html_c)
+        self.assertIn("Accept partner invitation", html_c)
+        self.assertNotIn("Home Household", html_c)
+        self.assertNotIn("Household Cash", html_c)
+        self.assertNotIn("Weekly fresh groceries", html_c)
+
+        # Bob joins then leaves
+        inv = create_shared_space_invitation(user=self.alice, shared_space=self.space)
+        accept_shared_space_invitation(user=self.bob, code=inv.code)
+        leave_shared_space(user=self.bob, shared_space=self.space)
+
+        # Alice views members: Bob is shown as former
+        self.client.force_login(self.alice)
+        resp_a = self.client.get(self.shared_url)
+        self.assertEqual(resp_a.status_code, 200)
+        html_a = resp_a.content.decode("utf-8")
+        self.assertIn("bob_stationery", html_a)
+        self.assertIn("Former", html_a)
+
+    def test_invitation_actions_and_limits(self):
+        from .services import accept_shared_space_invitation
+        from .models import SharedSpaceInvitation
+
+        self.client.force_login(self.alice)
+
+        # 1. Generate invitation
+        resp_inv = self.client.post(self.shared_url, {
+            "action": "create_invitation",
+            "partner_hint": "Roommate Bob",
+            "expires_in_days": 7,
+        }, follow=True)
+        self.assertEqual(resp_inv.status_code, 200)
+        inv = SharedSpaceInvitation.objects.filter(shared_space=self.space, status="pending").first()
+        self.assertIsNotNone(inv)
+        self.assertContains(resp_inv, inv.code)
+        self.assertContains(resp_inv, "Revoke")
+
+        # 2. Revoke invitation
+        resp_rev = self.client.post(self.shared_url, {
+            "action": "revoke_invitation",
+            "invitation_id": inv.id,
+        }, follow=True)
+        self.assertEqual(resp_rev.status_code, 200)
+        inv.refresh_from_db()
+        self.assertEqual(inv.status, SharedSpaceInvitation.Status.REVOKED)
+
+        # 3. Create fresh invite and Bob joins -> 2-member limit notice shown
+        resp_inv2 = self.client.post(self.shared_url, {
+            "action": "create_invitation",
+            "partner_hint": "Roommate Bob",
+            "expires_in_days": 7,
+        }, follow=True)
+        inv2 = SharedSpaceInvitation.objects.filter(shared_space=self.space, status="pending").first()
+        accept_shared_space_invitation(user=self.bob, code=inv2.code)
+
+        resp_limit = self.client.get(self.shared_url)
+        self.assertEqual(resp_limit.status_code, 200)
+        self.assertContains(resp_limit, "This shared space has reached the two-member maximum.")
+
+    def test_desktop_and_mobile_responsiveness(self):
+        import pathlib
+        from django.conf import settings
+
+        browser_bin = self._find_browser_binary()
+        if not browser_bin:
+            self.skipTest("No browser binary found for headless verification.")
+
+        static_dir = pathlib.Path(settings.BASE_DIR) / "static"
+        bs_js = (static_dir / "vendor" / "bootstrap" / "bootstrap.bundle.min.js").read_text(encoding="utf-8")
+        bs_css = (static_dir / "vendor" / "bootstrap" / "bootstrap.min.css").read_text(encoding="utf-8")
+        app_css = (static_dir / "css" / "app.css").read_text(encoding="utf-8")
+        dash_css = (static_dir / "css" / "dashboard.css").read_text(encoding="utf-8")
+
+        self.client.force_login(self.alice)
+        resp = self.client.get(self.shared_url)
+        page_html = resp.content.decode("utf-8")
+
+        def make_harness(html):
+            return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>{bs_css}</style>
+    <style>{app_css}</style>
+    <style>{dash_css}</style>
+</head>
+<body class="app-body">
+    {html}
+    <script>{bs_js}</script>
+    <script>
+    window.addEventListener('DOMContentLoaded', async function () {{
+        await new Promise(r => setTimeout(r, 200));
+        var results = {{
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            hasHorizontalDocumentOverflow: document.documentElement.scrollWidth > window.innerWidth,
+            hasTableResponsive: document.querySelectorAll('.table-responsive').length >= 2,
+            hasSummaryCards: document.querySelectorAll('.stationery-summary-card').length === 4,
+            hasPanels: document.querySelectorAll('.stationery-panel').length >= 3,
+        }};
+        fetch('/__test_done__', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(results)
+        }}).catch(function () {{}});
+    }});
+    </script>
+</body>
+</html>"""
+
+        # 1. Desktop Viewport (1366 x 768)
+        desktop_harness = make_harness(page_html)
+        rep_desktop = self._run_browser_harness(browser_bin, 1366, 768, desktop_harness)
+        self.assertIsNotNone(rep_desktop, "Desktop browser verification timed out")
+        self.assertGreaterEqual(rep_desktop.get("viewportWidth", 0), 1024, "Desktop viewport width should be >= 1024")
+        self.assertGreaterEqual(rep_desktop.get("viewportHeight", 0), 600, "Desktop viewport height should be >= 600")
+        self.assertFalse(rep_desktop.get("hasHorizontalDocumentOverflow"), "Desktop should have no horizontal overflow")
+        self.assertTrue(rep_desktop.get("hasTableResponsive"), "Table responsive wrapper must exist")
+        self.assertTrue(rep_desktop.get("hasSummaryCards"), "4 summary cards must exist")
+        self.assertTrue(rep_desktop.get("hasPanels"), "Panels must exist")
+
+        # 2. Mobile Viewport (360 x 800)
+        mobile_harness = make_harness(page_html)
+        rep_mobile = self._run_browser_harness(browser_bin, 360, 800, mobile_harness)
+        self.assertIsNotNone(rep_mobile, "Mobile browser verification timed out")
+        self.assertLessEqual(rep_mobile.get("viewportWidth", 999), 575, "Mobile viewport width should be <= 575 (Bootstrap mobile breakpoint)")
+        self.assertGreaterEqual(rep_mobile.get("viewportHeight", 0), 600, "Mobile viewport height should be >= 600")
+        self.assertFalse(rep_mobile.get("hasHorizontalDocumentOverflow"), "Mobile should have no horizontal page overflow")
+        self.assertTrue(rep_mobile.get("hasTableResponsive"), "Table responsive wrapper must exist on mobile")
+        self.assertTrue(rep_mobile.get("hasSummaryCards"), "4 summary cards must exist on mobile")
+        self.assertTrue(rep_mobile.get("hasPanels"), "Panels must exist on mobile")
 
 
+class SiteWideStationeryDesignSystemTests(TestCase):
+    """
+    Validates site-wide design system consistency across all user-facing views:
+    - Warm off-white background (#F8F7F4)
+    - Crisp white cards/panels with subtle cool-gray borders and soft shadows
+    - Deep navy (#1E3A5F) for primary actions, headings, and emphasis
+    - Muted semantic colors (green, amber, red)
+    - Preserved forms, fields, CSRF tokens, and security rules
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="designuser",
+            email="design@example.com",
+            password="TestPassword123!",
+        )
+        self.currency_jpy, _ = Currency.objects.get_or_create(
+            code="JPY",
+            defaults={"name": "Japanese Yen", "decimal_places": 0, "is_active": True},
+        )
+        self.currency_usd, _ = Currency.objects.get_or_create(
+            code="USD",
+            defaults={"name": "US Dollar", "decimal_places": 2, "is_active": True},
+        )
+        self.wallet = Wallet.objects.create(
+            owner=self.user,
+            name="Main Cash",
+            wallet_type="cash",
+            currency=self.currency_jpy,
+            opening_balance=Decimal("10000"),
+            opening_balance_date=date(2026, 11, 1),
+            ownership_scope="personal",
+        )
+        self.category = Category.objects.create(
+            owner=self.user,
+            name="Groceries",
+            kind="expense",
+        )
+        self.tx = Transaction.objects.create(
+            owner=self.user,
+            paid_by=self.user,
+            wallet=self.wallet,
+            category=self.category,
+            transaction_type="expense",
+            amount=Decimal("1500"),
+            currency=self.currency_jpy,
+            transaction_date=date(2026, 11, 2),
+            scope="personal",
+            description="Supermarket groceries",
+        )
+
+    def test_global_css_design_tokens_present(self):
+        """Verify static/css/app.css contains all required design tokens and components."""
+        import pathlib
+        from django.conf import settings
+        app_css_path = pathlib.Path(settings.BASE_DIR) / "static" / "css" / "app.css"
+        self.assertTrue(app_css_path.exists(), "app.css must exist")
+        css_text = app_css_path.read_text(encoding="utf-8")
+
+        self.assertIn("--stationery-bg: #F8F7F4", css_text)
+        self.assertIn("--stationery-navy: #1E3A5F", css_text)
+        self.assertIn("--stationery-border: #E5E3DE", css_text)
+        self.assertIn(".stationery-panel", css_text)
+        self.assertIn(".summary-card", css_text)
+        self.assertIn(".btn-primary", css_text)
+        self.assertIn(".status-pill", css_text)
+        self.assertIn(".table-stationery", css_text)
+
+    def test_dashboard_uses_stationery_design(self):
+        """Dashboard renders with status 200 and stationery classes."""
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("budgets:dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "dashboard-stationery")
+        self.assertContains(resp, "summary-strip-card")
+        self.assertContains(resp, "stationery-panel")
+
+    def test_transactions_page_uses_stationery_design(self):
+        """Transactions page renders with status 200 and toolbar stationery design."""
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("budgets:transactions"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "transactions-stationery")
+        self.assertContains(resp, "stationery-panel")
+        self.assertContains(resp, "transactions-table")
+
+    def test_budgets_page_uses_stationery_design(self):
+        """Budgets page renders with status 200 and stationery design system."""
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("budgets:budgets"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "budgets-stationery")
+        self.assertContains(resp, "stationery-panel")
+        self.assertContains(resp, "stationery-summary-card")
+
+    def test_shared_space_page_uses_stationery_design(self):
+        """Shared space page renders with status 200 and stationery design."""
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("budgets:shared_space"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "shared-space-stationery")
+        self.assertContains(resp, "stationery-panel")
+
+    def test_wallets_page_uses_stationery_design(self):
+        """Wallets page renders with status 200 and stationery styling."""
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("budgets:wallets"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "dashboard-panel")
+        self.assertContains(resp, "Your wallets")
+        self.assertContains(resp, "Main Cash")
+
+    def test_savings_goals_page_uses_stationery_design(self):
+        """Savings goals page renders with status 200 and stationery styling."""
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("budgets:savings_goals"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "dashboard-panel")
+        self.assertContains(resp, "Create savings goal")
+        self.assertContains(resp, "Your savings goals")
+
+    def test_reports_page_uses_stationery_design(self):
+        """Reports page renders with status 200 and summary cards."""
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("budgets:reports"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "dashboard-panel")
+        self.assertContains(resp, "summary-card")
+        self.assertContains(resp, "Report controls")
+
+    def test_currencies_page_uses_stationery_design(self):
+        """Currencies page renders with status 200 and stationery panels."""
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("budgets:currencies"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "dashboard-panel")
+        self.assertContains(resp, "Currency preferences")
+        self.assertContains(resp, "Currency converter")
+
+    def test_settings_page_uses_stationery_design(self):
+        """Settings page renders with status 200 and stationery panels."""
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("accounts:settings"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "dashboard-panel")
+        self.assertContains(resp, "Profile")
+        self.assertContains(resp, "Preferences")
+
+    def test_offline_page_uses_stationery_design(self):
+        """Offline page renders with status 200 and stationery layout."""
+        resp = self.client.get(reverse("budgets:offline"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Offline Workspace")
+        self.assertContains(resp, "dashboard-panel")
+
+    def test_auth_pages_use_stationery_design(self):
+        """Login and register pages render with status 200 and Jubao auth styling."""
+        resp_login = self.client.get(reverse("accounts:login"))
+        self.assertEqual(resp_login.status_code, 200)
+        self.assertContains(resp_login, "jubao_auth_art.webp")
+        self.assertContains(resp_login, "auth-card-wrapper")
+
+        resp_register = self.client.get(reverse("accounts:register"))
+        self.assertEqual(resp_register.status_code, 200)
+        self.assertContains(resp_register, "jubao_auth_art.webp")
+        self.assertContains(resp_register, "auth-card-wrapper")
+
+    def test_generic_page_summaries_removed_across_pages(self):
+        """Generic descriptive subtitles are absent while meaningful help/form text remains."""
+        self.client.force_login(self.user)
+
+        # Budgets
+        resp_b = self.client.get(reverse("budgets:budgets"))
+        html_b = resp_b.content.decode("utf-8")
+        self.assertNotIn("Plan monthly category spending limits", html_b)
+        self.assertContains(resp_b, "Set monthly category budget")
+
+        # Shared Space
+        resp_sp = self.client.get(reverse("budgets:shared_space"))
+        html_sp = resp_sp.content.decode("utf-8")
+        self.assertNotIn("Manage your household's shared wallets, budgets, members, and activity.", html_sp)
+        self.assertNotIn("A shared space lets two people track joint budgets", html_sp)
+        self.assertNotIn('<h1 class="sp-page-title', html_sp)
+        self.assertContains(resp_sp, "Create a shared space")
+
+        # Wallets
+        resp_w = self.client.get(reverse("budgets:wallets"))
+        html_w = resp_w.content.decode("utf-8")
+        self.assertNotIn("Wallets track your manually entered balances", html_w)
+        self.assertContains(resp_w, "Each wallet uses its own currency so balances remain accurate")
+
+        # Savings Goals
+        resp_g = self.client.get(reverse("budgets:savings_goals"))
+        html_g = resp_g.content.decode("utf-8")
+        self.assertNotIn("Savings goals track earmarked funds toward a target amount", html_g)
+        self.assertContains(resp_g, "Create savings goal")
+
+        # Reports
+        resp_r = self.client.get(reverse("budgets:reports"))
+        html_r = resp_r.content.decode("utf-8")
+        self.assertNotIn("Reports summarize your manually recorded income", html_r)
+        self.assertContains(resp_r, "Report controls")
+
+        # Currencies
+        resp_c = self.client.get(reverse("budgets:currencies"))
+        html_c = resp_c.content.decode("utf-8")
+        self.assertNotIn("Selecting a personal base currency records your preferred reference currency", html_c)
+        self.assertContains(resp_c, "Currency preferences")
+
+        # Settings
+        resp_s = self.client.get(reverse("accounts:settings"))
+        html_s = resp_s.content.decode("utf-8")
+        self.assertNotIn("Manage your profile display name, time zone", html_s)
+        self.assertContains(resp_s, "Profile")
+
+    def test_typography_system_rules(self):
+        """Verify global typography CSS rules enforce sans-serif font stack and tabular numerals."""
+        import pathlib
+        from django.conf import settings
+        app_css_path = pathlib.Path(settings.BASE_DIR) / "static" / "css" / "app.css"
+        css_text = app_css_path.read_text(encoding="utf-8")
+        self.assertIn("--app-font-sans:", css_text)
+        self.assertIn("font-variant-numeric: tabular-nums", css_text)
+        self.assertIn("font-feature-settings: \"tnum\" 1", css_text)
+
+    def test_standardized_summary_cards_across_views(self):
+        """All pages with summary/metric cards follow the 4-part structure: label, value, footer with dot, and icon-box."""
+        self.client.force_login(self.user)
+
+        # 1. Budgets
+        resp_b = self.client.get(reverse("budgets:budgets"))
+        self.assertEqual(resp_b.status_code, 200)
+        self.assertContains(resp_b, "stationery-summary-card")
+        self.assertContains(resp_b, "summary-card-label")
+        self.assertContains(resp_b, "summary-card-icon-box")
+        self.assertContains(resp_b, "summary-card-footer")
+        self.assertContains(resp_b, "summary-card-dot")
+
+        # 2. Reports
+        resp_r = self.client.get(reverse("budgets:reports"))
+        self.assertEqual(resp_r.status_code, 200)
+        self.assertContains(resp_r, "stationery-summary-card")
+        self.assertContains(resp_r, "summary-card-label")
+        self.assertContains(resp_r, "summary-card-icon-box")
+        self.assertContains(resp_r, "summary-card-footer")
+        self.assertContains(resp_r, "summary-card-dot")
+
+        # 3. Transactions
+        resp_t = self.client.get(reverse("budgets:transactions"))
+        self.assertEqual(resp_t.status_code, 200)
+        self.assertContains(resp_t, "tx-summary-card")
+        self.assertContains(resp_t, "summary-card-label")
+        self.assertContains(resp_t, "summary-card-icon-box")
+        self.assertContains(resp_t, "summary-card-footer")
+        self.assertContains(resp_t, "summary-card-dot")
+
+        # 4. Dashboard
+        resp_d = self.client.get(reverse("budgets:dashboard"))
+        self.assertEqual(resp_d.status_code, 200)
+        self.assertContains(resp_d, "summary-strip-card")
+        self.assertContains(resp_d, "summary-card-label")
+        self.assertContains(resp_d, "summary-card-icon-box")
+        self.assertContains(resp_d, "summary-card-footer")
+        self.assertContains(resp_d, "summary-card-dot")
 
 
+class PageConsolidationAndNavigationHubTests(TestCase):
+    def setUp(self):
+        from .models import SharedSpace, SharedSpaceMembership
 
+        self.password = "Str0ng!Password#2026"
+        self.user = User.objects.create_user(username="hub_tester", password=self.password)
+        self.partner = User.objects.create_user(username="hub_partner", password=self.password)
+        self.stranger = User.objects.create_user(username="hub_stranger", password=self.password)
+        self.client.force_login(self.user)
+
+        self.usd, _ = Currency.objects.get_or_create(
+            code="USD",
+            defaults={"name": "US Dollar", "decimal_places": 2, "is_active": True},
+        )
+        self.php, _ = Currency.objects.get_or_create(
+            code="PHP",
+            defaults={"name": "Philippine Peso", "decimal_places": 2, "is_active": True},
+        )
+
+        # Create space for user and partner
+        self.space = SharedSpace.objects.create(
+            name="Household Treasury",
+            base_currency=self.usd,
+            created_by=self.user,
+        )
+        SharedSpaceMembership.objects.create(
+            shared_space=self.space,
+            user=self.user,
+            role=SharedSpaceMembership.Role.CREATOR,
+            is_active=True,
+        )
+        SharedSpaceMembership.objects.create(
+            shared_space=self.space,
+            user=self.partner,
+            role=SharedSpaceMembership.Role.MEMBER,
+            is_active=True,
+        )
+
+        # Stranger's private space
+        self.stranger_space = SharedSpace.objects.create(
+            name="Secret Fortress",
+            base_currency=self.usd,
+            created_by=self.stranger,
+        )
+        SharedSpaceMembership.objects.create(
+            shared_space=self.stranger_space,
+            user=self.stranger,
+            role=SharedSpaceMembership.Role.CREATOR,
+            is_active=True,
+        )
+
+    def test_sidebar_consolidation(self):
+        """Verify sidebar no longer shows Shared Activity, Reports, or Currencies as primary pages."""
+        resp = self.client.get(reverse("budgets:dashboard"))
+        html = resp.content.decode("utf-8")
+
+        sidebar_start = html.find('id="appSidebar"')
+        sidebar_end = html.find('</aside>', sidebar_start)
+        sidebar_html = html[sidebar_start:sidebar_end] if sidebar_start != -1 and sidebar_end != -1 else html
+
+        # Removed primary sidebar items
+        self.assertNotIn('href="/shared-activity/"', sidebar_html)
+        self.assertNotIn('href="/reports/"', sidebar_html)
+        self.assertNotIn('href="/currencies/"', sidebar_html)
+
+        # Retained primary sidebar items
+        self.assertIn(reverse("budgets:dashboard"), sidebar_html)
+        self.assertIn(reverse("budgets:transactions"), sidebar_html)
+        self.assertIn(reverse("budgets:budgets"), sidebar_html)
+        self.assertIn(reverse("budgets:shared_space"), sidebar_html)
+        self.assertIn(reverse("budgets:wallets"), sidebar_html)
+        self.assertIn(reverse("budgets:savings_goals"), sidebar_html)
+        self.assertIn(reverse("accounts:settings"), sidebar_html)
+
+        # Dashboard sidebar item is active when viewing /reports/
+        resp_reports = self.client.get(reverse("budgets:reports"))
+        html_reports = resp_reports.content.decode("utf-8")
+        self.assertIn('title="Dashboard"', html_reports)
+        self.assertIn('href="/"\n                        class="nav-link sidebar-nav-link active"', html_reports.replace("\r\n", "\n"))
+
+        # Shared Space sidebar item is active when viewing /shared-activity/ and /sharing-privacy/
+        resp_sa = self.client.get(reverse("budgets:shared_activity"))
+        self.assertContains(resp_sa, 'title="Shared Space"')
+        self.assertIn('href="/shared-space/"\n                        class="nav-link sidebar-nav-link active"', resp_sa.content.decode("utf-8").replace("\r\n", "\n"))
+
+        resp_sp = self.client.get(reverse("budgets:sharing_privacy"))
+        self.assertContains(resp_sp, 'title="Shared Space"')
+        self.assertIn('href="/shared-space/"\n                        class="nav-link sidebar-nav-link active"', resp_sp.content.decode("utf-8").replace("\r\n", "\n"))
+
+        # Settings sidebar item is active when viewing /currencies/
+        resp_curr = self.client.get(reverse("budgets:currencies"))
+        self.assertContains(resp_curr, 'title="Settings"')
+        self.assertIn('href="/accounts/settings/"\n                        class="nav-link sidebar-nav-link active"', resp_curr.content.decode("utf-8").replace("\r\n", "\n"))
+
+    def test_shared_space_hub_tabs_and_authorization(self):
+        """Verify Shared Space hub tabs, selected-space preservation, and membership isolation."""
+        # 1. Overview tab
+        resp_overview = self.client.get(reverse("budgets:shared_space") + f"?space={self.space.id}")
+        self.assertEqual(resp_overview.status_code, 200)
+        self.assertContains(resp_overview, "Household Treasury")
+        self.assertContains(resp_overview, "id=\"tab-shared-overview\"")
+        self.assertContains(resp_overview, "id=\"tab-shared-activity\"")
+        self.assertContains(resp_overview, "id=\"tab-shared-privacy\"")
+        self.assertContains(resp_overview, "nav-link settings-nav-link active")
+
+        # 2. Activity tab via legacy URL
+        resp_act = self.client.get(reverse("budgets:shared_activity") + f"?space={self.space.id}")
+        self.assertEqual(resp_act.status_code, 200)
+        self.assertContains(resp_act, "Household Treasury")
+        self.assertContains(resp_act, "id=\"tab-shared-activity\"")
+        self.assertContains(resp_act, "id=\"sharedSpaceTabs\"")
+
+        # 3. Privacy tab via legacy URL
+        resp_priv = self.client.get(reverse("budgets:sharing_privacy") + f"?space={self.space.id}")
+        self.assertEqual(resp_priv.status_code, 200)
+        self.assertContains(resp_priv, "Household Treasury")
+        self.assertContains(resp_priv, "id=\"tab-shared-privacy\"")
+        self.assertContains(resp_priv, "id=\"sharedSpaceTabs\"")
+
+        # 4. Tab query param delegation on /shared-space/
+        resp_tab_act = self.client.get(reverse("budgets:shared_space") + f"?tab=activity&space={self.space.id}")
+        self.assertEqual(resp_tab_act.status_code, 200)
+        self.assertContains(resp_tab_act, "id=\"tab-shared-activity\"")
+
+        resp_tab_priv = self.client.get(reverse("budgets:shared_space") + f"?tab=privacy&space={self.space.id}")
+        self.assertEqual(resp_tab_priv.status_code, 200)
+        self.assertContains(resp_tab_priv, "id=\"tab-shared-privacy\"")
+
+        # 5. Non-member cannot manipulate or view stranger's private space
+        resp_stranger = self.client.get(reverse("budgets:shared_space") + f"?space={self.stranger_space.id}")
+        self.assertEqual(resp_stranger.status_code, 200)
+        self.assertNotContains(resp_stranger, "Secret Fortress")
+
+    def test_settings_currency_tab_and_legacy_compatibility(self):
+        """Verify Settings Currency tab behavior, forms, validation, and /currencies/ compatibility."""
+        # 1. Settings page has Currency tab
+        resp_settings = self.client.get(reverse("accounts:settings"))
+        self.assertEqual(resp_settings.status_code, 200)
+        self.assertContains(resp_settings, "id=\"currency-tab\"")
+        self.assertContains(resp_settings, "id=\"tab-currency\"")
+        self.assertContains(resp_settings, "Currency preferences")
+        self.assertContains(resp_settings, "Currency converter")
+        self.assertContains(resp_settings, "Supported currencies")
+        self.assertContains(resp_settings, "Exchange-rate provider")
+
+        # 2. Direct /currencies/ renders Settings with Currency tab active
+        resp_curr = self.client.get(reverse("budgets:currencies"))
+        self.assertEqual(resp_curr.status_code, 200)
+        self.assertContains(resp_curr, "id=\"tab-currency\"")
+        self.assertContains(resp_curr, "Currency preferences")
+        self.assertContains(resp_curr, "Currency converter")
+
+        # 3. Currency POST saves base currency and redirects
+        save_resp = self.client.post(
+            reverse("budgets:currencies"),
+            {"action": "save_base_currency", "personal_base_currency": self.php.pk},
+            follow=True,
+        )
+        self.assertEqual(save_resp.status_code, 200)
+        pref = UserPreference.objects.get(user=self.user)
+        self.assertEqual(pref.personal_base_currency, self.php)
+
+    def test_dashboard_hub_reports_tab_and_legacy_compatibility(self):
+        """Verify Dashboard Hub Overview and Reports tabs, exports, and query compatibility."""
+        # 1. Dashboard Overview
+        resp_dash = self.client.get(reverse("budgets:dashboard"))
+        self.assertEqual(resp_dash.status_code, 200)
+        self.assertContains(resp_dash, "id=\"dashboardHubTabs\"")
+        self.assertContains(resp_dash, "id=\"tab-dashboard-overview\"")
+        self.assertContains(resp_dash, "id=\"tab-dashboard-reports\"")
+
+        # 2. Reports direct URL
+        resp_rep = self.client.get(reverse("budgets:reports") + "?start_date=2026-10-01&end_date=2026-10-31")
+        self.assertEqual(resp_rep.status_code, 200)
+        self.assertContains(resp_rep, "id=\"dashboardHubTabs\"")
+        self.assertContains(resp_rep, "Report controls")
+        self.assertContains(resp_rep, "value=\"2026-10-01\"")
+        self.assertContains(resp_rep, "value=\"2026-10-31\"")
+        self.assertContains(resp_rep, "format=csv")
+        self.assertContains(resp_rep, "format=json")
+
+        # 3. Delegation via ?tab=reports on /
+        resp_tab_rep = self.client.get(reverse("budgets:dashboard") + "?tab=reports")
+        self.assertEqual(resp_tab_rep.status_code, 200)
+        self.assertContains(resp_tab_rep, "Report controls")
+
+
+import urllib.parse
+from datetime import timedelta
+from .models import SharedSpaceInvitation, SharedSpaceMembership
+from .services import (
+    accept_shared_space_invitation,
+    create_shared_space,
+    create_shared_space_invitation,
+    revoke_shared_space_invitation,
+)
+
+
+class SharedSpaceInvitationV2Tests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.usd, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "decimal_places": 2})
+        self.owner = User.objects.create_user(username="owner_user", password="Password123!")
+        self.joiner = User.objects.create_user(username="joiner_user", password="Password123!")
+        self.third_user = User.objects.create_user(username="third_user", password="Password123!")
+
+        self.space = create_shared_space(user=self.owner, name="Family Treasury", base_currency=self.usd)
+        self.client_owner = Client()
+        self.client_owner.force_login(self.owner)
+
+        self.client_joiner = Client()
+        self.client_joiner.force_login(self.joiner)
+
+    def tearDown(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_code_generation_alphabet_length_uniqueness(self):
+        """Generated codes are 6 characters, from INVITATION_ALPHABET (no 0, O, 1, I, L, U), and unique."""
+        from .services import INVITATION_ALPHABET, generate_invitation_code
+
+        disallowed = set("0O1ILU")
+        codes = set()
+        for _ in range(50):
+            code = generate_invitation_code()
+            self.assertEqual(len(code), 6)
+            for ch in code:
+                self.assertIn(ch, INVITATION_ALPHABET)
+                self.assertNotIn(ch, disallowed)
+            codes.add(code)
+        self.assertEqual(len(codes), 50)
+
+    def test_typed_redemption_with_lowercase_spaces_hyphens(self):
+        """Redeeming a code formatted with lowercase, spaces, or hyphens successfully normalizes and joins."""
+        inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        raw = inv.code  # e.g. ABC234
+        formatted_inputs = [
+            raw.lower(),
+            f"{raw[:3]}-{raw[3:]}".lower(),
+            f" {raw[:2]} - {raw[2:4]} - {raw[4:]} ",
+            f"{raw[:3]}   {raw[3:]}".lower(),
+        ]
+        for idx, typed in enumerate(formatted_inputs):
+            # Clean up active membership for joiner between tests
+            SharedSpaceMembership.objects.filter(shared_space=self.space, user=self.joiner).delete()
+            inv.status = SharedSpaceInvitation.Status.PENDING
+            inv.accepted_by = None
+            inv.save(update_fields=["status", "accepted_by"])
+
+            resp = self.client_joiner.post(
+                reverse("budgets:shared_space"),
+                {"action": "accept_invitation", "code": typed},
+                follow=True,
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertTrue(
+                SharedSpaceMembership.objects.filter(shared_space=self.space, user=self.joiner, is_active=True).exists(),
+                f"Failed to join with typed input: {typed!r}",
+            )
+
+    def test_link_redemption_requires_login_and_preserves_code(self):
+        """GET on join link requires login and preserves the code parameter through next."""
+        inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        anon_client = Client()
+        join_url = f"{reverse('budgets:shared_space')}?code={inv.code}"
+
+        resp = anon_client.get(join_url)
+        self.assertEqual(resp.status_code, 302)
+        login_url = reverse("accounts:login")
+        self.assertTrue(resp.url.startswith(login_url))
+        self.assertIn(f"code={inv.code}", urllib.parse.unquote(resp.url))
+
+        # After logging in, visiting the URL shows the confirmation prompt
+        resp_confirm = self.client_joiner.get(join_url)
+        self.assertEqual(resp_confirm.status_code, 200)
+        self.assertContains(resp_confirm, f"Join {self.owner.username}'s shared space?")
+        self.assertContains(resp_confirm, "Family Treasury")
+        self.assertContains(resp_confirm, inv.formatted_code)
+
+    def test_get_never_joins_post_joins(self):
+        """GET request on join URL never mutates data; only POST with CSRF joins."""
+        inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        join_url = f"{reverse('budgets:shared_space')}?code={inv.code}"
+
+        # GET request
+        resp_get = self.client_joiner.get(join_url)
+        self.assertEqual(resp_get.status_code, 200)
+        inv.refresh_from_db()
+        self.assertEqual(inv.status, SharedSpaceInvitation.Status.PENDING)
+        self.assertFalse(
+            SharedSpaceMembership.objects.filter(shared_space=self.space, user=self.joiner).exists()
+        )
+
+        # POST request
+        resp_post = self.client_joiner.post(
+            reverse("budgets:shared_space"),
+            {"action": "accept_invitation", "code": inv.code},
+            follow=True,
+        )
+        self.assertEqual(resp_post.status_code, 200)
+        inv.refresh_from_db()
+        self.assertEqual(inv.status, SharedSpaceInvitation.Status.ACCEPTED)
+        self.assertEqual(inv.accepted_by, self.joiner)
+        self.assertTrue(
+            SharedSpaceMembership.objects.filter(shared_space=self.space, user=self.joiner, is_active=True).exists()
+        )
+
+    def test_expired_used_revoked_invalid_give_same_message(self):
+        """Invalid, expired, used, and revoked codes all give the exact same generic error message."""
+        from .services import INVITATION_ERROR_MESSAGE
+
+        # 1. Invalid code
+        resp_inv = self.client_joiner.post(
+            reverse("budgets:shared_space"),
+            {"action": "accept_invitation", "code": "ZZZZZZ"},
+            follow=True,
+        )
+        self.assertContains(resp_inv, INVITATION_ERROR_MESSAGE)
+
+        # 2. Expired code
+        inv_exp = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        inv_exp.expires_at = timezone.now() - timedelta(minutes=5)
+        inv_exp.save(update_fields=["expires_at"])
+        resp_exp = self.client_joiner.post(
+            reverse("budgets:shared_space"),
+            {"action": "accept_invitation", "code": inv_exp.code},
+            follow=True,
+        )
+        self.assertContains(resp_exp, INVITATION_ERROR_MESSAGE)
+
+        # 3. Revoked code
+        inv_rev = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        revoke_shared_space_invitation(user=self.owner, invitation=inv_rev)
+        resp_rev = self.client_joiner.post(
+            reverse("budgets:shared_space"),
+            {"action": "accept_invitation", "code": inv_rev.code},
+            follow=True,
+        )
+        self.assertContains(resp_rev, INVITATION_ERROR_MESSAGE)
+
+        # 4. Used code
+        inv_used = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        accept_shared_space_invitation(user=self.joiner, code=inv_used.code)
+        resp_used = self.client_joiner.post(
+            reverse("budgets:shared_space"),
+            {"action": "accept_invitation", "code": inv_used.code},
+            follow=True,
+        )
+        self.assertContains(resp_used, INVITATION_ERROR_MESSAGE)
+
+    def test_owner_cannot_join_own_space(self):
+        """A space owner cannot join their own space."""
+        inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        resp = self.client_owner.post(
+            reverse("budgets:shared_space"),
+            {"action": "accept_invitation", "code": inv.code},
+            follow=True,
+        )
+        self.assertContains(resp, "You cannot join your own shared space.")
+
+    def test_single_use_under_repeated_submissions(self):
+        """An invitation code can only be used once; subsequent attempts fail."""
+        inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        # First use by joiner
+        resp1 = self.client_joiner.post(
+            reverse("budgets:shared_space"),
+            {"action": "accept_invitation", "code": inv.code},
+            follow=True,
+        )
+        self.assertEqual(resp1.status_code, 200)
+
+        # Second use by third user
+        client_third = Client()
+        client_third.force_login(self.third_user)
+        resp2 = client_third.post(
+            reverse("budgets:shared_space"),
+            {"action": "accept_invitation", "code": inv.code},
+            follow=True,
+        )
+        self.assertContains(resp2, "This code is invalid or has expired.")
+
+    def test_rate_limit_lockout_after_five_failures(self):
+        """Five failed redemption attempts result in a 15-minute lockout."""
+        from .services import INVITATION_LOCKOUT_MESSAGE
+
+        for i in range(5):
+            resp = self.client_joiner.post(
+                reverse("budgets:shared_space"),
+                {"action": "accept_invitation", "code": f"BAD00{i}"},
+                follow=True,
+            )
+            self.assertEqual(resp.status_code, 200)
+
+        # 6th attempt should trigger lockout
+        resp6 = self.client_joiner.post(
+            reverse("budgets:shared_space"),
+            {"action": "accept_invitation", "code": "BAD999"},
+            follow=True,
+        )
+        self.assertContains(resp6, INVITATION_LOCKOUT_MESSAGE)
+
+    def test_max_five_active_invitations(self):
+        """An owner can have at most 5 active invitations; 6th raises error."""
+        invites = []
+        for i in range(5):
+            inv = create_shared_space_invitation(user=self.owner, shared_space=self.space, partner_hint=f"note {i}")
+            invites.append(inv)
+
+        with self.assertRaises(ValidationError) as ctx:
+            create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        self.assertIn("limit of 5 active invitations", str(ctx.exception))
+
+        # Revoking one allows creating another
+        revoke_shared_space_invitation(user=self.owner, invitation=invites[0])
+        new_inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        self.assertIsNotNone(new_inv)
+
+    def test_qr_svg_present_and_contains_join_url(self):
+        """Pending invitation renders an inline SVG QR code and contains the join URL."""
+        inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        resp = self.client_owner.get(reverse("budgets:shared_space"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, f'<div id="qr-svg-{inv.id}" class="d-none">')
+        self.assertContains(resp, '<svg role="img"')
+        self.assertContains(resp, 'width="246"')
+        self.assertContains(resp, f'data-raw-code="{inv.code}"')
+        self.assertContains(resp, f'data-qr-code="{inv.formatted_code}"')
+        self.assertContains(resp, f'/shared-space/?code={inv.code}')
+
+    def test_legacy_long_codes_still_redeem(self):
+        """Legacy 32-character codes can still be redeemed until expiration."""
+        legacy_code = "9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c"
+        legacy_inv = SharedSpaceInvitation.objects.create(
+            shared_space=self.space,
+            code=legacy_code,
+            created_by=self.owner,
+            status=SharedSpaceInvitation.Status.PENDING,
+            expires_at=timezone.now() + timedelta(days=2),
+        )
+        resp = self.client_joiner.post(
+            reverse("budgets:shared_space"),
+            {"action": "accept_invitation", "code": legacy_code},
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        legacy_inv.refresh_from_db()
+        self.assertEqual(legacy_inv.status, SharedSpaceInvitation.Status.ACCEPTED)
+
+    def test_revoke_still_works(self):
+        """Revoking a pending invitation marks it revoked."""
+        inv = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        resp = self.client_owner.post(
+            reverse("budgets:shared_space"),
+            {"action": "revoke_invitation", "invitation_id": inv.id},
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        inv.refresh_from_db()
+        self.assertEqual(inv.status, SharedSpaceInvitation.Status.REVOKED)

@@ -1,49 +1,88 @@
 {% extends "base.html" %}
 
-{% block title %}Sharing &amp; Privacy | Jubao{% endblock %}
+{% block title %}Sharing &amp; Privacy | Jubao</div>
+{% endblock %}
 
 {% block content %}
-<div class="mb-4">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-        <div>
-            <p class="text-secondary mb-1">
-                Manage personal balance disclosures and view your transaction-sharing grants for your shared spaces.
-            </p>
-            <p class="small text-muted mb-0">
-                You control only your own disclosures. Membership in a space never reveals personal data by default.
-            </p>
-        </div>
+<div class="shared-space-stationery pb-4">
+    <!-- Context Row -->
+    <div class="sp-breadcrumbs mb-2.5">
+        <span>Shared Space</span>
+        <span>/</span>
+        <span class="d-inline-flex align-items-center gap-1.5 fw-semibold text-navy">
+            <span class="sp-breadcrumb-dot"></span>
+            {{ selected_space.name|default:"Privacy & sharing" }}
+        </span>
         {% if selected_space %}
-        <a href="{% url 'budgets:shared_activity' %}?space={{ selected_space.id }}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-arrow-left me-1"></i> Back to Shared Activity
-        </a>
+        <span class="sp-badge-id">Base: {{ selected_space.base_currency.code }}</span>
         {% endif %}
     </div>
 
-    {% if active_spaces %}
-    <div class="card bg-light border-0 p-3 mb-4">
-        <form method="get" action="{% url 'budgets:sharing_privacy' %}" class="row g-2 align-items-center">
-            <div class="col-auto">
-                <label for="privacy-space-select" class="form-label small fw-semibold mb-0">Shared space:</label>
-            </div>
-            <div class="col-auto">
-                <select name="space" id="privacy-space-select" class="form-select form-select-sm" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
-                    {% for sp in active_spaces %}
-                    <option value="{{ sp.id }}" {% if selected_space and selected_space.id == sp.id %}selected{% endif %}>
-                        {{ sp.name }} ({{ sp.base_currency.code }})
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
+    {% if selected_space %}
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        {% if active_spaces %}
+        <form method="get" action="{% url 'budgets:sharing_privacy' %}" class="d-flex align-items-center gap-2 m-0" id="shared-space-hub-switch-form">
+            <label for="privacy-space-select" class="form-label small fw-semibold mb-0 text-muted">Space:</label>
+            <select name="space" id="privacy-space-select" class="form-select form-select-sm" style="min-width: 170px;" onchange="this.form.submit()">
+                {% for sp in active_spaces %}
+                <option value="{{ sp.id }}" {% if selected_space and selected_space.id == sp.id %}selected{% endif %}>
+                    {{ sp.name }} ({{ sp.base_currency.code }})
+                </option>
+                {% endfor %}
+            </select>
             {% if partner %}
-            <div class="col-auto ms-sm-auto small text-secondary">
+            <span class="small text-secondary ms-2 d-none d-sm-inline">
                 Partner: <strong class="text-dark">{{ partner.username }}</strong>
-            </div>
+            </span>
             {% endif %}
         </form>
+        {% endif %}
+
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <a href="{% url 'budgets:transactions' %}?scope=shared" class="btn btn-navy-primary btn-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>Add shared transaction</span>
+            </a>
+        </div>
     </div>
     {% endif %}
-</div>
+
+    <!-- Contextual Tabs for Shared Space Hub -->
+    <ul class="nav nav-tabs settings-nav-tabs mb-4" id="sharedSpaceTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <a
+                class="nav-link settings-nav-link"
+                id="tab-shared-overview"
+                href="{% url 'budgets:shared_space' %}{% if selected_space %}?space={{ selected_space.id }}{% endif %}"
+                role="tab"
+                aria-selected="false"
+            >
+                Overview
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a
+                class="nav-link settings-nav-link"
+                id="tab-shared-activity"
+                href="{% url 'budgets:shared_activity' %}{% if selected_space %}?space={{ selected_space.id }}{% endif %}"
+                role="tab"
+                aria-selected="false"
+            >
+                Activity
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a
+                class="nav-link settings-nav-link active"
+                id="tab-shared-privacy"
+                href="{% url 'budgets:sharing_privacy' %}{% if selected_space %}?space={{ selected_space.id }}{% endif %}"
+                role="tab"
+                aria-selected="true"
+            >
+                Privacy &amp; sharing
+            </a>
+        </li>
+    </ul>
 
 {% if not active_spaces %}
 <section class="dashboard-panel p-4 text-center text-secondary mb-4" aria-labelledby="privacy-no-space-heading">
@@ -339,4 +378,5 @@
     </div>
 </section>
 {% endif %}
+</div>
 {% endblock %}

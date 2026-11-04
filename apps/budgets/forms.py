@@ -309,24 +309,36 @@ class SharedSpaceForm(forms.Form):
 
 
 class SharedSpaceInvitationForm(forms.Form):
+    EXPIRY_1_HOUR = "1h"
+    EXPIRY_24_HOURS = "24h"
+    EXPIRY_7_DAYS = "7d"
+    EXPIRY_CHOICES = [
+        (EXPIRY_1_HOUR, "1 hour"),
+        (EXPIRY_24_HOURS, "24 hours (default)"),
+        (EXPIRY_7_DAYS, "7 days"),
+    ]
+
     partner_hint = forms.CharField(
         max_length=100,
         required=False,
-        label="Partner username or note (optional)",
+        label="Partner note or hint (optional)",
         widget=forms.TextInput(
             attrs={
                 "class": "form-control form-control-sm",
-                "placeholder": "Partner username or note",
+                "placeholder": "Partner note or hint",
             }
         ),
     )
-    expires_in_days = forms.IntegerField(
-        min_value=1,
-        max_value=30,
-        initial=7,
+    expiry = forms.ChoiceField(
+        choices=EXPIRY_CHOICES,
+        initial=EXPIRY_24_HOURS,
         required=False,
-        label="Expires in (days)",
-        widget=forms.NumberInput(attrs={"class": "form-control form-control-sm"}),
+        label="Expires",
+        widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
+    )
+    expires_in_days = forms.IntegerField(
+        required=False,
+        widget=forms.HiddenInput(),
     )
 
 
@@ -336,9 +348,10 @@ class AcceptInvitationForm(forms.Form):
         label="Invitation code",
         widget=forms.TextInput(
             attrs={
-                "class": "form-control form-control-sm font-monospace",
-                "placeholder": "Paste single-use invitation code",
+                "class": "form-control form-control-lg font-monospace text-center fs-4",
+                "placeholder": "XXX-XXX",
                 "autocomplete": "off",
+                "autocapitalize": "characters",
             }
         ),
     )

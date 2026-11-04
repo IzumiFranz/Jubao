@@ -3,11 +3,33 @@
 {% block title %}Reports | Jubao{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
-    <p class="text-secondary mb-0">
-        Reports summarize your manually recorded income and spending across personal and shared records. Wallet-to-wallet transfers are excluded from income and expense totals.
-    </p>
-    <div class="d-flex flex-wrap gap-2">
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <ul class="nav nav-tabs settings-nav-tabs mb-0 border-bottom-0" id="dashboardHubTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <a
+                class="nav-link settings-nav-link"
+                id="tab-dashboard-overview"
+                href="{% url 'budgets:dashboard' %}"
+                role="tab"
+                aria-selected="false"
+            >
+                Overview
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a
+                class="nav-link settings-nav-link active"
+                id="tab-dashboard-reports"
+                href="{% url 'budgets:reports' %}"
+                role="tab"
+                aria-selected="true"
+            >
+                Reports
+            </a>
+        </li>
+    </ul>
+
+    <div class="d-flex align-items-center gap-2">
         <a
             href="{% url 'budgets:export_transactions' %}?format=csv&amp;{{ request.GET.urlencode }}"
             class="btn btn-outline-secondary btn-sm"
@@ -88,50 +110,68 @@
     <h2 id="reports-summary-heading" class="visually-hidden">Report Summary</h2>
     <div class="row g-3">
         <div class="col-12 col-md-4">
-            <div class="summary-card p-3 h-100">
-                <p class="text-secondary small fw-medium mb-1">Income</p>
-                <p class="summary-value mb-1">
+            <div class="stationery-summary-card summary-card h-100">
+                <div class="summary-card-header">
+                    <span class="summary-card-label">Income</span>
+                    <div class="summary-card-icon-box" aria-hidden="true">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                    </div>
+                </div>
+                <div class="summary-card-value summary-value">
                     {% if summary.is_complete and target_currency %}
                         {{ summary.formatted_income }} {{ target_currency.code }}
                     {% else %}
                         —
                     {% endif %}
-                </p>
-                <p class="text-secondary small mb-0">
-                    {% if summary.is_complete %}Recorded period income{% else %}Requires reporting currency &amp; complete conversion{% endif %}
-                </p>
+                </div>
+                <div class="summary-card-footer">
+                    <span class="summary-card-dot" aria-hidden="true"></span>
+                    <span>{% if summary.is_complete %}Recorded period income{% else %}Requires reporting currency &amp; complete conversion{% endif %}</span>
+                </div>
             </div>
         </div>
 
         <div class="col-12 col-md-4">
-            <div class="summary-card p-3 h-100">
-                <p class="text-secondary small fw-medium mb-1">Expenses</p>
-                <p class="summary-value mb-1">
+            <div class="stationery-summary-card summary-card h-100">
+                <div class="summary-card-header">
+                    <span class="summary-card-label">Expenses</span>
+                    <div class="summary-card-icon-box" aria-hidden="true">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>
+                    </div>
+                </div>
+                <div class="summary-card-value summary-value">
                     {% if summary.is_complete and target_currency %}
                         {{ summary.formatted_expense }} {{ target_currency.code }}
                     {% else %}
                         —
                     {% endif %}
-                </p>
-                <p class="text-secondary small mb-0">
-                    {% if summary.is_complete %}Recorded period expenses{% else %}Requires reporting currency &amp; complete conversion{% endif %}
-                </p>
+                </div>
+                <div class="summary-card-footer">
+                    <span class="summary-card-dot" aria-hidden="true"></span>
+                    <span>{% if summary.is_complete %}Recorded period expenses{% else %}Requires reporting currency &amp; complete conversion{% endif %}</span>
+                </div>
             </div>
         </div>
 
         <div class="col-12 col-md-4">
-            <div class="summary-card p-3 h-100">
-                <p class="text-secondary small fw-medium mb-1">Net Income</p>
-                <p class="summary-value mb-1">
+            <div class="stationery-summary-card summary-card h-100">
+                <div class="summary-card-header">
+                    <span class="summary-card-label">Net Income</span>
+                    <div class="summary-card-icon-box" aria-hidden="true">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    </div>
+                </div>
+                <div class="summary-card-value summary-value">
                     {% if summary.is_complete and target_currency %}
                         {{ summary.formatted_net_income }} {{ target_currency.code }}
                     {% else %}
                         —
                     {% endif %}
-                </p>
-                <p class="text-secondary small mb-0">
-                    Income minus expenses for the selected period (not total wallet balance)
-                </p>
+                </div>
+                <div class="summary-card-footer">
+                    <span class="summary-card-dot" aria-hidden="true"></span>
+                    <span>{% if summary.is_complete %}Period income minus expenses{% else %}Requires reporting currency &amp; complete conversion{% endif %}</span>
+                </div>
             </div>
         </div>
     </div>

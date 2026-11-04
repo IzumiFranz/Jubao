@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import Sum
+from django.utils import timezone
 
 
 currency_code_validator = RegexValidator(
@@ -240,6 +241,57 @@ class SharedSpaceInvitation(models.Model):
 
     def __str__(self):
         return f"Invite {self.code[:8]}... ({self.get_status_display()})"
+
+    @property
+    def formatted_code(self) -> str:
+        if len(self.code) == 6:
+            return f"{self.code[:3]}-{self.code[3:]}"
+        return self.code
+
+    @property
+    def accessible_code_label(self) -> str:
+        if len(self.code) == 6:
+            p1 = ", ".join(list(self.code[:3]))
+            p2 = ", ".join(list(self.code[3:]))
+            return f"{p1}, hyphen, {p2}"
+        return ", ".join(list(self.code))
+
+    @property
+    def is_expired(self) -> bool:
+        return self.status == self.Status.EXPIRED or (
+            self.status == self.Status.PENDING and self.expires_at <= timezone.now()
+        )
+
+    @property
+    def effective_status_display(self) -> str:
+        if self.status == self.Status.ACCEPTED:
+            return "Used"
+        if self.status == self.Status.REVOKED:
+            return "Revoked"
+        if self.is_expired:
+            return "Expired"
+        return "Pending"
+
+    @property
+    def remaining_time_display(self) -> str:
+        now = timezone.now()
+        if self.expires_at <= now or self.status in (self.Status.EXPIRED, self.Status.ACCEPTED, self.Status.REVOKED):
+            if self.status == self.Status.ACCEPTED:
+                return "Used"
+            if self.status == self.Status.REVOKED:
+                return "Revoked"
+            return "Expired"
+        diff = self.expires_at - now
+        total_seconds = int(diff.total_seconds())
+        if total_seconds < 3600:
+            minutes = max(1, total_seconds // 60)
+            return f"{minutes}m remaining"
+        elif total_seconds < 86400:
+            hours = total_seconds // 3600
+            return f"{hours}h remaining"
+        else:
+            days = total_seconds // 86400
+            return f"{days}d remaining" 
 
 
 class Wallet(models.Model):

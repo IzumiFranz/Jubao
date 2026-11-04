@@ -458,6 +458,70 @@ class AccountSettingsAndRateLimitTests(TestCase):
         self.assertEqual(json_resp.status_code, 200)
         self.assertEqual(json_resp["Content-Type"], "application/json; charset=utf-8")
 
+    def test_settings_redesign_layout_navigation_and_form_controls(self):
+        """Verify settings page uses stationery design, horizontal tabs, and preserves all controls."""
+        self.client.force_login(self.user)
+        resp = self.client.get(self.settings_url)
+        self.assertEqual(resp.status_code, 200)
+
+        # Header and Save button
+        self.assertContains(resp, "<h1 class=\"h4 fw-bold text-navy mb-0\">Settings</h1>")
+        self.assertContains(resp, "id=\"btn-header-save\"")
+        self.assertContains(resp, "Save profile")
+
+        # Horizontal navigation tabs for real Jubao settings sections
+        self.assertContains(resp, "id=\"settingsTabs\"")
+        self.assertContains(resp, "id=\"profile-tab\"")
+        self.assertContains(resp, "Account &amp; Profile")
+        self.assertContains(resp, "id=\"preferences-tab\"")
+        self.assertContains(resp, "Preferences")
+        self.assertContains(resp, "id=\"security-tab\"")
+        self.assertContains(resp, "Security")
+        self.assertContains(resp, "id=\"shared-space-tab\"")
+        self.assertContains(resp, "Shared Space")
+        self.assertContains(resp, "id=\"data-sync-tab\"")
+        self.assertContains(resp, "Data &amp; Sync")
+
+        # Stationery primary card panel
+        self.assertContains(resp, "settings-primary-panel")
+        self.assertContains(resp, "dashboard-panel")
+        self.assertContains(resp, "stationery-panel")
+
+        # Preserved form fields and IDs
+        self.assertContains(resp, "id=\"settings-profile-heading\"")
+        self.assertContains(resp, "id=\"settings-display-name\"")
+        self.assertContains(resp, "id=\"profile-email\"")
+        self.assertContains(resp, "id=\"settings-preferences-heading\"")
+        self.assertContains(resp, "id=\"settings-timezone\"")
+        self.assertContains(resp, "id=\"settings-week-start\"")
+        self.assertContains(resp, "id=\"settings-security-heading\"")
+        self.assertContains(resp, "id=\"settings-shared-space-heading\"")
+        self.assertContains(resp, "id=\"settings-data-export-heading\"")
+        self.assertContains(resp, "id=\"settings-offline-sync-heading\"")
+        self.assertContains(resp, "id=\"btn-settings-sync\"")
+        self.assertContains(resp, "id=\"settings-last-sync-note\"")
+
+        # Action links preserved
+        self.assertContains(resp, reverse("accounts:password_change"))
+        self.assertContains(resp, reverse("budgets:currencies"))
+        self.assertContains(resp, reverse("budgets:sharing_privacy"))
+        self.assertContains(resp, reverse("budgets:shared_space"))
+        self.assertContains(resp, f"{self.export_url}?format=csv")
+        self.assertContains(resp, f"{self.export_url}?format=json")
+
+        # Validation error shifts active tab to Preferences and updates header save button
+        invalid_pref_resp = self.client.post(
+            self.settings_url,
+            {
+                "action": "save_preferences",
+                "timezone": "Invalid/Timezone_Name",
+                "week_starts_on": 999,
+            },
+        )
+        self.assertEqual(invalid_pref_resp.status_code, 200)
+        self.assertContains(invalid_pref_resp, "Save preferences")
+        self.assertContains(invalid_pref_resp, "Select a valid choice")
+
 
 class TopBarScopeAndViewControlsTests(TestCase):
     def setUp(self):
@@ -812,7 +876,7 @@ class AuthenticationPageLayoutAndAccessibilityTests(TestCase):
         # Mockup art and overlay layout
         self.assertIn("auth-page-container", html)
         self.assertIn("auth-card-wrapper", html)
-        self.assertIn('src="/static/images/auth/jubao_auth_art.svg"', html)
+        self.assertIn('src="/static/images/auth/jubao_auth_art.webp"', html)
         self.assertIn('alt=""', html)
         self.assertIn("auth-form-overlay", html)
         self.assertIn("auth-form-column", html)
@@ -854,7 +918,7 @@ class AuthenticationPageLayoutAndAccessibilityTests(TestCase):
         self.assertNotIn("auth-back-link", html)
 
         # Art and heading
-        self.assertIn('src="/static/images/auth/jubao_auth_art.svg"', html)
+        self.assertIn('src="/static/images/auth/jubao_auth_art.webp"', html)
         self.assertIn("SIGN UP", html)
         self.assertIn("to track your budget &amp; gather treasure", html)
 

@@ -3,173 +3,722 @@
 {% block title %}Settings | Jubao{% endblock %}
 
 {% block content %}
-<p class="text-secondary mb-4">
-    Manage your profile display name, time zone, calendar preferences, account password, and data exports.
-</p>
+<div class="settings-header-row d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+        <h1 class="h4 fw-bold text-navy mb-0">Settings</h1>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        {% if active_tab == 'currency' %}
+        <button type="submit" form="base-currency-form" id="btn-header-save" class="btn btn-primary btn-sm px-3 fw-medium">
+            Save base currency
+        </button>
+        {% elif active_tab == 'preferences' or preferences_form.errors %}
+        <button type="submit" form="preferences-form" id="btn-header-save" class="btn btn-primary btn-sm px-3 fw-medium">
+            Save preferences
+        </button>
+        {% else %}
+        <button type="submit" form="profile-form" id="btn-header-save" class="btn btn-primary btn-sm px-3 fw-medium">
+            Save profile
+        </button>
+        {% endif %}
+    </div>
+</div>
 
-<div class="row g-3 mb-4">
-    <div class="col-12 col-lg-6">
-        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-profile-heading">
-            <h2 id="settings-profile-heading" class="h6 fw-semibold mb-2">Profile</h2>
-            <p class="small text-secondary mb-3">
-                Update your display name below. Username (<strong>{{ request.user.username }}</strong>) is used for signing in.
-            </p>
+<ul class="nav nav-tabs settings-nav-tabs mb-4" id="settingsTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button
+            class="nav-link settings-nav-link{% if active_tab != 'preferences' and active_tab != 'currency' and not preferences_form.errors %} active{% endif %}"
+            id="profile-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#tab-profile"
+            type="button"
+            role="tab"
+            aria-controls="tab-profile"
+            aria-selected="{% if active_tab != 'preferences' and active_tab != 'currency' and not preferences_form.errors %}true{% else %}false{% endif %}"
+        >
+            Account &amp; Profile
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button
+            class="nav-link settings-nav-link{% if active_tab == 'preferences' or preferences_form.errors %} active{% endif %}"
+            id="preferences-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#tab-preferences"
+            type="button"
+            role="tab"
+            aria-controls="tab-preferences"
+            aria-selected="{% if active_tab == 'preferences' or preferences_form.errors %}true{% else %}false{% endif %}"
+        >
+            Preferences
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button
+            class="nav-link settings-nav-link{% if active_tab == 'currency' %} active{% endif %}"
+            id="currency-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#tab-currency"
+            type="button"
+            role="tab"
+            aria-controls="tab-currency"
+            aria-selected="{% if active_tab == 'currency' %}true{% else %}false{% endif %}"
+        >
+            Currency
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button
+            class="nav-link settings-nav-link"
+            id="security-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#tab-security"
+            type="button"
+            role="tab"
+            aria-controls="tab-security"
+            aria-selected="false"
+        >
+            Security
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button
+            class="nav-link settings-nav-link"
+            id="shared-space-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#tab-shared-space"
+            type="button"
+            role="tab"
+            aria-controls="tab-shared-space"
+            aria-selected="false"
+        >
+            Shared Space
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button
+            class="nav-link settings-nav-link"
+            id="data-sync-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#tab-data-sync"
+            type="button"
+            role="tab"
+            aria-controls="tab-data-sync"
+            aria-selected="false"
+        >
+            Data &amp; Sync
+        </button>
+    </li>
+</ul>
 
-            <form method="post" action="{% url 'accounts:settings' %}" novalidate>
+<div class="dashboard-panel stationery-panel settings-primary-panel p-3 p-md-4 p-lg-5 mb-4">
+    <div class="tab-content" id="settingsTabContent">
+        <!-- Account & Profile Tab -->
+        <div class="tab-pane fade{% if active_tab != 'preferences' and active_tab != 'currency' and not preferences_form.errors %} show active{% endif %}" id="tab-profile" role="tabpanel" aria-labelledby="profile-tab">
+            <div class="settings-section-header mb-4">
+                <h2 id="settings-profile-heading" class="h6 fw-semibold text-navy mb-1">Profile</h2>
+                <p class="small text-secondary mb-0">
+                    Update your display name below. Username (<strong>{{ request.user.username }}</strong>) is used for signing in.
+                </p>
+            </div>
+
+            <form id="profile-form" method="post" action="{% url 'accounts:settings' %}" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="action" value="save_profile">
-                <div class="mb-3">
-                    <label for="settings-display-name" class="form-label small fw-medium">Display name</label>
-                    {{ profile_form.display_name }}
-                    {% if profile_form.display_name.errors %}
-                    <div class="invalid-feedback d-block">
-                        {% for error in profile_form.display_name.errors %}
-                        <div>{{ error }}</div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                </div>
 
-                <div class="mb-3">
-                    <label for="profile-email" class="form-label small fw-medium">Email</label>
-                    <input
-                        type="email"
-                        id="profile-email"
-                        name="email"
-                        class="form-control form-control-sm"
-                        value="{{ profile_email }}"
-                        disabled
-                        aria-disabled="true"
-                    >
-                    <div class="form-text small">
-                        Email verification and password recovery delivery are not enabled on this deployment.
+                <div class="row align-items-center mb-3 g-2">
+                    <label class="col-12 col-md-3 col-form-label small fw-medium text-dark">Username</label>
+                    <div class="col-12 col-md-7">
+                        <input
+                            type="text"
+                            class="form-control form-control-sm bg-light"
+                            value="{{ request.user.username }}"
+                            readonly
+                            disabled
+                            aria-disabled="true"
+                        >
+                        <div class="form-text small text-muted">
+                            Username is fixed and used for authentication.
+                        </div>
                     </div>
                 </div>
 
-                <div class="d-flex justify-content-end">
-                    <button type="submit" class="btn btn-primary btn-sm">
+                <hr class="settings-divider">
+
+                <div class="row align-items-center mb-3 g-2">
+                    <label for="settings-display-name" class="col-12 col-md-3 col-form-label small fw-medium text-dark">Display name</label>
+                    <div class="col-12 col-md-7">
+                        {{ profile_form.display_name }}
+                        {% if profile_form.display_name.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in profile_form.display_name.errors %}
+                            <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="form-text small text-muted">
+                            Your display name appears on transaction entries, budget summaries, and joint audits.
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="settings-divider">
+
+                <div class="row align-items-center mb-3 g-2">
+                    <label for="profile-email" class="col-12 col-md-3 col-form-label small fw-medium text-dark">Email address</label>
+                    <div class="col-12 col-md-7">
+                        <input
+                            type="email"
+                            id="profile-email"
+                            name="email"
+                            class="form-control form-control-sm bg-light"
+                            value="{{ profile_email }}"
+                            disabled
+                            aria-disabled="true"
+                        >
+                        <div class="form-text small text-muted">
+                            Email verification and password recovery delivery are not enabled on this deployment.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end pt-3">
+                    <button type="submit" class="btn btn-primary btn-sm px-4">
                         Save profile
                     </button>
                 </div>
             </form>
-        </section>
-    </div>
+        </div>
 
-    <div class="col-12 col-lg-6">
-        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-preferences-heading">
-            <h2 id="settings-preferences-heading" class="h6 fw-semibold mb-2">Preferences</h2>
-            <p class="small text-secondary mb-3">
-                Configure your time zone and week start day. Manage exchange rates and currency details on
-                <a href="{% url 'budgets:currencies' %}" class="text-decoration-none">Currencies</a>.
-            </p>
+        <!-- Preferences Tab -->
+        <div class="tab-pane fade{% if active_tab == 'preferences' or preferences_form.errors %} show active{% endif %}" id="tab-preferences" role="tabpanel" aria-labelledby="preferences-tab">
+            <div class="settings-section-header mb-4">
+                <h2 id="settings-preferences-heading" class="h6 fw-semibold text-navy mb-1">Preferences</h2>
+                <p class="small text-secondary mb-0">
+                    Configure your time zone and calendar week start day.
+                </p>
+            </div>
 
-            <form method="post" action="{% url 'accounts:settings' %}" novalidate>
+            <form id="preferences-form" method="post" action="{% url 'accounts:settings' %}" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="action" value="save_preferences">
-                <div class="mb-3">
-                    <label for="settings-timezone" class="form-label small fw-medium">Time zone</label>
-                    {{ preferences_form.timezone }}
-                    {% if preferences_form.timezone.errors %}
-                    <div class="invalid-feedback d-block">
-                        {% for error in preferences_form.timezone.errors %}
-                        <div>{{ error }}</div>
-                        {% endfor %}
+
+                <div class="row align-items-center mb-3 g-2">
+                    <label for="settings-timezone" class="col-12 col-md-3 col-form-label small fw-medium text-dark">Time zone</label>
+                    <div class="col-12 col-md-7">
+                        {{ preferences_form.timezone }}
+                        {% if preferences_form.timezone.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in preferences_form.timezone.errors %}
+                            <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="form-text small text-muted">
+                            Timestamps in reports and transactions use this time zone.
+                        </div>
                     </div>
-                    {% endif %}
                 </div>
 
-                <div class="mb-3">
-                    <label for="settings-week-start" class="form-label small fw-medium">Week starts on</label>
-                    {{ preferences_form.week_starts_on }}
-                    {% if preferences_form.week_starts_on.errors %}
-                    <div class="invalid-feedback d-block">
-                        {% for error in preferences_form.week_starts_on.errors %}
-                        <div>{{ error }}</div>
-                        {% endfor %}
+                <hr class="settings-divider">
+
+                <div class="row align-items-center mb-3 g-2">
+                    <label for="settings-week-start" class="col-12 col-md-3 col-form-label small fw-medium text-dark">Week starts on</label>
+                    <div class="col-12 col-md-7">
+                        {{ preferences_form.week_starts_on }}
+                        {% if preferences_form.week_starts_on.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in preferences_form.week_starts_on.errors %}
+                            <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="form-text small text-muted">
+                            Defines the first day of the week for weekly spending summaries.
+                        </div>
                     </div>
-                    {% endif %}
                 </div>
 
-                <div class="d-flex justify-content-end">
-                    <button type="submit" class="btn btn-primary btn-sm">
+                <hr class="settings-divider">
+
+                <div class="row align-items-center mb-3 g-2">
+                    <span class="col-12 col-md-3 col-form-label small fw-medium text-dark">Currency</span>
+                    <div class="col-12 col-md-7">
+                        <p class="small text-secondary mb-2">
+                            Personal base currency, conversion tools, and exchange rates are managed in the Currency section.
+                        </p>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="bootstrap.Tab.getOrCreateInstance(document.getElementById('currency-tab')).show()">
+                            Manage currency preferences
+                        </button>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end pt-3">
+                    <button type="submit" class="btn btn-primary btn-sm px-4">
                         Save preferences
                     </button>
                 </div>
             </form>
-        </section>
-    </div>
-</div>
+        </div>
 
-<div class="row g-3 mb-4">
-    <div class="col-12 col-lg-6">
-        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-security-heading">
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-                <h2 id="settings-security-heading" class="h6 fw-semibold mb-0">Security</h2>
-                <a href="{% url 'accounts:password_change' %}" class="btn btn-outline-primary btn-sm">
-                    Change password
-                </a>
+        <!-- Currency Tab -->
+        <div class="tab-pane fade{% if active_tab == 'currency' %} show active{% endif %}" id="tab-currency" role="tabpanel" aria-labelledby="currency-tab">
+            <!-- 1. Currency preferences (Personal Base Currency) -->
+            <div class="settings-section-header mb-4">
+                <h2 id="currency-preferences-heading" class="h6 fw-semibold text-navy mb-1">Currency preferences</h2>
+                <p class="small text-secondary mb-0">
+                    Choose your personal base currency from the supported currencies below. Shared spaces use their own separate base currency, and changing your personal preference will not modify a shared space or any wallet balances.
+                </p>
             </div>
-            <p class="small text-secondary mb-0">
-                Change your account password while signed in. Your current session remains active after updating your password.
-            </p>
-        </section>
-    </div>
 
-    <div class="col-12 col-lg-6">
-        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-shared-space-heading">
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-                <h2 id="settings-shared-space-heading" class="h6 fw-semibold mb-0">Shared-space settings</h2>
-                <div class="d-flex gap-2">
-                    <a href="{% url 'budgets:sharing_privacy' %}" class="btn btn-outline-secondary btn-sm">
-                        Sharing &amp; Privacy
-                    </a>
-                    <a href="{% url 'budgets:shared_space' %}" class="btn btn-outline-secondary btn-sm">
-                        Go to Shared Space
-                    </a>
+            {% if not has_active_currencies %}
+            <div class="alert alert-warning py-2 px-3 small mb-3" role="status" id="no-active-currencies-note">
+                No active currencies are currently available to save a preference.
+            </div>
+            {% endif %}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2 px-3 small mb-3" role="alert">
+                {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'budgets:currencies' %}" novalidate id="base-currency-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_base_currency">
+
+                <div class="row align-items-center mb-3 g-2">
+                    <label for="personal-base-currency" class="col-12 col-md-3 col-form-label small fw-medium text-dark">
+                        Personal base currency
+                    </label>
+                    <div class="col-12 col-md-7">
+                        {{ form.personal_base_currency }}
+                        {% if form.personal_base_currency.errors %}
+                        <div class="invalid-feedback d-block" id="personal-base-currency-errors">
+                            {% for error in form.personal_base_currency.errors %}
+                            <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div id="currency-preferences-note" class="form-text small text-muted">
+                            {% if saved_base_currency %}
+                            Current preference: <strong>{{ saved_base_currency.code }} ({{ saved_base_currency.name }})</strong>
+                            {% else %}
+                            Current preference: <strong>Not configured</strong>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end pt-2">
+                    <button
+                        type="submit"
+                        class="btn btn-primary btn-sm px-4"
+                        {% if not has_active_currencies %}
+                        disabled
+                        aria-disabled="true"
+                        aria-describedby="no-active-currencies-note"
+                        {% endif %}
+                    >
+                        Save preference
+                    </button>
+                </div>
+            </form>
+
+            <hr class="settings-divider">
+
+            <!-- 2. Currency Converter -->
+            <div class="mb-4">
+                <h3 id="currency-converter-heading" class="h6 fw-semibold text-navy mb-1">Currency converter</h3>
+                <p class="small text-secondary mb-3">
+                    Convert an amount between supported currencies using stored reference or manual rates without creating a ledger transaction.
+                </p>
+                <form method="post" action="{% url 'budgets:currencies' %}" novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="convert_currency">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-sm-3">
+                            <label for="converter-amount" class="form-label small fw-medium">Amount</label>
+                            {{ converter_form.amount }}
+                        </div>
+                        <div class="col-12 col-sm-3">
+                            <label for="converter-from" class="form-label small fw-medium">From</label>
+                            {{ converter_form.from_currency }}
+                        </div>
+                        <div class="col-12 col-sm-3">
+                            <label for="converter-to" class="form-label small fw-medium">To</label>
+                            {{ converter_form.to_currency }}
+                        </div>
+                        <div class="col-12 col-sm-3">
+                            <label for="converter-scope" class="form-label small fw-medium">Scope</label>
+                            {{ converter_form.scope }}
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3 pt-3 border-top">
+                        <div>
+                            <span class="small text-secondary d-block">Converted result</span>
+                            {% if conversion_result %}
+                                {% if conversion_result.available %}
+                                <span class="fs-6 fw-bold text-dark">
+                                    {{ conversion_result.formatted_input }} {{ conversion_result.from_currency.code }} =
+                                    {{ conversion_result.formatted_output }} {{ conversion_result.to_currency.code }}
+                                </span>
+                                <span class="small text-secondary d-block">
+                                    Rate: {{ conversion_result.rate }} ({{ conversion_result.status_label }})
+                                </span>
+                                {% else %}
+                                <span class="fs-6 fw-semibold text-warning">{{ conversion_result.status_label }}</span>
+                                {% endif %}
+                            {% else %}
+                            <span class="fs-6 fw-semibold text-muted" aria-label="Unavailable">—</span>
+                            {% endif %}
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm px-3">
+                            Convert
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <hr class="settings-divider">
+
+            <!-- 3. Supported Currencies -->
+            <div class="mb-4">
+                <h3 id="supported-currencies-heading" class="h6 fw-semibold text-navy mb-1">Supported currencies</h3>
+                <p class="small text-secondary mb-3">
+                    Initial supported ISO 4217 currencies available for wallets and base-currency preferences.
+                </p>
+                {% if supported_currencies %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 small">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Code</th>
+                                <th scope="col">Currency Name</th>
+                                <th scope="col">Minor-Unit Precision</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for currency in supported_currencies %}
+                            <tr>
+                                <td class="fw-semibold text-navy">{{ currency.code }}</td>
+                                <td>{{ currency.name }}</td>
+                                <td>{{ currency.decimal_places }} decimal place{{ currency.decimal_places|pluralize }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-center text-muted bg-light rounded">No active currencies available.</div>
+                {% endif %}
+            </div>
+
+            <hr class="settings-divider">
+
+            <!-- 4. Provider & Manual Rate Entry -->
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-lg-6">
+                    <div class="settings-action-card h-100">
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                            <h3 id="exchange-rate-info-heading" class="h6 fw-semibold text-navy mb-0">Exchange-rate provider</h3>
+                            <form method="post" action="{% url 'budgets:currencies' %}" class="m-0">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="refresh_rates">
+                                <button type="submit" class="btn btn-outline-primary btn-sm">Refresh rates</button>
+                            </form>
+                        </div>
+                        <p class="small text-secondary mb-2">{{ provider_info.cadence }}</p>
+                        <div class="small">
+                            <strong>{{ provider_info.name }}</strong> &middot; Host: <code>{{ provider_info.host }}</code>
+                            <div class="text-muted">{{ provider_info.coverage_note }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                    <div class="settings-action-card h-100">
+                        <h3 id="manual-rate-heading" class="h6 fw-semibold text-navy mb-1">Record manual exchange rate</h3>
+                        <p class="small text-secondary mb-2">Enter an explicit exchange rate for any currency pair.</p>
+                        <form method="post" action="{% url 'budgets:currencies' %}" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="record_manual_rate">
+                            <div class="row g-2">
+                                <div class="col-6 col-sm-3">
+                                    <label class="form-label small fw-medium">From</label>
+                                    {{ manual_rate_form.from_currency }}
+                                </div>
+                                <div class="col-6 col-sm-3">
+                                    <label class="form-label small fw-medium">To</label>
+                                    {{ manual_rate_form.to_currency }}
+                                </div>
+                                <div class="col-6 col-sm-3">
+                                    <label class="form-label small fw-medium">Rate</label>
+                                    {{ manual_rate_form.rate }}
+                                </div>
+                                <div class="col-6 col-sm-3">
+                                    <label class="form-label small fw-medium">Scope</label>
+                                    {{ manual_rate_form.scope }}
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-end mt-2 pt-2 border-top">
+                                <button type="submit" class="btn btn-outline-primary btn-sm">Save manual rate</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
-            <p class="small text-secondary mb-0">
-                Shared-space creation, base currency, personal balance disclosure, and partner invitation codes are managed on the Shared Space and Sharing &amp; Privacy pages.
-            </p>
-        </section>
-    </div>
-</div>
 
-<div class="row g-3">
-    <div class="col-12 col-lg-6">
-        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-data-export-heading">
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-                <h2 id="settings-data-export-heading" class="h6 fw-semibold mb-0">Data export</h2>
-                <div class="d-flex gap-2">
-                    <a href="{% url 'accounts:export_data' %}?format=csv" class="btn btn-outline-primary btn-sm">
-                        Export CSV
-                    </a>
-                    <a href="{% url 'accounts:export_data' %}?format=json" class="btn btn-outline-secondary btn-sm">
-                        Export JSON
-                    </a>
+            <hr class="settings-divider">
+
+            <!-- 5. Exchange Rates Table -->
+            <div>
+                {% if table_source_currency %}
+                <h3 id="exchange-rates-table-heading" class="h6 fw-semibold text-navy mb-1">Exchange rates — {{ table_source_currency.code }} base</h3>
+                <p class="small text-secondary mb-3">
+                    Daily reference rates with {{ table_source_currency.code }} as the base currency.
+                </p>
+                {% else %}
+                <h3 id="exchange-rates-table-heading" class="h6 fw-semibold text-navy mb-1">Exchange rates</h3>
+                <p class="small text-secondary mb-3">Daily reference rates.</p>
+                <div class="alert alert-info small d-flex align-items-center gap-2 mb-3" role="status">
+                    <div><strong>No display currency selected.</strong> Please select a <strong>Display currency</strong> in the top navigation bar to view reference exchange rates.</div>
+                </div>
+                {% endif %}
+
+                {% if rate_table_rows %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 small">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Pair</th>
+                                <th scope="col">Rate</th>
+                                <th scope="col">Source</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in rate_table_rows %}
+                            <tr>
+                                <td class="fw-semibold">{{ table_source_currency.code }} / {{ row.target_currency.code }}</td>
+                                <td class="fw-bold text-navy">{% if row.is_available %}<span class="visually-hidden">1 {{ table_source_currency.code }} = <span class="fw-semibold">{{ row.rate }}</span> {{ row.target_currency.code }}</span>{{ row.rate }}{% else %}—{% endif %}</td>
+                                <td>
+                                    {% if row.is_manual %}
+                                    <span class="badge bg-secondary-subtle text-secondary border">Manual rate</span>
+                                    {% elif row.provider %}
+                                    <span class="badge bg-light text-dark border">{{ row.provider }}</span>
+                                    {% else %}
+                                    <span class="badge bg-light text-muted border">—</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.is_available %}
+                                        {% if row.is_stale %}
+                                        <span class="badge bg-warning-subtle text-warning-emphasis border">Stale</span>
+                                        {% else %}
+                                        <span class="badge bg-success-subtle text-success-emphasis border">Current</span>
+                                        {% endif %}
+                                    {% else %}
+                                    <span class="badge bg-secondary-subtle text-muted border">Unavailable</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted">
+                                    {% if row.rate_timestamp %}
+                                    {{ row.rate_timestamp|date:"Y-m-d H:i" }}
+                                    {% elif row.retrieved_at %}
+                                    {{ row.retrieved_at|date:"Y-m-d H:i" }}
+                                    {% else %}
+                                    —
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-center text-muted bg-light rounded">No exchange rates available.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Security Tab -->
+        <div class="tab-pane fade" id="tab-security" role="tabpanel" aria-labelledby="security-tab">
+            <div class="settings-section-header mb-4">
+                <h2 id="settings-security-heading" class="h6 fw-semibold text-navy mb-1">Security</h2>
+                <p class="small text-secondary mb-0">
+                    Change your account password while signed in. Your current session remains active after updating your password.
+                </p>
+            </div>
+
+            <div class="row align-items-center mb-3 g-2">
+                <span class="col-12 col-md-3 col-form-label small fw-medium text-dark">Password</span>
+                <div class="col-12 col-md-7">
+                    <div class="settings-action-card d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <div>
+                            <div class="fw-medium small text-navy">Account password</div>
+                            <div class="small text-secondary">
+                                Update password credentials securely without interrupting your active session.
+                            </div>
+                        </div>
+                        <a href="{% url 'accounts:password_change' %}" class="btn btn-outline-primary btn-sm text-nowrap">
+                            Change password
+                        </a>
+                    </div>
                 </div>
             </div>
-            <p class="small text-secondary mb-0">
-                Download your authorized wallets, categories, savings goals, and transactions in CSV or JSON format.
-            </p>
-        </section>
-    </div>
 
-    <div class="col-12 col-lg-6">
-        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="settings-offline-sync-heading">
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-                <h2 id="settings-offline-sync-heading" class="h6 fw-semibold mb-0">Offline and synchronization</h2>
-                <button type="button" id="btn-settings-sync" class="btn btn-outline-primary btn-sm">
-                    Sync offline cache
-                </button>
+            <hr class="settings-divider">
+
+            <div class="row align-items-center mb-3 g-2">
+                <span class="col-12 col-md-3 col-form-label small fw-medium text-dark">Session security</span>
+                <div class="col-12 col-md-7">
+                    <p class="small text-secondary mb-0">
+                        Sessions are isolated and encrypted per user. Signing out revokes credentials and flushes local storage caches.
+                    </p>
+                </div>
             </div>
-            <p class="small text-secondary mb-1">
-                Offline data is partitioned by your signed-in username in IndexedDB and cleared automatically when you log out.
-            </p>
-            <p class="small text-secondary mb-0" id="settings-last-sync-note">
-                Last server sync: {{ user_preference.last_sync_at|date:"Y-m-d H:i"|default:"Not synced yet" }}
-            </p>
-        </section>
+        </div>
+
+        <!-- Shared Space Tab -->
+        <div class="tab-pane fade" id="tab-shared-space" role="tabpanel" aria-labelledby="shared-space-tab">
+            <div class="settings-section-header mb-4">
+                <h2 id="settings-shared-space-heading" class="h6 fw-semibold text-navy mb-1">Shared-space settings</h2>
+                <p class="small text-secondary mb-0">
+                    Shared-space creation, base currency, personal balance disclosure, and partner invitation codes are managed on the Shared Space hub.
+                </p>
+            </div>
+
+            <div class="row align-items-center mb-3 g-2">
+                <span class="col-12 col-md-3 col-form-label small fw-medium text-dark">Joint space settings</span>
+                <div class="col-12 col-md-7">
+                    <div class="settings-action-card d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+                        <div>
+                            <div class="fw-medium small text-navy">Sharing &amp; Privacy</div>
+                            <div class="small text-secondary">
+                                Control disclosure of individual wallet balances and manage partner invite codes.
+                            </div>
+                        </div>
+                        <a href="{% url 'budgets:sharing_privacy' %}" class="btn btn-outline-secondary btn-sm text-nowrap">
+                            Sharing &amp; Privacy
+                        </a>
+                    </div>
+
+                    <div class="settings-action-card d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <div>
+                            <div class="fw-medium small text-navy">Shared Space Overview</div>
+                            <div class="small text-secondary">
+                                View shared budgets, member permissions, and joint transaction audits.
+                            </div>
+                        </div>
+                        <a href="{% url 'budgets:shared_space' %}" class="btn btn-outline-primary btn-sm text-nowrap">
+                            Go to Shared Space
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data & Sync Tab -->
+        <div class="tab-pane fade" id="tab-data-sync" role="tabpanel" aria-labelledby="data-sync-tab">
+            <div class="settings-section-header mb-4">
+                <h2 class="h6 fw-semibold text-navy mb-1">Data &amp; Synchronization</h2>
+                <p class="small text-secondary mb-0">
+                    Export your authorized financial records or synchronize offline cache data.
+                </p>
+            </div>
+
+            <div class="row align-items-center mb-3 g-2">
+                <div class="col-12 col-md-3">
+                    <h3 id="settings-data-export-heading" class="h6 fw-medium text-dark mb-0">Data export</h3>
+                </div>
+                <div class="col-12 col-md-7">
+                    <p class="small text-secondary mb-2">
+                        Download your authorized wallets, categories, savings goals, and transactions in CSV or JSON format.
+                    </p>
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'accounts:export_data' %}?format=csv" class="btn btn-outline-primary btn-sm">
+                            Export CSV
+                        </a>
+                        <a href="{% url 'accounts:export_data' %}?format=json" class="btn btn-outline-primary btn-sm">
+                            Export JSON
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="settings-divider">
+
+            <div class="row align-items-center mb-3 g-2">
+                <div class="col-12 col-md-3">
+                    <h3 id="settings-offline-sync-heading" class="h6 fw-medium text-dark mb-0">Offline and synchronization</h3>
+                </div>
+                <div class="col-12 col-md-7">
+                    <p class="small text-secondary mb-2">
+                        Offline data is partitioned by your signed-in username in IndexedDB and cleared automatically when you log out.
+                    </p>
+                    <div class="d-flex flex-wrap align-items-center gap-3">
+                        <button type="button" id="btn-settings-sync" class="btn btn-outline-primary btn-sm">
+                            Sync offline cache
+                        </button>
+                        <span class="small text-secondary" id="settings-last-sync-note">
+                            Last server sync: {{ user_preference.last_sync_at|date:"Y-m-d H:i"|default:"Not synced yet" }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const headerSaveBtn = document.getElementById("btn-header-save");
+    const tabButtons = document.querySelectorAll("#settingsTabs button[data-bs-toggle='tab']");
+
+    function updateHeaderSave(tabTarget) {
+        if (!headerSaveBtn) return;
+        if (tabTarget === "#tab-profile") {
+            headerSaveBtn.style.display = "inline-flex";
+            headerSaveBtn.setAttribute("form", "profile-form");
+            headerSaveBtn.textContent = "Save profile";
+        } else if (tabTarget === "#tab-preferences") {
+            headerSaveBtn.style.display = "inline-flex";
+            headerSaveBtn.setAttribute("form", "preferences-form");
+            headerSaveBtn.textContent = "Save preferences";
+        } else if (tabTarget === "#tab-currency") {
+            headerSaveBtn.style.display = "inline-flex";
+            headerSaveBtn.setAttribute("form", "base-currency-form");
+            headerSaveBtn.textContent = "Save base currency";
+        } else {
+            headerSaveBtn.style.display = "none";
+        }
+    }
+
+    tabButtons.forEach(function (btn) {
+        btn.addEventListener("shown.bs.tab", function (event) {
+            const target = event.target.getAttribute("data-bs-target");
+            updateHeaderSave(target);
+            if (target && history.replaceState) {
+                const sectionName = target.replace("#tab-", "");
+                history.replaceState(null, null, "#" + sectionName);
+            }
+        });
+    });
+
+    const hash = window.location.hash.replace("#", "");
+    if (hash) {
+        const targetBtn = document.querySelector("#settingsTabs button[data-bs-target='#tab-" + hash + "']");
+        if (targetBtn && window.bootstrap && window.bootstrap.Tab) {
+            const tab = new bootstrap.Tab(targetBtn);
+            tab.show();
+            updateHeaderSave("#tab-" + hash);
+        }
+    }
+});
+</script>
 {% endblock %}

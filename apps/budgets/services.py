@@ -2,8 +2,14 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
 import json
+import logging
+import re
 import secrets
 import uuid
+
+import segno
+from django.core.cache import cache
+from django.db.models import Q
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -215,13 +221,119 @@ def update_shared_space(*, user, shared_space: SharedSpace, name: str, base_curr
     return shared_space
 
 
+logger = logging.getLogger(__name__)
+
+INVITATION_ALPHABET = "23456789ABCDEFGHJKMNPQRSTVWXYZ"
+MAX_ACTIVE_INVITATIONS_PER_OWNER = 5
+INVITATION_ERROR_MESSAGE = "This code is invalid or has expired."
+INVITATION_RATE_LIMIT_MAX_ATTEMPTS = 5
+INVITATION_RATE_LIMIT_WINDOW = 600  # 10 minutes
+INVITATION_LOCKOUT_DURATION = 900  # 15 minutes
+INVITATION_LOCKOUT_MESSAGE = "Too many failed attempts. Please wait 15 minutes before trying again."
+
+
+def generate_invitation_code() -> str:
+    now = timezone.now()
+    for _ in range(50):
+        code = "".join(secrets.choice(INVITATION_ALPHABET) for _ in range(6))
+        # Unique across table
+        if not SharedSpaceInvitation.objects.filter(code=code).exists():
+            return code
+    raise ValidationError("Could not generate a unique invitation code. Please try again.")
+
+
+def normalize_invitation_code(raw_code: str) -> str:
+    if not raw_code:
+        return ""
+    cleaned = str(raw_code).strip()
+    compact = re.sub(r"[\s\-]", "", cleaned)
+    if len(compact) == 6:
+        return compact.upper()
+    return cleaned
+
+
+def get_client_ip(request) -> str:
+    if not request:
+        return "unknown"
+    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    if x_forwarded_for:
+        return x_forwarded_for.split(",")[0].strip()
+    return (request.META.get("REMOTE_ADDR") or "unknown").strip()
+
+
+def check_invitation_rate_limit(request) -> tuple[bool, str]:
+    if not request:
+        return False, ""
+    user = getattr(request, "user", None)
+    user_id = str(user.id) if user and user.is_authenticated else None
+    ip = get_client_ip(request)
+    if user_id and cache.get(f"inv_lock_user_{user_id}"):
+        return True, INVITATION_LOCKOUT_MESSAGE
+    if ip and ip != "unknown" and cache.get(f"inv_lock_ip_{ip}"):
+        return True, INVITATION_LOCKOUT_MESSAGE
+    return False, ""
+
+
+def record_invitation_failure(request, raw_code: str = "") -> None:
+    if not request:
+        return
+    user = getattr(request, "user", None)
+    user_id = str(user.id) if user and user.is_authenticated else "anon"
+    ip = get_client_ip(request)
+    raw_str = str(raw_code or "").strip()
+    masked_code = (raw_str[:2] + "****") if len(raw_str) >= 2 else "****"
+    logger.warning(
+        "Failed invitation code redemption attempt from user %s, IP %s (code prefix: %s)",
+        user_id,
+        ip,
+        masked_code,
+    )
+    keys_to_update = []
+    if user_id != "anon":
+        keys_to_update.append((f"inv_fail_user_{user_id}", f"inv_lock_user_{user_id}"))
+    if ip != "unknown":
+        keys_to_update.append((f"inv_fail_ip_{ip}", f"inv_lock_ip_{ip}"))
+
+    for fail_key, lock_key in keys_to_update:
+        try:
+            attempts = (cache.get(fail_key) or 0) + 1
+            cache.set(fail_key, attempts, timeout=INVITATION_RATE_LIMIT_WINDOW)
+            if attempts >= INVITATION_RATE_LIMIT_MAX_ATTEMPTS:
+                cache.set(lock_key, True, timeout=INVITATION_LOCKOUT_DURATION)
+        except Exception:
+            pass
+
+
+def clear_invitation_rate_limit(request) -> None:
+    if not request:
+        return
+    user = getattr(request, "user", None)
+    user_id = str(user.id) if user and user.is_authenticated else None
+    ip = get_client_ip(request)
+    if user_id:
+        cache.delete(f"inv_fail_user_{user_id}")
+        cache.delete(f"inv_lock_user_{user_id}")
+    if ip and ip != "unknown":
+        cache.delete(f"inv_fail_ip_{ip}")
+        cache.delete(f"inv_lock_ip_{ip}")
+
+
+def generate_invitation_qr_svg(join_url: str, owner_name: str) -> str:
+    qr = segno.make(join_url, error="m")
+    # scale=6 with border=4 gives 246px which is >= 200px
+    svg = qr.svg_inline(border=4, scale=6, dark="#1E3A5F", light="#FFFFFF")
+    aria_text = f"QR code to join {owner_name}'s shared space"
+    return svg.replace("<svg ", f'<svg role="img" aria-label="{aria_text}" style="max-width: 100%; height: auto;" ')
+
+
 @transaction.atomic
 def create_shared_space_invitation(
     *,
     user,
     shared_space: SharedSpace,
     partner_hint: str = "",
-    expires_in_days: int = 7,
+    expiry: str = "24h",
+    expires_in_days: int | None = None,
 ) -> SharedSpaceInvitation:
     assert_space_creator(user, shared_space)
     active_count = SharedSpaceMembership.objects.select_for_update().filter(
@@ -231,14 +343,34 @@ def create_shared_space_invitation(
     if active_count >= SharedSpace.MAX_ACTIVE_MEMBERS:
         raise ValidationError("This shared space already has the maximum of two active members.")
 
-    code = secrets.token_urlsafe(24)
+    now = timezone.now()
+    active_invites = SharedSpaceInvitation.objects.filter(
+        created_by=user,
+        status=SharedSpaceInvitation.Status.PENDING,
+        expires_at__gt=now,
+    ).count()
+    if active_invites >= MAX_ACTIVE_INVITATIONS_PER_OWNER:
+        raise ValidationError(
+            "You have reached the limit of 5 active invitations. Revoke an unused invitation to create a new one."
+        )
+
+    if expires_in_days is not None:
+        delta = timedelta(days=max(1, int(expires_in_days)))
+    elif expiry == "1h":
+        delta = timedelta(hours=1)
+    elif expiry == "7d":
+        delta = timedelta(days=7)
+    else:
+        delta = timedelta(hours=24)
+
+    code = generate_invitation_code()
     invite = SharedSpaceInvitation(
         shared_space=shared_space,
         code=code,
         partner_hint=(partner_hint or "").strip()[:100],
         created_by=user,
         status=SharedSpaceInvitation.Status.PENDING,
-        expires_at=timezone.now() + timedelta(days=max(1, int(expires_in_days))),
+        expires_at=now + delta,
     )
     invite.full_clean()
     invite.save()
@@ -257,31 +389,50 @@ def revoke_shared_space_invitation(*, user, invitation: SharedSpaceInvitation) -
 
 
 @transaction.atomic
-def accept_shared_space_invitation(*, user, code: str) -> SharedSpaceMembership:
-    cleaned_code = (code or "").strip()
-    if not cleaned_code:
-        raise ValidationError({"code": "Enter an invitation code."})
+def accept_shared_space_invitation(*, user, code: str, request=None) -> SharedSpaceMembership:
+    if request:
+        is_locked, lock_msg = check_invitation_rate_limit(request)
+        if is_locked:
+            raise ValidationError({"code": lock_msg})
+
+    raw_code = (code or "").strip()
+    if not raw_code:
+        if request:
+            record_invitation_failure(request, raw_code)
+        raise ValidationError({"code": INVITATION_ERROR_MESSAGE})
+
+    compact = re.sub(r"[\s\-]", "", raw_code)
+    lookup_code = compact.upper() if len(compact) == 6 else raw_code
 
     invitation = (
         SharedSpaceInvitation.objects.select_for_update()
-        .select_related("shared_space")
-        .filter(code=cleaned_code)
+        .select_related("shared_space", "shared_space__created_by")
+        .filter(Q(code=lookup_code) | Q(code=compact.upper()) | Q(code=raw_code))
         .first()
     )
     if invitation is None:
-        raise ValidationError({"code": "Invalid invitation code."})
+        if request:
+            record_invitation_failure(request, raw_code)
+        raise ValidationError({"code": INVITATION_ERROR_MESSAGE})
 
     now = timezone.now()
     if invitation.status == SharedSpaceInvitation.Status.PENDING and invitation.expires_at <= now:
         invitation.status = SharedSpaceInvitation.Status.EXPIRED
         invitation.responded_at = now
         invitation.save(update_fields=["status", "responded_at"])
-        raise ValidationError({"code": "This invitation code has expired."})
+        if request:
+            record_invitation_failure(request, raw_code)
+        raise ValidationError({"code": INVITATION_ERROR_MESSAGE})
 
     if invitation.status != SharedSpaceInvitation.Status.PENDING:
-        raise ValidationError({"code": "This invitation code is no longer valid."})
+        if request:
+            record_invitation_failure(request, raw_code)
+        raise ValidationError({"code": INVITATION_ERROR_MESSAGE})
 
     space = invitation.shared_space
+    if space.created_by == user or invitation.created_by == user:
+        raise ValidationError({"code": "You cannot join your own shared space."})
+
     existing = SharedSpaceMembership.objects.select_for_update().filter(
         shared_space=space,
         user=user,
@@ -300,8 +451,9 @@ def accept_shared_space_invitation(*, user, code: str) -> SharedSpaceMembership:
         existing.is_active = True
         existing.left_at = None
         existing.role = SharedSpaceMembership.Role.MEMBER
+        existing.joined_at = now
         existing.full_clean()
-        existing.save(update_fields=["is_active", "left_at", "role"])
+        existing.save(update_fields=["is_active", "left_at", "role", "joined_at"])
         membership = existing
     else:
         membership = SharedSpaceMembership(
@@ -309,6 +461,7 @@ def accept_shared_space_invitation(*, user, code: str) -> SharedSpaceMembership:
             user=user,
             role=SharedSpaceMembership.Role.MEMBER,
             is_active=True,
+            joined_at=now,
         )
         membership.full_clean()
         membership.save()
@@ -317,6 +470,8 @@ def accept_shared_space_invitation(*, user, code: str) -> SharedSpaceMembership:
     invitation.accepted_by = user
     invitation.responded_at = now
     invitation.save(update_fields=["status", "accepted_by", "responded_at"])
+    if request:
+        clear_invitation_rate_limit(request)
     return membership
 
 

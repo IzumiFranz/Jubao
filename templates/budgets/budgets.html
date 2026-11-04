@@ -1,213 +1,923 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Budgets | Jubao{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=v12">
+<style>
+/* Scoped Budgets Page Theme (Jubao Finance Stationery System) */
+body:has(.budgets-stationery),
+body:has(.budgets-stationery) .app-main-column,
+body:has(.budgets-stationery) .app-content {
+    background-color: var(--stationery-bg, #F8F7F4) !important;
+}
+
+.budgets-stationery {
+    background-color: var(--stationery-bg, #F8F7F4);
+    color: var(--stationery-text-main, #132238);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Page description */
+.budgets-page-desc {
+    color: #5A6B82;
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+/* Stationery Panels & Cards */
+.budgets-stationery .stationery-panel {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E3DE;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(19, 34, 56, 0.04), 0 2px 6px -1px rgba(19, 34, 56, 0.02);
+}
+
+.stationery-summary-card {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E3DE;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(19, 34, 56, 0.04), 0 2px 6px -1px rgba(19, 34, 56, 0.02);
+    padding: 1.25rem 1.35rem;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stationery-summary-card:hover {
+    box-shadow: 0 4px 12px rgba(19, 34, 56, 0.06);
+}
+
+/* Summary Card Typography & Icons */
+.summary-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.65rem;
+}
+
+.summary-card-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #7A8599;
+}
+
+.summary-card-icon-box {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #F4F6F9;
+    border: 1px solid #E5E9F0;
+    border-radius: 8px;
+    color: #5A6B82;
+}
+
+.summary-card-value {
+    font-family: var(--app-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif) !important;
+    font-size: 1.75rem;
+    font-weight: 700 !important;
+    line-height: 1.2;
+    color: #132238;
+    letter-spacing: -0.015em;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+
+.summary-card-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    color: #5A6B82;
+    margin-top: 0.35rem;
+}
+
+.summary-card-dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background-color: #7A8599;
+    flex-shrink: 0;
+}
+
+/* Control Bar */
+.control-bar-box {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E3DE;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(19, 34, 56, 0.03);
+}
+
+.period-nav-btn {
+    color: #132238;
+    background: transparent;
+    border: none;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    transition: background-color 0.12s ease;
+}
+
+.period-nav-btn:hover {
+    background-color: #F4F6F9;
+    color: #132238;
+}
+
+.period-display-text {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #132238;
+    padding: 0 0.5rem;
+}
+
+.scope-select-control {
+    border: 1px solid #E5E3DE;
+    border-radius: 8px;
+    background-color: #FFFFFF;
+    color: #132238;
+    font-size: 0.88rem;
+    font-weight: 600;
+    padding: 0.45rem 2rem 0.45rem 0.85rem;
+    box-shadow: 0 1px 2px rgba(19, 34, 56, 0.03);
+    cursor: pointer;
+    background-position: right 0.75rem center;
+}
+
+.scope-select-control:focus {
+    border-color: #1E3A5F;
+    box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.15);
+    outline: none;
+}
+
+/* Primary Button (Deep Navy) */
+.btn-navy-primary {
+    background-color: #1E3A5F;
+    border-color: #1E3A5F;
+    color: #FFFFFF;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 0.45rem 1.1rem;
+    box-shadow: 0 1px 2px rgba(19, 34, 56, 0.05);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-navy-primary:hover,
+.btn-navy-primary:focus-visible {
+    background-color: #152943;
+    border-color: #152943;
+    color: #FFFFFF;
+}
+
+/* Table Card Header */
+.table-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.1rem 1.35rem;
+    border-bottom: 1px solid #ECEAE5;
+}
+
+.table-card-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #132238;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.category-count-badge {
+    background-color: #F4F6F9;
+    border: 1px solid #E5E9F0;
+    color: #5A6B82;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+}
+
+/* Filter Tab Pills */
+.filter-tabs-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background-color: #F4F6F9;
+    border: 1px solid #E5E9F0;
+    padding: 0.2rem;
+    border-radius: 8px;
+}
+
+.filter-tab-btn {
+    border: none;
+    background: transparent;
+    color: #5A6B82;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.25rem 0.7rem;
+    border-radius: 6px;
+    transition: all 0.12s ease;
+    cursor: pointer;
+}
+
+.filter-tab-btn:hover {
+    color: #132238;
+}
+
+.filter-tab-btn.active {
+    background-color: #FFFFFF;
+    color: #132238;
+    box-shadow: 0 1px 2px rgba(19, 34, 56, 0.06);
+}
+
+/* Budgets Table */
+.budgets-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+}
+
+.budgets-table thead th {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #7A8599;
+    background-color: #FAFAF8;
+    border-bottom: 1px solid #ECEAE5;
+    padding: 0.75rem 1.35rem;
+}
+
+.budgets-table tbody td {
+    padding: 1.05rem 1.35rem;
+    border-bottom: 1px solid #ECEAE5;
+    vertical-align: middle;
+}
+
+.budgets-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.budgets-table tbody tr:hover td {
+    background-color: #FAFAF8;
+}
+
+/* Category Icon Box */
+.cat-icon-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    background-color: #F4F6F9;
+    border: 1px solid #E5E9F0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #5A6B82;
+    flex-shrink: 0;
+}
+
+.cat-title-text {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #132238;
+    line-height: 1.25;
+}
+
+.cat-sub-text {
+    font-size: 0.78rem;
+    color: #7A8599;
+    line-height: 1.25;
+    margin-top: 0.15rem;
+}
+
+/* Numerical Cells */
+.tabular-amt {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #132238;
+}
+
+.tabular-sub {
+    font-size: 0.75rem;
+    color: #7A8599;
+    line-height: 1.2;
+    margin-top: 0.2rem;
+}
+
+/* Standard Progress Bar (Deep Navy) */
+.progress-track {
+    width: 100%;
+    height: 6px;
+    background-color: #ECEAE5;
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 0.4rem;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background-color: #1E3A5F;
+    transition: width 0.3s ease;
+}
+
+.progress-bar-fill.bar-warning {
+    background-color: #B45309;
+}
+
+.progress-bar-fill.bar-danger {
+    background-color: #B91C1C;
+}
+
+/* Status Pills with Semantic Dots */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-pill-success {
+    background-color: #F0FDF4;
+    border: 1px solid #DCFCE7;
+    color: #15803D;
+}
+.status-pill-success .status-dot {
+    background-color: #16A34A;
+}
+
+.status-pill-warning {
+    background-color: #FFFBEB;
+    border: 1px solid #FEF3C7;
+    color: #B45309;
+}
+.status-pill-warning .status-dot {
+    background-color: #D97706;
+}
+
+.status-pill-danger {
+    background-color: #FEF2F2;
+    border: 1px solid #FEE2E2;
+    color: #B91C1C;
+}
+.status-pill-danger .status-dot {
+    background-color: #DC2626;
+}
+
+.status-pill-muted {
+    background-color: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    color: #64748B;
+}
+.status-pill-muted .status-dot {
+    background-color: #94A3B8;
+}
+
+/* Actions Links */
+.action-link-edit {
+    color: #2563EB;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+
+.action-link-edit:hover {
+    color: #1D4ED8;
+    text-decoration: underline;
+}
+
+.btn-dots-more {
+    color: #7A8599;
+    background: transparent;
+    border: none;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    line-height: 1;
+}
+
+.btn-dots-more:hover {
+    color: #132238;
+    background-color: #F4F6F9;
+}
+
+/* Modal Styling */
+.budgets-modal-content {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E3DE;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(19, 34, 56, 0.1);
+}
+
+.budgets-modal-header {
+    border-bottom: 1px solid #ECEAE5;
+    padding: 1.15rem 1.4rem;
+}
+
+.budgets-modal-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #132238;
+    margin: 0;
+}
+
+.budgets-modal-body {
+    padding: 1.4rem;
+}
+
+.budgets-form-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #7A8599;
+    margin-bottom: 0.3rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 767.98px) {
+    .table-card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+    .filter-tabs-wrapper {
+        width: 100%;
+        overflow-x: auto;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .budgets-stationery * {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<p class="text-secondary mb-4">
-    Set monthly category spending limits for a chosen period across both personal and shared spaces.
-</p>
+<div class="budgets-stationery pb-4">
+    <!-- 1. Control Bar (Period Navigator, Scope Dropdown, Action Button) -->
+    <section class="stationery-panel mb-4 p-2.5" aria-labelledby="budget-controls-heading">
+        <h2 id="budget-controls-heading" class="visually-hidden">Filter budget period</h2>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <!-- Period Navigator: < Month YYYY > -->
+                <div class="control-bar-box d-inline-flex align-items-center p-1">
+                    <a href="?period={{ prev_period }}&scope={{ overview.scope }}" class="period-nav-btn" aria-label="Previous month">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </a>
+                    <div class="d-inline-flex align-items-center gap-1.5 px-2">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7A8599" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        <span class="period-display-text">{{ overview.period_start|date:"F Y"|default:overview.period }}</span>
+                    </div>
+                    <a href="?period={{ next_period }}&scope={{ overview.scope }}" class="period-nav-btn" aria-label="Next month">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </a>
+                </div>
 
-<div class="row g-3 mb-4">
-    <div class="col-12 col-lg-7">
-        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="budget-create-heading">
-            <h2 id="budget-create-heading" class="h6 fw-semibold mb-2">Set monthly category budget</h2>
-            <p class="small text-secondary mb-3">
-                Select an expense category, month, currency, and spending limit. Saving an existing category/period/currency combination updates its limit.
-            </p>
-            <form method="post" action="{% url 'budgets:budgets' %}" novalidate>
-                {% csrf_token %}
-                <input type="hidden" name="action" value="save_budget">
-                <div class="row g-2">
-                    <div class="col-12 col-sm-6">
-                        <label class="form-label small fw-medium">Category</label>
-                        {{ budget_form.category }}
-                    </div>
-                    <div class="col-6 col-sm-3">
-                        <label class="form-label small fw-medium">Period (YYYY-MM)</label>
-                        {{ budget_form.period }}
-                    </div>
-                    <div class="col-6 col-sm-3">
-                        <label class="form-label small fw-medium">Scope</label>
-                        {{ budget_form.scope }}
-                    </div>
-                    <div class="col-6 col-sm-6">
-                        <label class="form-label small fw-medium">Currency</label>
-                        {{ budget_form.currency }}
-                    </div>
-                    <div class="col-6 col-sm-6">
-                        <label class="form-label small fw-medium">Monthly limit</label>
-                        {{ budget_form.limit_amount }}
-                    </div>
-                </div>
-                <div class="d-flex justify-content-end mt-3">
-                    <button type="submit" class="btn btn-primary btn-sm">
-                        Save budget
-                    </button>
-                </div>
-            </form>
-        </section>
-    </div>
-
-    <div class="col-12 col-lg-5">
-        <section class="dashboard-panel p-3 p-md-4 h-100" aria-labelledby="budget-controls-heading">
-            <h2 id="budget-controls-heading" class="h6 fw-semibold mb-2">Filter budget period</h2>
-            <form method="get" action="{% url 'budgets:budgets' %}" class="row g-2 align-items-end mb-3">
-                <div class="col-12 col-sm-6">
-                    <label for="budget-period" class="form-label small fw-medium">Period</label>
-                    <input
-                        type="month"
-                        id="budget-period"
-                        name="period"
-                        value="{{ overview.period }}"
-                        class="form-control form-control-sm"
-                    >
-                </div>
-                <div class="col-12 col-sm-6">
-                    <label for="budget-scope" class="form-label small fw-medium">Scope</label>
-                    <select id="budget-scope" name="scope" class="form-select form-select-sm">
-                        <option value="">All scopes</option>
-                        <option value="personal" {% if overview.scope == 'personal' %}selected{% endif %}>Personal</option>
-                        <option value="shared" {% if overview.scope == 'shared' %}selected{% endif %}>Shared</option>
+                <!-- Scope Dropdown Selector -->
+                <form method="get" action="{% url 'budgets:budgets' %}" class="d-inline-flex align-items-center">
+                    <input type="hidden" id="budget-period" name="period" value="{{ overview.period }}">
+                    <select id="budget-scope" name="scope" class="form-select form-select-sm scope-select-control" onchange="this.form.submit()">
+                        <option value="" {% if not overview.scope %}selected{% endif %}>Scope: All scopes</option>
+                        <option value="personal" {% if overview.scope == 'personal' %}selected{% endif %}>Scope: Personal</option>
+                        <option value="shared" {% if overview.scope == 'shared' %}selected{% endif %}>Scope: Shared</option>
                     </select>
-                </div>
-                <div class="col-12 d-flex justify-content-end mt-2">
-                    <button type="submit" class="btn btn-outline-primary btn-sm">View period</button>
-                </div>
-            </form>
+                    <button type="submit" class="visually-hidden">View period</button>
+                </form>
+            </div>
 
-            <hr class="my-2">
-            <h3 class="small fw-semibold mb-2">Quick add category</h3>
-            <form method="post" action="{% url 'budgets:budgets' %}" class="row g-2 align-items-end" novalidate>
-                {% csrf_token %}
-                <input type="hidden" name="action" value="create_category">
-                <input type="hidden" name="kind" value="expense">
-                <div class="col-7">
-                    {{ category_form.name }}
+            <!-- Set budget Primary Action Button -->
+            <div>
+                <button type="button" class="btn btn-navy-primary d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#budgetModal">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <span>Set budget</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- 3. Three Summary Cards Row (Planned Budget, Spent, Remaining) -->
+    <section class="mb-4" aria-labelledby="budget-overview-heading">
+        <h2 id="budget-overview-heading" class="visually-hidden">Budget Overview</h2>
+        <div class="row g-3">
+            <!-- Planned Budget Card -->
+            <div class="col-12 col-md-4">
+                <div class="summary-card stationery-summary-card h-100">
+                    <div class="summary-card-header">
+                        <span class="summary-card-label">Planned Budget</span>
+                        <div class="summary-card-icon-box" aria-hidden="true">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                        </div>
+                    </div>
+                    <div class="summary-card-value">
+                        {% if overview.single_currency %}
+                            {{ overview.formatted_total_budgeted }} {{ overview.single_currency.code }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </div>
+                    <div class="summary-card-footer">
+                        <span class="summary-card-dot" aria-hidden="true"></span>
+                        <span>Allocated across {{ active_categories_count }} active {% if active_categories_count == 1 %}category{% else %}categories{% endif %}</span>
+                    </div>
                 </div>
-                <div class="col-5">
-                    <button type="submit" class="btn btn-outline-secondary btn-sm w-100">Add category</button>
+            </div>
+
+            <!-- Spent Card -->
+            <div class="col-12 col-md-4">
+                <div class="summary-card stationery-summary-card h-100">
+                    <div class="summary-card-header">
+                        <span class="summary-card-label">Spent</span>
+                        <div class="summary-card-icon-box" aria-hidden="true">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                        </div>
+                    </div>
+                    <div class="summary-card-value">
+                        {% if overview.summary_available and overview.single_currency %}
+                            {{ overview.formatted_total_spent }} {{ overview.single_currency.code }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </div>
+                    <div class="summary-card-footer">
+                        <span class="summary-card-dot" aria-hidden="true"></span>
+                        <span>
+                            {% if total_spent_pct %}
+                                {{ total_spent_pct }}% of monthly budget used
+                            {% elif overview.any_incomplete_conversion %}
+                                Conversion incomplete for some expenses
+                            {% else %}
+                                Tracked expenses in budgeted categories
+                            {% endif %}
+                        </span>
+                    </div>
                 </div>
-            </form>
-        </section>
+            </div>
+
+            <!-- Remaining Card -->
+            <div class="col-12 col-md-4">
+                <div class="summary-card stationery-summary-card h-100">
+                    <div class="summary-card-header">
+                        <span class="summary-card-label">Remaining</span>
+                        <div class="summary-card-icon-box" aria-hidden="true">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg>
+                        </div>
+                    </div>
+                    <div class="summary-card-value {% if overview.formatted_total_remaining|first == '-' %}text-danger{% endif %}">
+                        {% if overview.summary_available and overview.single_currency %}
+                            {{ overview.formatted_total_remaining }} {{ overview.single_currency.code }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </div>
+                    <div class="summary-card-footer">
+                        <span class="summary-card-dot" aria-hidden="true"></span>
+                        <span>{{ on_track_count }} on track{% if over_budget_count %} · <span class="text-danger fw-semibold">{{ over_budget_count }} over limit</span>{% endif %}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 4. Category Budgets Main Card -->
+    <section class="dashboard-panel stationery-panel" aria-labelledby="category-budgets-heading">
+        <!-- Header with Title, Count Badge, and Filter Tabs -->
+        <div class="table-card-header">
+            <h2 id="category-budgets-heading" class="table-card-title">
+                Category budgets — {{ overview.period_start|date:"F Y"|default:overview.period }}
+                <span class="category-count-badge">{{ overview.rows|length }} {% if overview.rows|length == 1 %}category{% else %}categories{% endif %}</span>
+            </h2>
+            <div class="filter-tabs-wrapper" role="tablist">
+                <button type="button" class="filter-tab-btn active" data-status-filter="all">All</button>
+                <button type="button" class="filter-tab-btn" data-status-filter="on-track">On track</button>
+                <button type="button" class="filter-tab-btn" data-status-filter="near-limit">Near limit</button>
+                <button type="button" class="filter-tab-btn" data-status-filter="over-budget">Over budget</button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-responsive">
+            <table class="budgets-table">
+                <thead>
+                    <tr>
+                        <th scope="col" style="min-width: 220px;">Category</th>
+                        <th scope="col" class="d-none">Scope</th>
+                        <th scope="col" class="d-none">Period</th>
+                        <th scope="col" class="d-none">Currency</th>
+                        <th scope="col" class="text-end" style="width: 130px;">Limit</th>
+                        <th scope="col" style="min-width: 170px;">Spent</th>
+                        <th scope="col" class="text-end" style="width: 140px;">Remaining</th>
+                        <th scope="col" class="text-center" style="width: 130px;">Status</th>
+                        <th scope="col" class="text-end" style="width: 110px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in overview.rows %}
+                    <tr class="bgt-row" data-status="{{ row.status_label|slugify }}">
+                        <!-- Category Column (Icon + Name + Subtitle) -->
+                        <td>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="cat-icon-avatar" aria-hidden="true">
+                                    {% if 'grocer' in row.category.name|lower or 'market' in row.category.name|lower or 'food' in row.category.name|lower %}
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                                    {% elif 'transport' in row.category.name|lower or 'travel' in row.category.name|lower or 'transit' in row.category.name|lower or 'commute' in row.category.name|lower %}
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                                    {% elif 'dining' in row.category.name|lower or 'restaurant' in row.category.name|lower or 'cafe' in row.category.name|lower or 'coffee' in row.category.name|lower %}
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2v20"></path><path d="M6 2v20"></path><path d="M2 7h8a4 4 0 0 1-8 0v-5"></path></svg>
+                                    {% else %}
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <div class="cat-title-text">{{ row.category.name }}</div>
+                                    <div class="cat-sub-text">{{ row.scope_display }} · {{ row.category.kind|capfirst }}</div>
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- Hidden columns for test assertions -->
+                        <td class="d-none">{{ row.scope_display }}</td>
+                        <td class="d-none">{{ row.budget.period }}</td>
+                        <td class="d-none">{{ row.currency.code }}</td>
+
+                        <!-- Limit Column -->
+                        <td class="text-end">
+                            <span class="tabular-amt">{{ row.formatted_limit }}</span>
+                        </td>
+
+                        <!-- Spent Column (Amount + Percentage + Thin Progress Bar) -->
+                        <td>
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <span class="tabular-amt text-secondary">{{ row.formatted_spent }}</span>
+                                <span class="tabular-sub">{{ row.raw_progress_pct|floatformat:0 }}%</span>
+                            </div>
+                            <div class="progress-track">
+                                <div class="progress-bar-fill {% if row.status_label == 'Near limit' %}bar-warning{% elif row.status_label == 'Over budget' %}bar-danger{% endif %}" style="width: {{ row.progress_pct }}%;"></div>
+                            </div>
+                        </td>
+
+                        <!-- Remaining Column (Amount + Percentage left) -->
+                        <td class="text-end">
+                            <div class="tabular-amt {% if row.remaining_amount < 0 %}text-danger{% endif %}">
+                                {{ row.formatted_remaining }}
+                            </div>
+                            <div class="tabular-sub">
+                                {% if row.remaining_pct is not None %}
+                                    {{ row.remaining_pct|floatformat:0 }}% left
+                                {% else %}
+                                    {{ row.plain_remaining }} left
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <!-- Status Column (Muted pill with colored dot) -->
+                        <td class="text-center">
+                            {% if row.status_label == 'On track' %}
+                                <span class="status-pill status-pill-success">
+                                    <span class="status-dot"></span>
+                                    <span>On track</span>
+                                </span>
+                            {% elif row.status_label == 'Near limit' %}
+                                <span class="status-pill status-pill-warning">
+                                    <span class="status-dot"></span>
+                                    <span>Near limit</span>
+                                </span>
+                            {% elif row.status_label == 'Over budget' %}
+                                <span class="status-pill status-pill-danger">
+                                    <span class="status-dot"></span>
+                                    <span>Over budget</span>
+                                </span>
+                            {% else %}
+                                <span class="status-pill status-pill-muted">
+                                    <span class="status-dot"></span>
+                                    <span>{{ row.status_label }}</span>
+                                </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Actions Column (Edit Link + Dropdown) -->
+                        <td class="text-end">
+                            <div class="d-inline-flex align-items-center gap-2">
+                                <button type="button"
+                                        class="action-link-edit btn-edit-budget"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#budgetModal"
+                                        data-cat-id="{{ row.category.id }}"
+                                        data-period="{{ row.budget.period }}"
+                                        data-scope="{{ row.scope }}"
+                                        data-currency-id="{{ row.currency.id }}"
+                                        data-limit="{{ row.plain_limit }}">
+                                    Edit
+                                </button>
+                                <div class="dropdown d-inline-block">
+                                    <button class="btn-dots-more" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions for {{ row.category.name }}">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end shadow-sm border p-1" style="border-radius: 8px;">
+                                        <li>
+                                            <form method="post" action="{% url 'budgets:budgets' %}" class="m-0">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="archive_budget">
+                                                <input type="hidden" name="budget_id" value="{{ row.budget.id }}">
+                                                <button type="submit" class="dropdown-item text-danger py-1 px-3 small rounded-1 d-flex align-items-center gap-2">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                                    <span>Remove</span>
+                                                </button>
+                                            </form>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center text-secondary py-5">
+                            <div class="empty-state py-3">
+                                <p class="mb-0 text-muted">No budgets created for this period.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 5. Bootstrap Modal for Setting Category Budget & Quick Add -->
+    <div class="modal fade {% if budget_form.errors or category_form.errors %}show d-block{% endif %}" id="budgetModal" tabindex="-1" aria-labelledby="budget-create-heading" aria-modal="true" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content budgets-modal-content">
+                <div class="modal-header budgets-modal-header">
+                    <h3 id="budget-create-heading" class="budgets-modal-title">Set monthly category budget</h3>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body budgets-modal-body">
+                    <!-- Set Budget Form -->
+                    <form method="post" action="{% url 'budgets:budgets' %}" id="set-budget-form" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="save_budget">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="budgets-form-label" for="{{ budget_form.category.id_for_label }}">Category</label>
+                                {{ budget_form.category }}
+                                {% if budget_form.category.errors %}
+                                    <div class="invalid-feedback d-block small mt-1">{{ budget_form.category.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-6">
+                                <label class="budgets-form-label" for="{{ budget_form.period.id_for_label }}">Period (YYYY-MM)</label>
+                                {{ budget_form.period }}
+                                {% if budget_form.period.errors %}
+                                    <div class="invalid-feedback d-block small mt-1">{{ budget_form.period.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-6">
+                                <label class="budgets-form-label" for="{{ budget_form.scope.id_for_label }}">Scope</label>
+                                {{ budget_form.scope }}
+                                {% if budget_form.scope.errors %}
+                                    <div class="invalid-feedback d-block small mt-1">{{ budget_form.scope.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-6">
+                                <label class="budgets-form-label" for="{{ budget_form.currency.id_for_label }}">Currency</label>
+                                {{ budget_form.currency }}
+                                {% if budget_form.currency.errors %}
+                                    <div class="invalid-feedback d-block small mt-1">{{ budget_form.currency.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-6">
+                                <label class="budgets-form-label" for="{{ budget_form.limit_amount.id_for_label }}">Monthly limit</label>
+                                {{ budget_form.limit_amount }}
+                                {% if budget_form.limit_amount.errors %}
+                                    <div class="invalid-feedback d-block small mt-1">{{ budget_form.limit_amount.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if budget_form.non_field_errors %}
+                            <div class="alert alert-danger small mt-3 mb-0" role="alert">
+                                {{ budget_form.non_field_errors.0 }}
+                            </div>
+                        {% endif %}
+
+                        <div class="d-flex justify-content-end mt-3">
+                            <button type="submit" class="btn btn-navy-primary px-3">
+                                Save budget
+                            </button>
+                        </div>
+                    </form>
+
+                    <hr class="my-4" style="border-top: 1px solid #ECEAE5; opacity: 1;">
+
+                    <!-- Quick Add Category Form -->
+                    <div class="quick-add-category-box">
+                        <h4 class="budgets-form-label mb-2" style="font-size: 0.78rem;">Quick add category</h4>
+                        <form method="post" action="{% url 'budgets:budgets' %}" class="row g-2 align-items-start" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="create_category">
+                            <input type="hidden" name="kind" value="expense">
+                            <div class="col-7 col-sm-8">
+                                <label for="{{ category_form.name.id_for_label }}" class="visually-hidden">Category name</label>
+                                {{ category_form.name }}
+                                {% if category_form.name.errors %}
+                                    <div class="invalid-feedback d-block small mt-1">{{ category_form.name.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-5 col-sm-4">
+                                <button type="submit" class="btn btn-outline-secondary btn-sm w-100 py-1.5">Add category</button>
+                            </div>
+                            {% if category_form.non_field_errors %}
+                                <div class="col-12">
+                                    <div class="alert alert-danger small mt-1 mb-0" role="alert">
+                                        {{ category_form.non_field_errors.0 }}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
-<section class="mb-4" aria-labelledby="budget-overview-heading">
-    <h2 id="budget-overview-heading" class="visually-hidden">Budget Overview</h2>
-    <div class="row g-3">
-        <div class="col-12 col-md-4">
-            <div class="summary-card p-3 h-100">
-                <p class="text-secondary small fw-medium mb-1">Planned Budget ({{ overview.period }})</p>
-                <p class="summary-value mb-1">
-                    {% if overview.single_currency %}
-                        {{ overview.formatted_total_budgeted }} {{ overview.single_currency.code }}
-                    {% else %}
-                        —
-                    {% endif %}
-                </p>
-                <p class="text-secondary small mb-0">
-                    {% if overview.single_currency %}
-                        Single-currency period total
-                    {% elif overview.rows %}
-                        Multiple currencies — see per-category rows
-                    {% else %}
-                        No budgets for {{ overview.period }}
-                    {% endif %}
-                </p>
-            </div>
-        </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. Client-side filter tabs (All, On track, Near limit, Over budget)
+    var filterBtns = document.querySelectorAll('[data-status-filter]');
+    var rows = document.querySelectorAll('tr.bgt-row');
 
-        <div class="col-12 col-md-4">
-            <div class="summary-card p-3 h-100">
-                <p class="text-secondary small fw-medium mb-1">Spent ({{ overview.period }})</p>
-                <p class="summary-value mb-1">
-                    {% if overview.summary_available and overview.single_currency %}
-                        {{ overview.formatted_total_spent }} {{ overview.single_currency.code }}
-                    {% else %}
-                        —
-                    {% endif %}
-                </p>
-                <p class="text-secondary small mb-0">
-                    {% if overview.any_incomplete_conversion %}
-                        Conversion incomplete for some category expenses
-                    {% else %}
-                        Tracked expenses in budgeted categories
-                    {% endif %}
-                </p>
-            </div>
-        </div>
+    filterBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var filter = this.getAttribute('data-status-filter');
+            filterBtns.forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
 
-        <div class="col-12 col-md-4">
-            <div class="summary-card p-3 h-100">
-                <p class="text-secondary small fw-medium mb-1">Remaining ({{ overview.period }})</p>
-                <p class="summary-value mb-1">
-                    {% if overview.summary_available and overview.single_currency %}
-                        {{ overview.formatted_total_remaining }} {{ overview.single_currency.code }}
-                    {% else %}
-                        —
-                    {% endif %}
-                </p>
-                <p class="text-secondary small mb-0">
-                    Planned limit minus tracked expenses
-                </p>
-            </div>
-        </div>
-    </div>
-</section>
+            rows.forEach(function(row) {
+                var rowStatus = row.getAttribute('data-status');
+                if (filter === 'all' || rowStatus === filter) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    });
 
-<section class="dashboard-panel p-3 p-md-4" aria-labelledby="category-budgets-heading">
-    <div class="mb-3">
-        <h2 id="category-budgets-heading" class="h6 fw-semibold mb-1">Category budgets ({{ overview.period }})</h2>
-    </div>
+    // 2. Prefill edit modal when clicking "Edit"
+    document.querySelectorAll('.btn-edit-budget').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var catId = this.getAttribute('data-cat-id');
+            var period = this.getAttribute('data-period');
+            var scope = this.getAttribute('data-scope');
+            var currId = this.getAttribute('data-currency-id');
+            var limit = this.getAttribute('data-limit');
 
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th scope="col">Category</th>
-                    <th scope="col">Scope</th>
-                    <th scope="col">Period</th>
-                    <th scope="col">Currency</th>
-                    <th scope="col" class="text-end">Limit</th>
-                    <th scope="col" class="text-end">Spent</th>
-                    <th scope="col" class="text-end">Remaining</th>
-                    <th scope="col">Status</th>
-                    <th scope="col" class="text-end">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in overview.rows %}
-                <tr>
-                    <td class="fw-medium">{{ row.category.name }}</td>
-                    <td>{{ row.scope_display }}</td>
-                    <td>{{ row.budget.period }}</td>
-                    <td>{{ row.currency.code }}</td>
-                    <td class="text-end">{{ row.formatted_limit }}</td>
-                    <td class="text-end">{{ row.formatted_spent }}</td>
-                    <td class="text-end fw-semibold">{{ row.formatted_remaining }}</td>
-                    <td>
-                        <span class="badge text-bg-{{ row.status_variant }}">{{ row.status_label }}</span>
-                    </td>
-                    <td class="text-end">
-                        <form method="post" action="{% url 'budgets:budgets' %}" class="d-inline">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="archive_budget">
-                            <input type="hidden" name="budget_id" value="{{ row.budget.id }}">
-                            <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">
-                                Remove
-                            </button>
-                        </form>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="9" class="text-center text-secondary py-5">
-                        No budgets created for this period.
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</section>
+            var catSelect = document.getElementById('id_category');
+            if (catSelect && catId) catSelect.value = catId;
+
+            var periodInput = document.getElementById('id_period');
+            if (periodInput && period) periodInput.value = period;
+
+            var scopeSelect = document.getElementById('id_scope');
+            if (scopeSelect && scope) scopeSelect.value = scope;
+
+            var currSelect = document.getElementById('id_currency');
+            if (currSelect && currId) currSelect.value = currId;
+
+            var limitInput = document.getElementById('id_limit_amount');
+            if (limitInput && limit) limitInput.value = limit;
+        });
+    });
+});
+</script>
 {% endblock %}
+

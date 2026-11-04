@@ -1346,39 +1346,63 @@
         aria-label="Filtered transactions summary"
     >
         <div class="col-12 col-md-4">
-            <div class="tx-summary-card">
-                <div class="tx-summary-label">Total income ({% if display_currency %}{{ display_currency.code }}{% else %}—{% endif %}) · {{ month_bar.period_label }}</div>
-                <p class="tx-summary-value tx-amount-income" id="summary-total-income">
+            <div class="tx-summary-card stationery-summary-card h-100">
+                <div class="summary-card-header">
+                    <span class="summary-card-label">Total income ({% if display_currency %}{{ display_currency.code }}{% else %}—{% endif %}) · {{ month_bar.period_label }}</span>
+                    <div class="summary-card-icon-box" aria-hidden="true">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                    </div>
+                </div>
+                <p class="summary-card-value tx-summary-value tx-amount-income" id="summary-total-income">
                     +{{ summary_totals.formatted_income|default:"0.00" }} {% if display_currency %}{{ display_currency.code }}{% endif %}
                 </p>
-                <p class="tx-summary-sub" id="summary-income-count">{{ total_count }} transaction{{ total_count|pluralize }}</p>
+                <div class="summary-card-footer">
+                    <span class="summary-card-dot" aria-hidden="true"></span>
+                    <span class="tx-summary-sub" id="summary-income-count">{% if total_count %}{{ total_count }} transaction{{ total_count|pluralize }}{% else %}No matching transactions{% endif %}</span>
+                </div>
             </div>
         </div>
         <div class="col-12 col-md-4">
-            <div class="tx-summary-card">
-                <div class="tx-summary-label">Total expenses ({% if display_currency %}{{ display_currency.code }}{% else %}—{% endif %}) · {{ month_bar.period_label }}</div>
-                <p class="tx-summary-value tx-amount-expense" id="summary-total-expenses">
+            <div class="tx-summary-card stationery-summary-card h-100">
+                <div class="summary-card-header">
+                    <span class="summary-card-label">Total expenses ({% if display_currency %}{{ display_currency.code }}{% else %}—{% endif %}) · {{ month_bar.period_label }}</span>
+                    <div class="summary-card-icon-box" aria-hidden="true">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>
+                    </div>
+                </div>
+                <p class="summary-card-value tx-summary-value tx-amount-expense" id="summary-total-expenses">
                     -{{ summary_totals.formatted_expense|default:"0.00" }} {% if display_currency %}{{ display_currency.code }}{% endif %}
                 </p>
-                <p class="tx-summary-sub" id="summary-expense-count">{{ total_count }} transaction{{ total_count|pluralize }}</p>
+                <div class="summary-card-footer">
+                    <span class="summary-card-dot" aria-hidden="true"></span>
+                    <span class="tx-summary-sub" id="summary-expense-count">{% if total_count %}{{ total_count }} transaction{{ total_count|pluralize }}{% else %}No matching transactions{% endif %}</span>
+                </div>
             </div>
         </div>
         <div class="col-12 col-md-4">
-            <div class="tx-summary-card">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div class="tx-summary-label">Net ({% if display_currency %}{{ display_currency.code }}{% else %}—{% endif %}) · {{ month_bar.period_label }}</div>
-                    {% if summary_totals.unconverted_count > 0 %}
-                    <span class="tx-chip tx-chip-amber" id="summary-missing-rates-badge" title="Some filtered records are missing an exchange rate and are excluded from these totals.">
-                        Excludes {{ summary_totals.unconverted_count }} unconverted
-                    </span>
-                    {% else %}
-                    <span class="tx-chip tx-chip-amber d-none" id="summary-missing-rates-badge" title="Some filtered records are missing an exchange rate and are excluded from these totals."></span>
-                    {% endif %}
+            <div class="tx-summary-card stationery-summary-card h-100">
+                <div class="summary-card-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="summary-card-label">Net ({% if display_currency %}{{ display_currency.code }}{% else %}—{% endif %}) · {{ month_bar.period_label }}</span>
+                        {% if summary_totals.unconverted_count > 0 %}
+                        <span class="tx-chip tx-chip-amber" id="summary-missing-rates-badge" title="Some filtered records are missing an exchange rate and are excluded from these totals.">
+                            Excludes {{ summary_totals.unconverted_count }} unconverted
+                        </span>
+                        {% else %}
+                        <span class="tx-chip tx-chip-amber d-none" id="summary-missing-rates-badge" title="Some filtered records are missing an exchange rate and are excluded from these totals."></span>
+                        {% endif %}
+                    </div>
+                    <div class="summary-card-icon-box" aria-hidden="true">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    </div>
                 </div>
-                <p class="tx-summary-value {% if summary_totals.net > 0 %}tx-amount-income{% elif summary_totals.net < 0 %}tx-amount-expense{% endif %}" id="summary-net-amount">
+                <p class="summary-card-value tx-summary-value {% if summary_totals.net > 0 %}tx-amount-income{% elif summary_totals.net < 0 %}tx-amount-expense{% endif %}" id="summary-net-amount">
                     {% if summary_totals.net > 0 %}+{% elif summary_totals.net < 0 %}-{% endif %}{{ summary_totals.formatted_net|default:"0.00" }} {% if display_currency %}{{ display_currency.code }}{% endif %}
                 </p>
-                <p class="tx-summary-sub" id="summary-net-count">{{ total_count }} transaction{{ total_count|pluralize }}</p>
+                <div class="summary-card-footer">
+                    <span class="summary-card-dot" aria-hidden="true"></span>
+                    <span class="tx-summary-sub" id="summary-net-count">{% if total_count %}{{ total_count }} transaction{{ total_count|pluralize }}{% else %}No matching transactions{% endif %}</span>
+                </div>
             </div>
         </div>
     </div>

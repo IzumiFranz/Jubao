@@ -1767,3 +1767,145 @@ body.auth-page-body {
 .settings-action-card:hover {
     border-color: #d1cfc9;
 }
+
+/* ==========================================================================
+   QR Scanner Modal & Viewfinder Styles
+   ========================================================================== */
+
+.qr-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.qr-touch-target:focus-visible,
+#qrScannerModal button:focus-visible,
+#qrScannerFileLabel:focus-visible,
+#qrScannerFileInput:focus-visible + #qrScannerFileLabel {
+    outline: 2px solid var(--app-blue, #2563eb);
+    outline-offset: 2px;
+}
+
+.qr-scanner-modal-dialog {
+    max-width: 460px;
+    margin: 1.25rem auto;
+}
+
+.qr-scanner-viewport {
+    position: relative;
+    width: 100%;
+    max-width: 380px;
+    aspect-ratio: 1 / 1;
+    background-color: #0b0f19;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.qr-scanner-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.qr-scanner-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+}
+
+.qr-viewfinder-reticle {
+    position: relative;
+    width: 70%;
+    height: 70%;
+    box-shadow: 0 0 0 9999px rgba(11, 15, 25, 0.45);
+    border-radius: 12px;
+}
+
+.qr-corner {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border-color: #ffffff;
+    border-style: solid;
+    border-width: 0;
+}
+
+.qr-corner.top-left {
+    top: 0;
+    left: 0;
+    border-top-width: 3px;
+    border-left-width: 3px;
+    border-top-left-radius: 10px;
+}
+
+.qr-corner.top-right {
+    top: 0;
+    right: 0;
+    border-top-width: 3px;
+    border-right-width: 3px;
+    border-top-right-radius: 10px;
+}
+
+.qr-corner.bottom-left {
+    bottom: 0;
+    left: 0;
+    border-bottom-width: 3px;
+    border-left-width: 3px;
+    border-bottom-left-radius: 10px;
+}
+
+.qr-corner.bottom-right {
+    bottom: 0;
+    right: 0;
+    border-bottom-width: 3px;
+    border-right-width: 3px;
+    border-bottom-right-radius: 10px;
+}
+
+.qr-scanner-laser {
+    position: absolute;
+    top: 6%;
+    left: 4%;
+    right: 4%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.8), #60a5fa, rgba(59, 130, 246, 0.8), transparent);
+    animation: qrLaserScan 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes qrLaserScan {
+    0% { top: 6%; }
+    100% { top: 92%; }
+}
+
+.qr-scanner-status {
+    min-height: 24px;
+    font-weight: 500;
+    transition: color 0.15s ease;
+}
+
+@media (max-width: 400px) {
+    .qr-scanner-viewport {
+        max-width: 100%;
+        aspect-ratio: 1 / 1;
+    }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+    .qr-scanner-viewport {
+        max-height: 200px;
+        aspect-ratio: 16 / 9;
+    }
+    .qr-viewfinder-reticle {
+        width: 50%;
+        height: 80%;
+    }
+}

@@ -13098,3 +13098,458 @@ class SharedSpaceInvitationV2Tests(TestCase):
 
         joiner_mem = SharedSpaceMembership.objects.get(shared_space=self.space, user=self.joiner)
         self.assertTrue(joiner_mem.is_active)
+
+
+
+class SharedSpaceQrScannerMarkupAndHeadersTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.usd, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "decimal_places": 2})
+        self.owner = User.objects.create_user(username="scanner_owner", password="Password123!")
+        self.joiner = User.objects.create_user(username="scanner_joiner", password="Password123!")
+        self.space = create_shared_space(user=self.owner, name="Scanner Space", base_currency=self.usd)
+        self.client_owner = Client()
+        self.client_owner.force_login(self.owner)
+        self.client_joiner = Client()
+        self.client_joiner.force_login(self.joiner)
+
+    def test_permissions_policy_header_allows_camera_for_self(self):
+        """Permissions-Policy header is present and allows camera=(self)."""
+        resp = self.client_owner.get(reverse("budgets:shared_space"))
+        self.assertEqual(resp.status_code, 200)
+        policy = resp.headers.get("Permissions-Policy", "")
+        self.assertTrue(len(policy) > 0, "Permissions-Policy header is missing.")
+        self.assertIn("camera=(self)", policy)
+
+    def test_shared_space_page_contains_scan_button_and_modal_markup(self):
+        """Page renders the scan button with camera icon, fallback upload, and accessible modal elements."""
+        resp = self.client_joiner.get(reverse("budgets:shared_space"))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode("utf-8")
+
+        # Scan button exists next to typed-code form
+        self.assertIn("Scan QR code", content)
+        self.assertIn('data-bs-target="#qrScannerModal"', content)
+        self.assertIn("<svg", content)
+
+        # Modal elements
+        self.assertIn('id="qrScannerModal"', content)
+        self.assertIn('id="qrScannerVideo"', content)
+        self.assertIn("playsinline", content)
+        self.assertIn("Point the camera at the invitation QR code", content)
+        self.assertIn('id="qrScannerCancelBtn"', content)
+        self.assertIn("Cancel", content)
+        self.assertIn('id="qrScannerSwitchCamBtn"', content)
+        self.assertIn('id="qrScannerTorchBtn"', content)
+        self.assertIn('id="qrScannerFileInput"', content)
+        self.assertIn('accept="image/*"', content)
+        self.assertIn("Upload a photo of the QR code", content)
+        self.assertIn('class="qr-viewfinder-reticle"', content)
+        self.assertIn('class="qr-scanner-laser"', content)
+        self.assertIn('id="qrScannerStatus"', content)
+        self.assertIn('aria-live="polite"', content)
+
+
+class SharedSpaceQrScannerBrowserTests(TestCase):
+    """Headless Chromium test verifying in-app QR scanner behavior."""
+
+    @staticmethod
+    def _find_browser_binary():
+        import os
+        import shutil
+
+        candidates = [
+            shutil.which("chrome"),
+            shutil.which("msedge"),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        ]
+        for c in candidates:
+            if c and os.path.exists(c):
+                return c
+        return None
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.usd, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "decimal_places": 2})
+        self.owner = User.objects.create_user(username="scanner_owner", password="Password123!")
+        self.joiner = User.objects.create_user(username="scanner_joiner", password="Password123!")
+        self.space = create_shared_space(user=self.owner, name="Family Space", base_currency=self.usd)
+        self.invitation = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        self.invitation.code = "ABC234"
+        self.invitation.save()
+        self.second_invitation = create_shared_space_invitation(user=self.owner, shared_space=self.space)
+        self.second_invitation.code = "XYZ789"
+        self.second_invitation.save()
+
+        self.client_joiner = Client()
+        self.client_joiner.force_login(self.joiner)
+
+    def test_qr_scanner_runtime_in_headless_browser(self):
+        import http.server
+        import json
+        import mimetypes
+        import os
+        import pathlib
+        import shutil
+        import socket
+        import subprocess
+        import tempfile
+        import threading
+        from django.conf import settings
+
+        browser_bin = self._find_browser_binary()
+        if not browser_bin:
+            self.skipTest("No Chromium browser binary found for headless QR scanner verification.")
+
+        # Pre-render pages on main thread to avoid multi-thread SQLite locks
+        initial_resp = self.client_joiner.get(reverse("budgets:shared_space"))
+        initial_page_html = initial_resp.content.decode("utf-8")
+
+        bare_code_resp = self.client_joiner.get(f"{reverse('budgets:shared_space')}?code=ABC234")
+        bare_code_page_html = bare_code_resp.content.decode("utf-8")
+
+        url_code_resp = self.client_joiner.get(f"{reverse('budgets:shared_space')}?code=XYZ789")
+        url_code_page_html = url_code_resp.content.decode("utf-8")
+
+        done_event = threading.Event()
+        results_holder = {"report": None, "errors": []}
+        static_root = pathlib.Path(settings.BASE_DIR) / "static"
+
+        test_harness_js = r"""
+(async function() {
+    var storedAssertions = {};
+    try {
+        storedAssertions = JSON.parse(sessionStorage.getItem("qr_test_assertions") || "{}");
+    } catch(e) {}
+    var report = { assertions: storedAssertions, errors: [] };
+    function assert(name, condition, message) {
+        if (!condition) {
+            report.errors.push(name + ": " + (message || "assertion failed"));
+        }
+        report.assertions[name] = !!condition;
+        try {
+            sessionStorage.setItem("qr_test_assertions", JSON.stringify(report.assertions));
+        } catch(e) {}
+    }
+
+    function waitMs(ms) {
+        return new Promise(function(resolve) { setTimeout(resolve, ms); });
+    }
+
+    var urlParams = new URLSearchParams(window.location.search);
+    var arrivingCode = urlParams.get("code");
+    if (arrivingCode) {
+        var storedState = sessionStorage.getItem("qr_test_state");
+        if (storedState === "tested_bare_code") {
+            var confirmPanel = document.getElementById("joinConfirmationPanel");
+            assert("bare_code_navigated_to_confirmation", !!confirmPanel, "Confirmation panel not visible after bare code scan");
+            if (confirmPanel) {
+                assert("bare_code_shows_owner_prompt", confirmPanel.textContent.includes("Join scanner_owner"));
+            }
+            sessionStorage.setItem("qr_test_state", "tested_bare_code_done");
+            window.location.href = window.location.pathname;
+            return;
+        } else if (storedState === "testing_join_url") {
+            var confirmPanel2 = document.getElementById("joinConfirmationPanel");
+            assert("join_url_navigated_to_confirmation", !!confirmPanel2, "Confirmation panel not visible after join URL scan");
+            if (confirmPanel2) {
+                assert("join_url_shows_owner_prompt", confirmPanel2.textContent.includes("Join scanner_owner"));
+            }
+            sessionStorage.removeItem("qr_test_state");
+            await fetch("/__test_report__", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(report)
+            });
+            return;
+        }
+    }
+
+    var testCanvas = document.createElement("canvas");
+    testCanvas.width = 320;
+    testCanvas.height = 240;
+    var ctx = testCanvas.getContext("2d");
+    ctx.fillStyle = "#2563eb";
+    ctx.fillRect(0, 0, 320, 240);
+    var stubStream = testCanvas.captureStream ? testCanvas.captureStream(25) : null;
+
+    var trackStopped = false;
+    if (stubStream && stubStream.getVideoTracks().length > 0) {
+        var vtrack = stubStream.getVideoTracks()[0];
+        var origStop = vtrack.stop.bind(vtrack);
+        vtrack.stop = function() {
+            trackStopped = true;
+            origStop();
+        };
+        vtrack.getCapabilities = function() {
+            return { torch: true };
+        };
+        vtrack.applyConstraints = function() {
+            return Promise.resolve();
+        };
+    }
+
+    window.__simPermissionDenied = false;
+    window.__stubBarcodeResult = null;
+
+    navigator.mediaDevices.getUserMedia = function(constraints) {
+        if (window.__simPermissionDenied) {
+            var err = new Error("Permission denied");
+            err.name = "NotAllowedError";
+            return Promise.reject(err);
+        }
+        trackStopped = false;
+        return Promise.resolve(stubStream);
+    };
+
+    navigator.mediaDevices.enumerateDevices = function() {
+        return Promise.resolve([
+            { kind: "videoinput", deviceId: "cam1", label: "Rear Camera" },
+            { kind: "videoinput", deviceId: "cam2", label: "Front Camera" }
+        ]);
+    };
+
+    window.BarcodeDetector = function(options) {
+        this.detect = function(source) {
+            if (window.__stubBarcodeResult !== null && window.__stubBarcodeResult !== undefined) {
+                return Promise.resolve([{ rawValue: window.__stubBarcodeResult }]);
+            }
+            return Promise.resolve([]);
+        };
+    };
+    window.BarcodeDetector.getSupportedFormats = function() {
+        return Promise.resolve(["qr_code"]);
+    };
+
+    try {
+        var modalEl = document.getElementById("qrScannerModal");
+        var scanBtn = document.getElementById("btnOpenQrScanner") || document.getElementById("btnOpenQrScannerEmpty");
+        var statusEl = document.getElementById("qrScannerStatus");
+        var cancelBtn = document.getElementById("qrScannerCancelBtn");
+        var typedInput = document.getElementById("id_typed_code") || document.getElementById("id_empty_typed_code");
+
+        assert("scan_button_present", !!scanBtn);
+        assert("modal_element_present", !!modalEl);
+
+        var nextState = sessionStorage.getItem("qr_test_state");
+
+        if (nextState === "tested_bare_code_done") {
+            // Test 5: Valid Join URL
+            sessionStorage.setItem("qr_test_state", "testing_join_url");
+            scanBtn.click();
+            await waitMs(600);
+            window.__stubBarcodeResult = window.location.origin + window.location.pathname + "?code=XYZ789";
+            await waitMs(1000);
+            return;
+        }
+
+        // Test 1: Permission Denied -> message shown, typed form usable
+        window.__simPermissionDenied = true;
+        scanBtn.click();
+        await waitMs(600);
+
+        assert("permission_denied_message_shown",
+            statusEl.textContent.includes("Camera permission was denied"),
+            "Expected permission denied message, got: " + statusEl.textContent
+        );
+        assert("typed_code_form_still_usable",
+            typedInput && !typedInput.disabled && typedInput.type === "text"
+        );
+        typedInput.value = "TEST99";
+        assert("typed_code_input_accepted_value", typedInput.value === "TEST99");
+        typedInput.value = "";
+
+        cancelBtn.click();
+        await waitMs(600);
+
+        // Test 2: Tracks are stopped on close
+        window.__simPermissionDenied = false;
+        trackStopped = false;
+        scanBtn.click();
+        await waitMs(600);
+        assert("camera_stream_active_on_open", trackStopped === false);
+
+        cancelBtn.click();
+        await waitMs(600);
+        assert("tracks_stopped_on_close", trackStopped === true);
+
+        // Test 3: External URL, wrong path, wrong code format, junk text
+        // -> rejected with message and scanning continues
+        scanBtn.click();
+        await waitMs(600);
+
+        var badInputs = [
+            { label: "external_url", val: "https://attacker.example.com/shared-space/?code=ABC234" },
+            { label: "wrong_path", val: window.location.origin + "/some/other/path/?code=ABC234" },
+            { label: "wrong_code_format", val: window.location.origin + window.location.pathname + "?code=111111" },
+            { label: "junk_text", val: "This is completely random invalid qr content" }
+        ];
+
+        for (var i = 0; i < badInputs.length; i++) {
+            var item = badInputs[i];
+            window.__stubBarcodeResult = item.val;
+            await waitMs(350);
+            assert("invalid_rejected_" + item.label,
+                statusEl.textContent === "This QR code isn't a Jubao invitation.",
+                "Expected invalid message for " + item.label + ", got: " + statusEl.textContent
+            );
+            assert("modal_still_open_after_" + item.label,
+                modalEl.classList.contains("show") || modalEl.style.display !== "none"
+            );
+        }
+
+        // Test 4: Bare 6-character code -> navigates to confirmation
+        sessionStorage.setItem("qr_test_state", "tested_bare_code");
+        window.__stubBarcodeResult = "ABC234";
+        await waitMs(1000);
+
+    } catch (ex) {
+        report.errors.push("Harness exception: " + ex.toString());
+        await fetch("/__test_report__", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(report)
+        });
+    }
+})();
+"""
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, format, *args):
+                pass
+
+            def do_GET(self):
+                if self.path.startswith("/shared-space"):
+                    if "code=ABC234" in self.path:
+                        html = bare_code_page_html
+                    elif "code=XYZ789" in self.path:
+                        html = url_code_page_html
+                    else:
+                        html = initial_page_html
+                    injected_html = html.replace("</body>", '<script src="/test-harness.js"></script></body>')
+                    body_bytes = injected_html.encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body_bytes)))
+                    self.send_header("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
+                    self.end_headers()
+                    self.wfile.write(body_bytes)
+                elif self.path == "/test-harness.js":
+                    js_bytes = test_harness_js.encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/javascript; charset=utf-8")
+                    self.send_header("Content-Length", str(len(js_bytes)))
+                    self.end_headers()
+                    self.wfile.write(js_bytes)
+                elif self.path.startswith("/static/"):
+                    rel_path = self.path[len("/static/"):]
+                    file_path = static_root / rel_path.split("?")[0]
+                    if file_path.exists() and file_path.is_file():
+                        mime_type, _ = mimetypes.guess_type(str(file_path))
+                        file_bytes = file_path.read_bytes()
+                        self.send_response(200)
+                        self.send_header("Content-Type", mime_type or "application/octet-stream")
+                        self.send_header("Content-Length", str(len(file_bytes)))
+                        self.end_headers()
+                        self.wfile.write(file_bytes)
+                    else:
+                        self.send_response(404)
+                        self.end_headers()
+                else:
+                    self.send_response(302)
+                    self.send_header("Location", "/shared-space/")
+                    self.end_headers()
+
+            def do_POST(self):
+                if self.path == "/__test_report__":
+                    length = int(self.headers.get("Content-Length", 0))
+                    data = self.rfile.read(length)
+                    try:
+                        results_holder["report"] = json.loads(data.decode("utf-8"))
+                    except Exception as e:
+                        results_holder["errors"].append(str(e))
+                    done_event.set()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", "2")
+                    self.end_headers()
+                    self.wfile.write(b"{}")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+
+        httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+
+        user_data_dir = tempfile.mkdtemp(prefix="bt_qr_test_")
+        proc = None
+        stderr_output = ""
+        try:
+            proc = subprocess.Popen(
+                [
+                    browser_bin,
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-backgrounding-occluded-windows",
+                    f"--user-data-dir={user_data_dir}",
+                    f"http://127.0.0.1:{port}/shared-space/",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            finished = done_event.wait(timeout=25)
+            if not finished and proc.poll() is not None:
+                _, err_bytes = proc.communicate(timeout=2)
+                stderr_output = err_bytes.decode("utf-8", errors="replace")
+            self.assertTrue(
+                finished,
+                f"Headless browser QR scanner test timed out. Browser stderr: {stderr_output[:500]}",
+            )
+            report = results_holder.get("report") or {}
+            self.assertEqual(
+                report.get("errors"),
+                [],
+                f"Browser QR test errors: {report.get('errors')}",
+            )
+            assertions = report.get("assertions", {})
+            self.assertTrue(assertions.get("permission_denied_message_shown"))
+            self.assertTrue(assertions.get("typed_code_form_still_usable"))
+            self.assertTrue(assertions.get("tracks_stopped_on_close"))
+            self.assertTrue(assertions.get("invalid_rejected_external_url"))
+            self.assertTrue(assertions.get("invalid_rejected_wrong_path"))
+            self.assertTrue(assertions.get("invalid_rejected_wrong_code_format"))
+            self.assertTrue(assertions.get("invalid_rejected_junk_text"))
+            self.assertTrue(assertions.get("bare_code_navigated_to_confirmation"))
+            self.assertTrue(assertions.get("join_url_navigated_to_confirmation"))
+
+            # Assert joiner has NOT been added as active member (no auto-join!)
+            self.assertFalse(
+                SharedSpaceMembership.objects.filter(shared_space=self.space, user=self.joiner, is_active=True).exists(),
+                "Scanner auto-joined without confirmation!",
+            )
+        finally:
+            if proc is not None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
+                try:
+                    shutil.rmtree(user_data_dir, ignore_errors=True)
+                except Exception:
+                    pass
+            httpd.shutdown()

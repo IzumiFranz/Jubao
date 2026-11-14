@@ -82,6 +82,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "config.settings.SecurityHeadersMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -89,6 +90,30 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+
+class SecurityHeadersMiddleware:
+    """Sets modern HTTP security headers including Permissions-Policy for camera."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        existing_policy = response.headers.get("Permissions-Policy")
+        if not existing_policy:
+            response.headers["Permissions-Policy"] = (
+                "camera=(self), microphone=(), geolocation=()"
+            )
+        elif "camera=()" in existing_policy:
+            response.headers["Permissions-Policy"] = existing_policy.replace(
+                "camera=()", "camera=(self)"
+            )
+        elif "camera" not in existing_policy:
+            response.headers["Permissions-Policy"] = (
+                f"{existing_policy}, camera=(self)"
+            )
+        return response
 
 ROOT_URLCONF = "config.urls"
 

@@ -183,6 +183,28 @@ class AccountAuthenticationTests(TestCase):
         dashboard_after_logout = self.client.get(self.dashboard_url)
         self.assertRedirects(dashboard_after_logout, f"{self.login_url}?next={self.dashboard_url}")
 
+    def test_topbar_account_dropdown_logout_form_and_behavior(self):
+        user = User.objects.create_user(username="topbar_logout_user", password="Str0ng!Password#2026")
+        self.client.force_login(user)
+        resp = self.client.get(self.dashboard_url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+        self.assertIn('id="topbar-logout-form"', html)
+        self.assertIn(f'action="{self.logout_url}"', html)
+        self.assertIn('method="post"', html)
+        self.assertIn('class="dropdown-item d-flex align-items-center gap-2 w-100 topbar-logout-btn"', html)
+        self.assertIn('aria-label="Log out"', html)
+        self.assertIn('title="Log out"', html)
+        self.assertIn('Log out', html)
+        self.assertIn('id="sidebar-logout-form"', html)
+        get_response = self.client.get(self.logout_url)
+        self.assertEqual(get_response.status_code, 405)
+        self.assertEqual(self.client.get(self.dashboard_url).status_code, 200)
+        post_response = self.client.post(self.logout_url)
+        self.assertRedirects(post_response, self.login_url)
+        dash_after = self.client.get(self.dashboard_url)
+        self.assertRedirects(dash_after, f"{self.login_url}?next={self.dashboard_url}")
+
     def test_csrf_enforced_on_login_register_and_logout_posts(self):
         csrf_client = Client(enforce_csrf_checks=True)
 

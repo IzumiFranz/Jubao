@@ -4138,7 +4138,7 @@
             });
         }
 
-        var logoutForms = document.querySelectorAll("#logout-form, #sidebar-logout-form");
+        var logoutForms = document.querySelectorAll("#logout-form, #sidebar-logout-form, #topbar-logout-form");
         Array.prototype.forEach.call(logoutForms, function (form) {
             form.addEventListener("submit", function (event) {
                 if (form.getAttribute("data-confirmed-logout") === "true") {

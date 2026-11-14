@@ -8091,9 +8091,10 @@ class GlobalNavbarRestylingTests(TestCase):
         # 7. Offline queue badge preserved
         self.assertIn('id="offline-queue-badge"', html)
 
-        # 8. Topbar logout form removed, sidebar logout form retained
-        self.assertNotIn('id="logout-form"', html)
+        # 8. Topbar and sidebar logout forms present
+        self.assertIn('id="topbar-logout-form"', html)
         self.assertIn('id="sidebar-logout-form"', html)
+        self.assertIn('Log out', html)
 
     def test_navbar_workspace_and_currency_switching(self):
         from .services import create_shared_space
@@ -13098,3 +13099,138 @@ class SharedSpaceInvitationV2Tests(TestCase):
 
         joiner_mem = SharedSpaceMembership.objects.get(shared_space=self.space, user=self.joiner)
         self.assertTrue(joiner_mem.is_active)
+
+
+class TransactionDateEditConversionPreservationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="fx_editor", password="Password123!")
+        self.usd = Currency.objects.get(code="USD")
+        self.php = Currency.objects.get(code="PHP")
+        UserPreference.objects.create(user=self.user, personal_base_currency=self.php)
+        self.wallet = Wallet.objects.create(
+            owner=self.user,
+            ownership_scope=Wallet.OwnershipScope.PERSONAL,
+            name="USD Wallet",
+            wallet_type=Wallet.WalletType.BANK_ACCOUNT,
+            currency=self.usd,
+            opening_balance=Decimal("500.00"),
+            opening_balance_date=date(2026, 1, 1),
+        )
+        self.category = Category.objects.create(
+            owner=self.user,
+            scope=Category.Scope.PERSONAL,
+            name="Travel",
+            kind=Category.Kind.EXPENSE,
+        )
+
+    def test_date_edit_preserves_manual_rate(self):
+        from .services import create_transaction_entry, update_transaction_entry
+
+        tx = create_transaction_entry(
+            user=self.user,
+            transaction_type=Transaction.Type.EXPENSE,
+            amount=Decimal("60.00"),
+            wallet=self.wallet,
+            transaction_date=date(2026, 11, 10),
+            category=self.category,
+            manual_rate=Decimal("28.33333333"),
+        )
+        self.assertEqual(tx.conversion_status, Transaction.ConversionStatus.MANUAL)
+        self.assertEqual(tx.converted_amount, Decimal("1700.00"))
+
+        updated = update_transaction_entry(
+            user=self.user,
+            tx=tx,
+            transaction_type=Transaction.Type.EXPENSE,
+            amount=Decimal("60.00"),
+            wallet=self.wallet,
+            transaction_date=date(2026, 11, 8),
+            category=self.category,
+        )
+        self.assertEqual(updated.conversion_status, Transaction.ConversionStatus.MANUAL)
+        self.assertEqual(updated.conversion_rate, Decimal("28.33333333"))
+        self.assertEqual(updated.converted_amount, Decimal("1700.00"))
+
+    def test_date_edit_preserves_booked_rate_when_new_date_has_no_cached_rate(self):
+        from datetime import datetime
+        from .models import ExchangeRate
+        from .services import create_transaction_entry, update_transaction_entry
+
+        ExchangeRate.objects.create(
+            from_currency=self.usd,
+            to_currency=self.php,
+            rate=Decimal("28.33333333"),
+            provider="frankfurter",
+            rate_timestamp=timezone.make_aware(datetime(2026, 11, 10, 12, 0)),
+            is_manual=False,
+            scope=ExchangeRate.Scope.PROVIDER,
+        )
+        tx = create_transaction_entry(
+            user=self.user,
+            transaction_type=Transaction.Type.EXPENSE,
+            amount=Decimal("60.00"),
+            wallet=self.wallet,
+            transaction_date=date(2026, 11, 10),
+            category=self.category,
+        )
+        self.assertEqual(tx.conversion_status, Transaction.ConversionStatus.CONVERTED)
+        self.assertEqual(tx.converted_amount, Decimal("1700.00"))
+
+        updated = update_transaction_entry(
+            user=self.user,
+            tx=tx,
+            transaction_type=Transaction.Type.EXPENSE,
+            amount=Decimal("60.00"),
+            wallet=self.wallet,
+            transaction_date=date(2026, 11, 8),
+            category=self.category,
+        )
+        self.assertEqual(updated.conversion_status, Transaction.ConversionStatus.CONVERTED)
+        self.assertEqual(updated.conversion_rate, Decimal("28.33333333"))
+        self.assertEqual(updated.converted_amount, Decimal("1700.00"))
+
+    def test_date_edit_updates_provider_rate_when_new_date_has_cached_rate(self):
+        from datetime import datetime
+        from .models import ExchangeRate
+        from .services import create_transaction_entry, update_transaction_entry
+
+        ExchangeRate.objects.create(
+            from_currency=self.usd,
+            to_currency=self.php,
+            rate=Decimal("28.33333333"),
+            provider="frankfurter",
+            rate_timestamp=timezone.make_aware(datetime(2026, 11, 10, 12, 0)),
+            is_manual=False,
+            scope=ExchangeRate.Scope.PROVIDER,
+        )
+        ExchangeRate.objects.create(
+            from_currency=self.usd,
+            to_currency=self.php,
+            rate=Decimal("26.66666667"),
+            provider="frankfurter",
+            rate_timestamp=timezone.make_aware(datetime(2026, 11, 8, 12, 0)),
+            is_manual=False,
+            scope=ExchangeRate.Scope.PROVIDER,
+        )
+        tx = create_transaction_entry(
+            user=self.user,
+            transaction_type=Transaction.Type.EXPENSE,
+            amount=Decimal("60.00"),
+            wallet=self.wallet,
+            transaction_date=date(2026, 11, 10),
+            category=self.category,
+        )
+        self.assertEqual(tx.converted_amount, Decimal("1700.00"))
+
+        updated = update_transaction_entry(
+            user=self.user,
+            tx=tx,
+            transaction_type=Transaction.Type.EXPENSE,
+            amount=Decimal("60.00"),
+            wallet=self.wallet,
+            transaction_date=date(2026, 11, 8),
+            category=self.category,
+        )
+        self.assertEqual(updated.conversion_status, Transaction.ConversionStatus.CONVERTED)
+        self.assertEqual(updated.conversion_rate, Decimal("26.66666667"))
+        self.assertEqual(updated.converted_amount, Decimal("1600.00"))

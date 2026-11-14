@@ -1413,7 +1413,7 @@ def get_dashboard_context(user, period: str | None = None) -> dict:
                 "count": data["count"],
             })
 
-    recent_txs = list(scoped_tx_qs[:8])
+    recent_txs = list(scoped_tx_qs[:5])
     enrich_transactions_with_display_currency(
         recent_txs,
         display_currency=target_currency,

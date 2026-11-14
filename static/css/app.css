@@ -586,6 +586,7 @@ textarea:focus-visible,
     border-radius: 8px;
     padding: 0.5rem;
     min-width: 190px;
+    max-width: calc(100vw - 1.5rem);
     box-shadow: 0 4px 14px rgba(19, 34, 56, 0.08);
     background-color: #FFFFFF;
 }
@@ -611,6 +612,26 @@ textarea:focus-visible,
 
 .topbar-dropdown-menu .dropdown-item:focus-visible {
     outline: 2px solid #18365D;
+    outline-offset: 1px;
+}
+
+.topbar-dropdown-menu .topbar-logout-btn {
+    background: transparent;
+    border: 0;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.topbar-dropdown-menu .topbar-logout-btn:hover,
+.topbar-dropdown-menu .topbar-logout-btn:focus {
+    background-color: #FFF5F5;
+    color: #DC2626;
+}
+
+.topbar-dropdown-menu .topbar-logout-btn:focus-visible {
+    outline: 2px solid #DC2626;
     outline-offset: 1px;
 }
 
@@ -886,9 +907,14 @@ textarea:focus-visible,
 
 .table thead th,
 .table-hover thead th,
-.table-stationery thead th {
-    background-color: #FAF9F6;
-    color: #5A6B82;
+.table-stationery thead th,
+.table thead.table-light th,
+.table-light {
+    --bs-table-bg: #FAF9F6;
+    --bs-table-color: #5A6B82;
+    --bs-table-border-color: #E5E3DE;
+    background-color: #FAF9F6 !important;
+    color: #5A6B82 !important;
     font-size: 0.72rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -896,6 +922,37 @@ textarea:focus-visible,
     padding: 0.65rem 0.75rem;
     border-top: none;
     border-bottom: 1px solid #E5E3DE;
+}
+
+.app-content .bg-light {
+    background-color: #FAF9F6 !important;
+}
+
+.stationery-inset-card {
+    background-color: #FAF9F6;
+    border: 1px solid #E5E3DE;
+    border-radius: 8px;
+}
+
+.stationery-collapse-row td {
+    background-color: #FAF9F6 !important;
+}
+
+.stationery-progress {
+    background-color: #ECEAE5;
+    border-radius: 999px;
+    height: 6px;
+    overflow: hidden;
+}
+
+.stationery-progress-bar {
+    background-color: #E0A526;
+    border-radius: 999px;
+    transition: width 0.25s ease;
+}
+
+.stationery-progress-bar.is-complete {
+    background-color: #3D7A53;
 }
 
 .table tbody td,
@@ -1207,6 +1264,12 @@ textarea:focus-visible,
         min-height: 40px;
     }
 
+    .topbar-dropdown-menu .dropdown-item {
+        min-height: 44px;
+        padding-top: 0.625rem;
+        padding-bottom: 0.625rem;
+    }
+
     .btn.btn-sm,
     table .btn,
     .tx-icon-btn {
@@ -1312,7 +1375,9 @@ textarea:focus-visible,
    ========================================================================== */
 
 :root {
-    --auth-page-bg: linear-gradient(135deg, #FBEFD0, #E5D0CB);
+    --auth-page-bg:
+        radial-gradient(circle at 36% 42%, rgba(255, 252, 245, 0.92) 0%, rgba(248, 247, 244, 0.4) 48%, transparent 72%),
+        linear-gradient(145deg, #F8F7F4 0%, #F3EDE2 55%, #EBE2D4 100%);
     --auth-navy: #172C52;
     --auth-gold: #E0A526;
     --auth-gold-focus: #E0A526;
@@ -1322,8 +1387,9 @@ textarea:focus-visible,
 }
 
 body.auth-page-body {
+    position: relative;
     background: var(--auth-page-bg) !important;
-    background-color: #FBEFD0 !important;
+    background-color: var(--stationery-bg, #F8F7F4) !important;
     min-height: 100vh;
     min-height: 100dvh;
     display: flex;
@@ -1335,13 +1401,28 @@ body.auth-page-body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+body.auth-page-body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+        url("data:image/svg+xml,%3Csvg width='56' height='56' viewBox='0 0 56 56' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='28' cy='28' r='20' fill='none' stroke='%231E3A5F' stroke-width='0.75' opacity='0.055'/%3E%3Crect x='22' y='22' width='12' height='12' rx='1.5' fill='none' stroke='%231E3A5F' stroke-width='0.75' opacity='0.055' transform='rotate(45 28 28)'/%3E%3C/svg%3E"),
+        url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.032'/%3E%3C/svg%3E");
+    background-size: 56px 56px, 180px 180px;
+    background-repeat: repeat, repeat;
+}
+
 .auth-page-container {
+    position: relative;
+    z-index: 1;
     flex: 1 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 24px;
+    padding: 36px 24px;
     width: 100%;
     box-sizing: border-box;
 }
@@ -1350,11 +1431,11 @@ body.auth-page-body {
 .auth-card-wrapper {
     position: relative;
     width: 100%;
-    max-width: min(960px, calc((100dvh - 48px) * 923 / 819));
+    max-width: min(700px, calc((100dvh - 120px) * 923 / 819));
     aspect-ratio: 923 / 819;
     margin: 0 auto;
     overflow: visible;
-    filter: drop-shadow(0 28px 45px rgba(23, 44, 82, 0.28)) drop-shadow(0 10px 18px rgba(0, 0, 0, 0.08));
+    filter: drop-shadow(0 24px 42px rgba(19, 34, 56, 0.22)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.07));
 }
 
 .auth-card-art {
@@ -1380,7 +1461,7 @@ body.auth-page-body {
 
 .auth-form-column {
     width: 100%;
-    max-width: 260px;
+    max-width: 240px;
     display: flex;
     flex-direction: column;
     text-align: left;
@@ -1388,12 +1469,12 @@ body.auth-page-body {
 
 .auth-logo-link {
     display: inline-block;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     text-decoration: none;
 }
 
 .auth-logo-img {
-    width: 170px;
+    width: 145px;
     height: auto;
     display: block;
     object-fit: contain;
@@ -1401,7 +1482,7 @@ body.auth-page-body {
 
 .auth-heading {
     color: #ffffff;
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -1411,17 +1492,17 @@ body.auth-page-body {
 
 .auth-subtitle {
     color: var(--auth-gold);
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 500;
     letter-spacing: 0.02em;
-    margin: 0 0 18px 0;
+    margin: 0 0 14px 0;
     line-height: 1.35;
     white-space: nowrap;
 }
 
 /* Form groups and underline inputs matching mockup */
 .auth-form-group {
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     position: relative;
 }
 

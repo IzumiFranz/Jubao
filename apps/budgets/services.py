@@ -918,13 +918,17 @@ def update_transaction_entry(
     tx.description = (description or "").strip()[:200]
     tx.notes = (notes or "").strip()
 
+    has_manual_rate = manual_rate is not None and str(manual_rate).strip() != ""
     if rebook_needed:
-        if (
-            (manual_rate is None or str(manual_rate).strip() == "")
+        can_reuse_existing_rate = (
+            not has_manual_rate
             and effective_currency.pk == prev_currency_id
-            and transaction_date == prev_date
             and tx.conversion_rate is not None
             and tx.base_currency_id is not None
+        )
+        if can_reuse_existing_rate and (
+            transaction_date == prev_date
+            or tx.conversion_status == Transaction.ConversionStatus.MANUAL
         ):
             tx.converted_amount = convert_decimal_amount(
                 tx.amount, tx.conversion_rate, tx.base_currency
@@ -939,8 +943,19 @@ def update_transaction_entry(
                 transaction_date=transaction_date,
                 manual_rate=manual_rate,
             )
-            for k, v in conv.items():
-                setattr(tx, k, v)
+            if (
+                can_reuse_existing_rate
+                and conv["conversion_status"] == Transaction.ConversionStatus.PENDING
+            ):
+                # Preserve existing conversion rate rather than wiping a valid
+                # historical/booked conversion to PENDING when no rate is cached
+                # for the new date.
+                tx.converted_amount = convert_decimal_amount(
+                    tx.amount, tx.conversion_rate, tx.base_currency
+                )
+            else:
+                for k, v in conv.items():
+                    setattr(tx, k, v)
 
     tx.revision = current_rev + 1
     tx.full_clean()

@@ -110,7 +110,7 @@
 
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
-            <thead class="table-light">
+            <thead>
                 <tr>
                     <th scope="col">Goal</th>
                     <th scope="col">Scope</th>
@@ -127,8 +127,8 @@
                 <tr>
                     <td>
                         <div class="fw-medium">{{ item.goal.name }}</div>
-                        <div class="progress mt-1" style="height: 5px; max-width: 140px;">
-                            <div class="progress-bar bg-primary" style="width: {{ item.progress_pct }}%;"></div>
+                        <div class="progress stationery-progress mt-1" style="max-width: 140px;">
+                            <div class="progress-bar stationery-progress-bar {% if item.is_completed %}is-complete{% endif %}" style="width: {{ item.progress_pct }}%;"></div>
                         </div>
                     </td>
                     <td>{{ item.goal.get_scope_display }}</td>
@@ -160,7 +160,7 @@
                         </div>
                     </td>
                 </tr>
-                <tr class="collapse bg-light" id="edit-goal-{{ item.goal.id }}">
+                <tr class="collapse stationery-collapse-row" id="edit-goal-{{ item.goal.id }}">
                     <td colspan="8" class="p-3">
                         <form method="post" action="{% url 'budgets:savings_goals' %}" novalidate>
                             {% csrf_token %}

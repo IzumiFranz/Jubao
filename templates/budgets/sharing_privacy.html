@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Sharing &amp; Privacy | Jubao</div>
-{% endblock %}
+{% block title %}Sharing &amp; Privacy | Jubao{% endblock %}
 
 {% block content %}
 <div class="shared-space-stationery pb-4">
@@ -144,7 +143,7 @@
         {% csrf_token %}
         <input type="hidden" name="shared_space_id" value="{{ selected_space.id }}">
 
-        <div class="card border p-3 mb-3 bg-light">
+        <div class="stationery-inset-card p-3 mb-3">
             <div class="form-check form-switch mb-0">
                 <input
                     class="form-check-input"
@@ -208,8 +207,8 @@
 
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pt-2 border-top">
             <div>
-                <button type="submit" name="action" value="preview_balance" class="btn btn-outline-info btn-sm sharing-action-btn" data-online-only="true">
-                    <i class="bi bi-eye me-1"></i> Preview what {{ partner.username }} sees
+                <button type="submit" name="action" value="preview_balance" class="btn btn-outline-secondary btn-sm sharing-action-btn" data-online-only="true">
+                    Preview what {{ partner.username }} sees
                 </button>
             </div>
             <div class="d-flex gap-2">
@@ -228,10 +227,10 @@
 
 <!-- Preview Modal / Section -->
 {% if is_preview and preview_result %}
-<section class="dashboard-panel p-3 p-md-4 mb-4 border border-info-subtle" aria-labelledby="privacy-preview-heading">
+<section class="dashboard-panel p-3 p-md-4 mb-4" aria-labelledby="privacy-preview-heading">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-        <h2 id="privacy-preview-heading" class="h6 fw-semibold text-info-emphasis mb-0">
-            <i class="bi bi-eye me-1"></i> Preview: What {{ partner.username }} sees
+        <h2 id="privacy-preview-heading" class="h6 fw-semibold text-navy mb-0">
+            Preview: What {{ partner.username }} sees
         </h2>
         <span class="badge text-bg-warning">Unsaved Preview</span>
     </div>
@@ -318,7 +317,7 @@
     {% if shared_tx_grants %}
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
-            <thead class="table-light">
+            <thead>
                 <tr>
                     <th scope="col">Date</th>
                     <th scope="col">Description</th>
@@ -367,7 +366,7 @@
         </table>
     </div>
     {% else %}
-    <div class="card bg-light border-0 p-3 text-center text-muted small">
+    <div class="empty-state-box p-3 text-center text-muted small">
         You have not shared any personal transactions with {{ partner.username }} in this space.
         You can share individual transactions anytime from your <a href="{% url 'budgets:transactions' %}" class="ms-1">Transactions page</a>.
     </div>
